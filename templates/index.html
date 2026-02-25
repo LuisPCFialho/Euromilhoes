@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EuroMilhões – Gerador Profissional v{{ version }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+  <style>
+    :root {
+      --em-dark:   #1a1a2e;
+      --em-mid:    #16213e;
+      --em-accent: #0f3460;
+      --em-gold:   #e94560;
+      --em-verm:   #ff6b6b;
+      --em-verd:   #51cf66;
+      --em-azul:   #74c0fc;
+      --em-cast:   #c9956a;
+    }
+    body { background: var(--em-dark); color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      position: fixed; top:0; left:0; height:100vh; width:220px;
+      background: var(--em-mid); border-right:1px solid #2a2a4a;
+      display:flex; flex-direction:column; z-index:100;
+    }
+    #sidebar .brand { padding:24px 20px 16px; border-bottom:1px solid #2a2a4a; }
+    #sidebar .brand h5 { color: var(--em-gold); margin:0; font-weight:700; letter-spacing:.05em; }
+    #sidebar .brand small { color:#888; font-size:.75rem; }
+    #sidebar nav { flex:1; padding:12px 8px; }
+    #sidebar nav .nav-link {
+      color:#aaa; border-radius:8px; padding:10px 14px; margin-bottom:2px;
+      display:flex; align-items:center; gap:10px; transition:.15s;
+    }
+    #sidebar nav .nav-link:hover { background:#1f2a4a; color:#e0e0e0; }
+    #sidebar nav .nav-link.active { background: var(--em-accent); color:#fff; }
+    #sidebar .status-bar { padding:16px; border-top:1px solid #2a2a4a; font-size:.78rem; color:#666; }
+
+    /* ── Main content ── */
+    #main { margin-left:220px; padding:32px; min-height:100vh; }
+
+    /* ── Cards ── */
+    .card-dark {
+      background:var(--em-mid); border:1px solid #2a2a4a; border-radius:12px;
+      padding:24px; margin-bottom:20px;
+    }
+    .card-dark h5 { color: var(--em-gold); font-weight:700; margin-bottom:16px; }
+
+    /* ── Number balls ── */
+    .ball {
+      display:inline-flex; align-items:center; justify-content:center;
+      width:42px; height:42px; border-radius:50%; font-weight:700;
+      font-size:1rem; margin:3px; border:2px solid transparent;
+    }
+    .ball-verm  { background:#4a1515; color: var(--em-verm); border-color: var(--em-verm); }
+    .ball-verd  { background:#0d3320; color: var(--em-verd); border-color: var(--em-verd); }
+    .ball-azul  { background:#0d2a40; color: var(--em-azul); border-color: var(--em-azul); }
+    .ball-cast  { background:#3a2810; color: var(--em-cast); border-color: var(--em-cast); }
+    .ball-neu   { background:#252545; color:#ccc; border-color:#444; }
+    .ball-star  { background:#3a2d00; color:#ffd700; border-color:#ffd700; font-size:.85rem; }
+
+    /* ── Key rows table ── */
+    .chave-row td { vertical-align:middle; padding:6px 10px; }
+    .chave-row:hover { background:#1e2a40 !important; }
+
+    /* ── Filter pills ── */
+    .filtro-pill {
+      display:inline-flex; align-items:center; gap:6px;
+      background:#1a2540; border:1px solid #2a3a60; border-radius:20px;
+      padding:5px 12px; font-size:.8rem; margin:4px;
+    }
+    .filtro-pill .dot { width:8px; height:8px; border-radius:50%; background: var(--em-verd); }
+    .filtro-pill .dot.off { background:#666; }
+
+    /* ── Stats bars ── */
+    .freq-bar { height:18px; background:#0d3320; border-radius:4px; overflow:hidden; }
+    .freq-bar-fill { height:100%; background: linear-gradient(90deg, var(--em-verd), var(--em-azul)); border-radius:4px; transition:.3s; }
+
+    /* ── Colour legend chips ── */
+    .colour-chip {
+      display:inline-block; padding:3px 10px; border-radius:12px;
+      font-size:.78rem; font-weight:600; margin:2px;
+    }
+    .chip-verm { background:#4a1515; color:var(--em-verm); }
+    .chip-verd { background:#0d3320; color:var(--em-verd); }
+    .chip-azul { background:#0d2a40; color:var(--em-azul); }
+    .chip-cast { background:#3a2810; color:var(--em-cast); }
+
+    /* ── Buttons ── */
+    .btn-em { background: var(--em-gold); border:none; color:#fff; font-weight:600; }
+    .btn-em:hover { background:#c73950; color:#fff; }
+    .btn-ghost { background:transparent; border:1px solid #444; color:#aaa; }
+    .btn-ghost:hover { border-color:#888; color:#e0e0e0; background:#1a2540; }
+
+    /* ── Toast ── */
+    #toast-box { position:fixed; bottom:24px; right:24px; z-index:9999; }
+
+    /* ── Loading overlay ── */
+    #loading { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6);
+               z-index:500; align-items:center; justify-content:center; flex-direction:column; gap:16px; }
+    #loading.show { display:flex; }
+
+    /* ── Tabs content ── */
+    .tab-pane { display:none; }
+    .tab-pane.active { display:block; }
+
+    /* ── Section header ── */
+    .section-header {
+      display:flex; align-items:center; gap:12px; margin-bottom:24px;
+      padding-bottom:12px; border-bottom:1px solid #2a2a4a;
+    }
+    .section-header i { color: var(--em-gold); font-size:1.4rem; }
+    .section-header h3 { margin:0; font-size:1.3rem; color:#e0e0e0; }
+
+    select.form-select, input.form-control {
+      background:#1a2540; color:#e0e0e0; border:1px solid #2a3a60;
+    }
+    select.form-select:focus, input.form-control:focus {
+      background:#1a2540; color:#e0e0e0; border-color: var(--em-accent); box-shadow:none;
+    }
+    .form-check-input:checked { background-color: var(--em-gold); border-color: var(--em-gold); }
+
+    table.table { color:#ccc; }
+    table.table th { color:#888; border-color:#2a2a4a; }
+    table.table td { border-color:#1e1e3a; }
+
+    .badge-padrao { background:#1a3a60; color:var(--em-azul); font-size:.72rem; padding:3px 8px; border-radius:8px; }
+
+    #no-draws-msg { color:#666; text-align:center; padding:40px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Loading overlay ── -->
+<div id="loading">
+  <div class="spinner-border text-warning" style="width:3rem;height:3rem;"></div>
+  <span style="color:#e0e0e0;font-size:1.1rem;">A processar...</span>
+</div>
+
+<!-- ── Toast ── -->
+<div id="toast-box"></div>
+
+<!-- ── Sidebar ── -->
+<div id="sidebar">
+  <div class="brand">
+    <h5><i class="fa-solid fa-star me-2"></i>EuroMilhões</h5>
+    <small>v{{ version }} – Gerador Profissional</small>
+  </div>
+  <nav>
+    <a class="nav-link active" href="#" onclick="showTab('gerar')">
+      <i class="fa-solid fa-wand-magic-sparkles"></i> Gerar Chaves
+    </a>
+    <a class="nav-link" href="#" onclick="showTab('sorteio')">
+      <i class="fa-solid fa-trophy"></i> Último Sorteio
+    </a>
+    <a class="nav-link" href="#" onclick="showTab('estatisticas')">
+      <i class="fa-solid fa-chart-bar"></i> Estatísticas
+    </a>
+    <a class="nav-link" href="#" onclick="showTab('estrategias')">
+      <i class="fa-solid fa-chess"></i> Estratégias
+    </a>
+    <a class="nav-link" href="#" onclick="showTab('historico')">
+      <i class="fa-solid fa-database"></i> Histórico BD
+    </a>
+    <a class="nav-link" href="#" onclick="showTab('atualizar')">
+      <i class="fa-solid fa-cloud-arrow-down"></i> Actualizar BD
+    </a>
+  </nav>
+  <div class="status-bar" id="status-bar">
+    <i class="fa-solid fa-circle-dot me-1" style="color:#51cf66;"></i>
+    <span id="sb-total">–</span> sorteios<br/>
+    Último: <span id="sb-ultimo">–</span>
+  </div>
+</div>
+
+<!-- ── Main ── -->
+<div id="main">
+
+  <!-- ════════════ TAB: GERAR ════════════ -->
+  <div id="tab-gerar" class="tab-pane active">
+    <div class="section-header">
+      <i class="fa-solid fa-wand-magic-sparkles"></i>
+      <h3>Gerar Chaves</h3>
+    </div>
+
+    <div class="row g-3">
+      <!-- Config panel -->
+      <div class="col-lg-4">
+        <div class="card-dark">
+          <h5><i class="fa-solid fa-sliders me-2"></i>Configuração</h5>
+          <div class="mb-3">
+            <label class="form-label text-muted small">Quantidade de chaves</label>
+            <input type="number" id="qtd" class="form-control" value="10" min="1" max="100"/>
+          </div>
+          <div class="mb-3">
+            <label class="form-label text-muted small">Intervalo de Soma</label>
+            <select id="soma_range" class="form-select">
+              <option value="padrao">Padrão: 80–190 (recomendado)</option>
+              <option value="apertado">Apertado: 95–160 (purist)</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="regra31" checked/>
+              <label class="form-check-label" for="regra31">Filtro G – Regra do 31</label>
+            </div>
+            <small class="text-muted d-block ms-4" style="font-size:.75rem;">Mín 2 números &gt; 31</small>
+          </div>
+          <div class="mb-3">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="progressao" checked/>
+              <label class="form-check-label" for="progressao">Filtro H – Anti-Progressão</label>
+            </div>
+            <small class="text-muted d-block ms-4" style="font-size:.75rem;">Rejeita sequências aritméticas</small>
+          </div>
+          <button class="btn btn-em w-100" onclick="gerarChaves()">
+            <i class="fa-solid fa-play me-2"></i>Gerar Chaves
+          </button>
+        </div>
+
+        <!-- Colour classification -->
+        <div class="card-dark" id="cores-panel" style="display:none;">
+          <h5><i class="fa-solid fa-palette me-2"></i>Classificação de Cores</h5>
+          <div id="cores-content"></div>
+        </div>
+      </div>
+
+      <!-- Results panel -->
+      <div class="col-lg-8">
+        <div class="card-dark" id="results-panel" style="display:none;">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0"><i class="fa-solid fa-list me-2"></i>Chaves Geradas</h5>
+            <div class="d-flex gap-2">
+              <span id="gen-stats" class="text-muted small align-self-center"></span>
+              <button class="btn btn-ghost btn-sm" onclick="exportarExcel()">
+                <i class="fa-solid fa-file-excel me-1" style="color:#51cf66;"></i>Excel
+              </button>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="table table-sm" id="chaves-table">
+              <thead>
+                <tr>
+                  <th>#</th><th>N1</th><th>N2</th><th>N3</th><th>N4</th><th>N5</th>
+                  <th>★1</th><th>★2</th><th>Soma</th><th>Padrão</th>
+                </tr>
+              </thead>
+              <tbody id="chaves-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Filter stats -->
+        <div class="card-dark" id="filtros-panel" style="display:none;">
+          <h5><i class="fa-solid fa-filter me-2"></i>Estatísticas dos Filtros</h5>
+          <div id="filtros-content"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════ TAB: ÚLTIMO SORTEIO ════════════ -->
+  <div id="tab-sorteio" class="tab-pane">
+    <div class="section-header">
+      <i class="fa-solid fa-trophy"></i>
+      <h3>Último Sorteio</h3>
+    </div>
+    <div id="ultimo-content">
+      <div class="text-center text-muted py-5">
+        <div class="spinner-border text-warning mb-3"></div><br/>A carregar...
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════ TAB: ESTATÍSTICAS ════════════ -->
+  <div id="tab-estatisticas" class="tab-pane">
+    <div class="section-header">
+      <i class="fa-solid fa-chart-bar"></i>
+      <h3>Estatísticas Históricas</h3>
+    </div>
+    <div id="stats-content">
+      <div class="text-center text-muted py-5">
+        <div class="spinner-border text-warning mb-3"></div><br/>A carregar...
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════ TAB: ESTRATÉGIAS ════════════ -->
+  <div id="tab-estrategias" class="tab-pane">
+    <div class="section-header">
+      <i class="fa-solid fa-chess"></i>
+      <h3>Estratégias e Filtros Activos</h3>
+    </div>
+    <div id="estrategias-content">
+      <div class="text-center text-muted py-5">
+        <div class="spinner-border text-warning mb-3"></div><br/>A carregar...
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════ TAB: HISTÓRICO ════════════ -->
+  <div id="tab-historico" class="tab-pane">
+    <div class="section-header">
+      <i class="fa-solid fa-database"></i>
+      <h3>Histórico da Base de Dados</h3>
+    </div>
+
+    <!-- Manual insert form -->
+    <div class="card-dark mb-3">
+      <h5><i class="fa-solid fa-plus-circle me-2"></i>Inserir Sorteio Manualmente</h5>
+      <div class="row g-2 align-items-end">
+        <div class="col-auto">
+          <label class="form-label text-muted small">Data</label>
+          <input type="date" id="m-data" class="form-control" style="width:160px;"/>
+        </div>
+        <div class="col">
+          <label class="form-label text-muted small">Números (5, separados por vírgula)</label>
+          <input type="text" id="m-nums" class="form-control" placeholder="ex: 3,14,27,38,45"/>
+        </div>
+        <div class="col-auto">
+          <label class="form-label text-muted small">Estrelas</label>
+          <input type="text" id="m-stars" class="form-control" placeholder="ex: 2,9" style="width:120px;"/>
+        </div>
+        <div class="col-auto">
+          <button class="btn btn-em" onclick="inserirManual()">
+            <i class="fa-solid fa-save me-1"></i>Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="historico-content"></div>
+    <div class="d-flex justify-content-center gap-2 mt-3" id="paginacao"></div>
+  </div>
+
+
+  <!-- ════════════ TAB: ACTUALIZAR ════════════ -->
+  <div id="tab-atualizar" class="tab-pane">
+    <div class="section-header">
+      <i class="fa-solid fa-cloud-arrow-down"></i>
+      <h3>Actualizar Base de Dados</h3>
+    </div>
+    <div class="card-dark" style="max-width:600px;">
+      <h5><i class="fa-solid fa-spider me-2"></i>Web Scraping Automático</h5>
+      <p class="text-muted small">
+        Tenta obter o último sorteio EuroMilhões automaticamente de várias fontes
+        (lotaria.net, jogossantacasa.pt, euro-millions.com).
+      </p>
+      <button class="btn btn-em" onclick="actualizarWeb()">
+        <i class="fa-solid fa-cloud-arrow-down me-2"></i>Ir buscar último sorteio
+      </button>
+      <div id="scrape-result" class="mt-3"></div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+
+<script>
+// ════════════════════════════════════════════════════════════════════
+// State
+// ════════════════════════════════════════════════════════════════════
+let lastChaves  = [];
+let lastCores   = {};
+let histPage    = 1;
+
+// ════════════════════════════════════════════════════════════════════
+// Boot
+// ════════════════════════════════════════════════════════════════════
+document.addEventListener("DOMContentLoaded", () => {
+  loadStatus();
+  // Set today's date as default for manual insert
+  document.getElementById("m-data").value = new Date().toISOString().split("T")[0];
+});
+
+// ════════════════════════════════════════════════════════════════════
+// Navigation
+// ════════════════════════════════════════════════════════════════════
+function showTab(name) {
+  document.querySelectorAll(".tab-pane").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll("#sidebar .nav-link").forEach(l => l.classList.remove("active"));
+  document.getElementById("tab-" + name).classList.add("active");
+  event.target.closest(".nav-link").classList.add("active");
+
+  if (name === "sorteio")     loadUltimoSorteio();
+  if (name === "estatisticas") loadEstatisticas();
+  if (name === "estrategias") loadEstrategias();
+  if (name === "historico")   loadHistorico(1);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Helpers
+// ════════════════════════════════════════════════════════════════════
+function loading(show) {
+  document.getElementById("loading").classList.toggle("show", show);
+}
+
+function toast(msg, type = "success") {
+  const id   = "t" + Date.now();
+  const icon = type === "success" ? "✓" : type === "warning" ? "⚠" : "✗";
+  const bg   = type === "success" ? "#0d3320" : type === "warning" ? "#3a2800" : "#3a1010";
+  const col  = type === "success" ? "#51cf66" : type === "warning" ? "#ffd700" : "#ff6b6b";
+  const box  = document.getElementById("toast-box");
+  box.insertAdjacentHTML("beforeend", `
+    <div id="${id}" style="background:${bg};color:${col};border:1px solid ${col}30;
+         border-radius:10px;padding:12px 18px;margin-top:8px;min-width:240px;
+         box-shadow:0 4px 20px rgba(0,0,0,.5);font-size:.9rem;">
+      ${icon} ${msg}
+    </div>`);
+  setTimeout(() => { const el = document.getElementById(id); if(el) el.remove(); }, 3500);
+}
+
+function ballHTML(n, cores) {
+  const cls = cores.vermelhos?.includes(n) ? "ball-verm"
+            : cores.verdes?.includes(n)    ? "ball-verd"
+            : cores.azuis?.includes(n)     ? "ball-azul"
+            : cores.castanhos?.includes(n) ? "ball-cast"
+            : "ball-neu";
+  return `<span class="ball ${cls}">${n}</span>`;
+}
+
+function starHTML(s) {
+  return `<span class="ball ball-star">★${s}</span>`;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Status bar
+// ════════════════════════════════════════════════════════════════════
+async function loadStatus() {
+  const r = await fetch("/api/status");
+  const d = await r.json();
+  document.getElementById("sb-total").textContent  = d.total_sorteios;
+  document.getElementById("sb-ultimo").textContent = d.ultimo_sorteio?.data ?? "–";
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Generate keys
+// ════════════════════════════════════════════════════════════════════
+async function gerarChaves() {
+  const qtd = parseInt(document.getElementById("qtd").value) || 10;
+  loading(true);
+  try {
+    const resp = await fetch("/api/gerar", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        quantidade:  qtd,
+        soma_range:  document.getElementById("soma_range").value,
+        regra31:     document.getElementById("regra31").checked,
+        progressao:  document.getElementById("progressao").checked,
+      })
+    });
+    const d = await resp.json();
+    if (!resp.ok) { toast(d.erro || "Erro", "error"); return; }
+
+    lastChaves = d.chaves;
+    lastCores  = d.cores;
+    renderChaves(d);
+    renderCores(d.cores);
+    renderFiltros(d.filtros, d.total_tentativas);
+    toast(`${d.total_geradas} chaves geradas!`);
+  } catch(e) {
+    toast("Erro de ligação", "error");
+  } finally {
+    loading(false);
+  }
+}
+
+function renderChaves(d) {
+  const tbody = document.getElementById("chaves-tbody");
+  tbody.innerHTML = "";
+  d.chaves.forEach((ch, i) => {
+    const nums   = ch.numeros.map(n => ballHTML(n, d.cores)).join("");
+    const stars  = ch.estrelas.map(s => starHTML(s)).join("");
+    const padrao = `<span class="badge-padrao">${ch.padrao.join("-")}</span>`;
+    tbody.insertAdjacentHTML("beforeend", `
+      <tr class="chave-row">
+        <td class="text-muted">${i+1}</td>
+        <td colspan="5">${nums}</td>
+        <td colspan="2">${stars}</td>
+        <td><strong>${ch.soma}</strong></td>
+        <td>${padrao}</td>
+      </tr>`);
+  });
+  document.getElementById("gen-stats").textContent =
+    `${d.total_geradas}/${d.total_pedidas} geradas · ${d.total_tentativas.toLocaleString()} testadas`;
+  document.getElementById("results-panel").style.display = "";
+}
+
+function renderCores(cores) {
+  const panel = document.getElementById("cores-content");
+  const groups = [
+    { key:"vermelhos", label:"VERMELHOS (0×)", cls:"chip-verm", regra:"1–3" },
+    { key:"verdes",    label:"VERDES (1×)",    cls:"chip-verd", regra:"1–3" },
+    { key:"azuis",     label:"AZUIS (2×)",     cls:"chip-azul", regra:"0–1" },
+    { key:"castanhos", label:"CASTANHOS (3×+)",cls:"chip-cast", regra:"Excluídos" },
+  ];
+  panel.innerHTML = groups.map(g => `
+    <div class="mb-2">
+      <span class="colour-chip ${g.cls}">${g.label}</span>
+      <span class="text-muted small ms-1">→ ${g.regra}</span>
+      <div class="mt-1 ms-2" style="font-size:.8rem;color:#888;">
+        ${(cores[g.key]||[]).map(n => `<span class="badge me-1" style="background:#1a2540;color:#aaa;">${n}</span>`).join("")}
+      </div>
+    </div>`).join("");
+  document.getElementById("cores-panel").style.display = "";
+}
+
+function renderFiltros(filtros, totalTentativas) {
+  const div = document.getElementById("filtros-content");
+  div.innerHTML = `<div class="mb-2 text-muted small">Total testadas: <strong>${totalTentativas.toLocaleString()}</strong></div>`;
+  filtros.forEach(f => {
+    const ativo = f.ativo !== false;
+    const pct   = totalTentativas > 0 ? Math.round(f.reprovadas / totalTentativas * 100) : 0;
+    div.insertAdjacentHTML("beforeend", `
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <span class="filtro-pill">
+          <span class="dot ${ativo ? '' : 'off'}"></span>
+          <strong>[${f.id}]</strong> ${f.nome}
+        </span>
+        <span class="text-muted small">${f.reprovadas.toLocaleString()} rejeitadas (${pct}%)</span>
+        <small class="text-muted" style="font-size:.72rem;">${f.config}</small>
+      </div>`);
+  });
+  document.getElementById("filtros-panel").style.display = "";
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Excel export
+// ════════════════════════════════════════════════════════════════════
+async function exportarExcel() {
+  if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
+  loading(true);
+  try {
+    const resp = await fetch("/api/export-excel", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ chaves: lastChaves, cores: lastCores })
+    });
+    if (!resp.ok) { toast("Erro ao exportar", "error"); return; }
+    const blob = await resp.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = "chaves_euromilhoes.xlsx";
+    a.click();
+    toast("Excel exportado!");
+  } finally { loading(false); }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Last draw
+// ════════════════════════════════════════════════════════════════════
+async function loadUltimoSorteio() {
+  const d = await (await fetch("/api/ultimo-sorteio")).json();
+  const el = document.getElementById("ultimo-content");
+
+  if (!d.ultimo) {
+    el.innerHTML = `<div id="no-draws-msg"><i class="fa-solid fa-inbox fa-2x mb-3"></i><br/>
+      Sem sorteios na base de dados.<br/>
+      <small>Vai a "Actualizar BD" ou "Histórico" para inserir.</small></div>`;
+    return;
+  }
+
+  const cores = d.cores;
+  const u = d.ultimo;
+  const nums  = u.numeros.map(n => ballHTML(n, cores)).join("");
+  const stars = u.estrelas.map(s => starHTML(s)).join("");
+
+  // Last 9 draws mini table
+  const ultimos9Rows = (d.ultimos_9 || []).map((s, i) =>
+    `<tr><td class="text-muted small">${i === 0 ? "← Último" : `−${i+1}`}</td>
+     <td>${s.data}</td>
+     <td>${s.numeros.join(" · ")}</td>
+     <td>${s.estrelas.join(" · ")}</td></tr>`
+  ).join("");
+
+  el.innerHTML = `
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="card-dark">
+          <div class="d-flex justify-content-between mb-2">
+            <h5 class="mb-0"><i class="fa-solid fa-trophy me-2"></i>Resultado</h5>
+            <span class="text-muted small">${u.data}</span>
+          </div>
+          <div class="mb-3">${nums}</div>
+          <div>${stars}</div>
+          <div class="mt-3 text-muted small">Soma: <strong class="text-white">${u.soma}</strong></div>
+        </div>
+        <div class="card-dark">
+          <h5><i class="fa-solid fa-palette me-2"></i>Cores Actuais</h5>
+          ${renderCoresHTML(cores)}
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card-dark">
+          <h5><i class="fa-solid fa-history me-2"></i>Últimos 9 Sorteios</h5>
+          <table class="table table-sm">
+            <thead><tr><th></th><th>Data</th><th>Números</th><th>★</th></tr></thead>
+            <tbody>${ultimos9Rows}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderCoresHTML(cores) {
+  const groups = [
+    {key:"vermelhos",label:"VERMELHOS (0×)",cls:"chip-verm",regra:"1–3"},
+    {key:"verdes",   label:"VERDES (1×)",   cls:"chip-verd",regra:"1–3"},
+    {key:"azuis",    label:"AZUIS (2×)",    cls:"chip-azul",regra:"0–1"},
+    {key:"castanhos",label:"CASTANHOS (3+)",cls:"chip-cast",regra:"Excluídos"},
+  ];
+  return groups.map(g => `
+    <div class="mb-2">
+      <span class="colour-chip ${g.cls}">${g.label}</span>
+      <span class="text-muted small"> → ${g.regra} · ${(cores[g.key]||[]).length} nº</span>
+      <div class="ms-2 mt-1" style="font-size:.78rem;color:#888;">
+        ${(cores[g.key]||[]).map(n=>`<span class="badge me-1" style="background:#1a2540;color:#aaa;">${n}</span>`).join("")}
+      </div>
+    </div>`).join("");
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Statistics
+// ════════════════════════════════════════════════════════════════════
+async function loadEstatisticas() {
+  const d  = await (await fetch("/api/estatisticas")).json();
+  const el = document.getElementById("stats-content");
+  if (!d.total_sorteios) {
+    el.innerHTML = `<div id="no-draws-msg">Sem dados históricos. Insere sorteios primeiro.</div>`;
+    return;
+  }
+
+  const total = d.total_sorteios;
+
+  // Frequency bars for 1-50
+  const freqRows = Array.from({length:50}, (_,i) => {
+    const n   = i+1;
+    const cnt = d.frequencia_numeros[n] || 0;
+    const pct = total > 0 ? Math.round(cnt/total*100) : 0;
+    return `<tr>
+      <td class="text-muted" style="width:30px;">${n}</td>
+      <td><div class="freq-bar"><div class="freq-bar-fill" style="width:${pct}%;"></div></div></td>
+      <td class="text-muted small" style="width:60px;">${cnt}×</td>
+      <td class="text-muted small" style="width:50px;">${pct}%</td>
+    </tr>`;
+  }).join("");
+
+  // Star frequency
+  const starRows = Array.from({length:12}, (_,i) => {
+    const n   = i+1;
+    const cnt = d.frequencia_estrelas[n] || 0;
+    const pct = total > 0 ? Math.round(cnt/total*100) : 0;
+    return `<tr>
+      <td class="text-muted" style="width:30px;">★${n}</td>
+      <td><div class="freq-bar"><div class="freq-bar-fill" style="width:${pct*2}%;background:linear-gradient(90deg,#ffd700,#ff6b6b);"></div></div></td>
+      <td class="text-muted small">${cnt}× (${pct}%)</td>
+    </tr>`;
+  }).join("");
+
+  // Hot / cold
+  const quentesHTML = (d.quentes||[]).map(([n,c]) =>
+    `<span class="ball ball-verm" title="${c} vezes">${n}</span>`).join("");
+  const atrasadosHTML = (d.atrasados||[]).map(([n,c]) =>
+    `<span class="ball ball-azul" title="Há ${c} sorteios">${n}</span>`).join("");
+
+  // Sum stats
+  const soma = d.somas || {};
+
+  el.innerHTML = `
+    <div class="row g-3">
+      <div class="col-lg-5">
+        <div class="card-dark">
+          <h5>Frequência Números (1–50)</h5>
+          <div style="max-height:420px;overflow-y:auto;">
+            <table class="table table-sm">${freqRows}</table>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="card-dark">
+          <h5>Frequência Estrelas (1–12)</h5>
+          <table class="table table-sm">${starRows}</table>
+        </div>
+        <div class="card-dark">
+          <h5>Somas Históricas</h5>
+          <table class="table table-sm">
+            <tr><td class="text-muted">Total sorteios</td><td><strong>${total}</strong></td></tr>
+            <tr><td class="text-muted">Mínima</td><td>${soma.min ?? "–"}</td></tr>
+            <tr><td class="text-muted">Máxima</td><td>${soma.max ?? "–"}</td></tr>
+            <tr><td class="text-muted">Média</td><td>${soma.media ?? "–"}</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="col-lg-3">
+        <div class="card-dark">
+          <h5>🔥 Mais Frequentes (10 sorteios)</h5>
+          <div>${quentesHTML || "<span class='text-muted'>–</span>"}</div>
+        </div>
+        <div class="card-dark">
+          <h5>❄️ Mais Atrasados</h5>
+          <div>${atrasadosHTML || "<span class='text-muted'>–</span>"}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Strategies
+// ════════════════════════════════════════════════════════════════════
+async function loadEstrategias() {
+  const d  = await (await fetch("/api/estrategias")).json();
+  const el = document.getElementById("estrategias-content");
+
+  const filtroRows = (d.filtros||[]).map(f => `
+    <div class="card-dark mb-2 p-3" style="border-left:3px solid #0f3460;">
+      <div class="d-flex gap-3 align-items-start">
+        <span style="font-size:1.4rem;font-weight:800;color:#e94560;min-width:32px;">${f.id}</span>
+        <div>
+          <strong style="color:#e0e0e0;">${f.nome}</strong>
+          <div class="text-muted small mt-1">${f.descricao}</div>
+        </div>
+      </div>
+    </div>`).join("");
+
+  const quadrantesHTML = Object.entries(d.quadrantes||{}).map(([k, q]) => `
+    <div class="col-md-6 mb-3">
+      <div class="card-dark p-3">
+        <strong style="color:#e94560;">${k}</strong> – ${q.descricao}
+        <div class="mt-1" style="font-size:.78rem;color:#888;">
+          ${q.numeros.map(n=>`<span class="badge me-1" style="background:#1a2540;color:#aaa;">${n}</span>`).join("")}
+        </div>
+      </div>
+    </div>`).join("");
+
+  const padroes = (d.padroes_equilibrados||[]).map(p =>
+    `<span class="badge me-1 mb-1" style="background:#0f2040;color:#74c0fc;padding:5px 8px;">[${p.join(",")}]</span>`
+  ).join("");
+
+  el.innerHTML = `
+    <div class="row g-3">
+      <div class="col-lg-7">
+        <div class="card-dark mb-3">
+          <h5>Quadrantes BI-BP-AI-AP</h5>
+          <p class="text-muted small">Os 50 números estão divididos em 4 quadrantes. Cada chave é construída
+          escolhendo uma quantidade específica de cada quadrante, garantindo equilíbrio entre
+          alto/baixo e ímpar/par.</p>
+          <div class="row">${quadrantesHTML}</div>
+          <div class="mt-3">
+            <span class="text-muted small">Universo total: </span>
+            <strong>${(d.total_combinacoes_universo||0).toLocaleString()}</strong>
+            <span class="text-muted small"> combinações · Aceites pelos padrões: </span>
+            <strong style="color:#51cf66;">${(d.total_combinacoes_aceites||0).toLocaleString()}</strong>
+          </div>
+        </div>
+        <div class="card-dark">
+          <h5>16 Padrões Equilibrados</h5>
+          <div>${padroes}</div>
+          <p class="text-muted small mt-2">
+            Formato: [BI, BP, AI, AP]. Todos os padrões somam 5 (os 5 números da chave).
+            Cobrem 1.333.800 das 2.118.760 combinações possíveis.
+          </p>
+        </div>
+      </div>
+      <div class="col-lg-5">
+        <div class="card-dark mb-3">
+          <h5>Filtros Activos</h5>
+          ${filtroRows}
+        </div>
+        <div class="card-dark">
+          <h5>Estrelas Equilibradas</h5>
+          <p class="text-muted small">
+            O sistema memoriza quantas vezes cada estrela (1–12) foi usada e selecciona
+            sempre as 2 com menor contagem. Garante distribuição uniforme ao longo das
+            chaves geradas — diferença máxima de 1 entre a mais e menos usada.
+          </p>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// History
+// ════════════════════════════════════════════════════════════════════
+async function loadHistorico(page) {
+  histPage = page;
+  const r  = await fetch(`/api/sorteios?page=${page}&per=20`);
+  const d  = await r.json();
+  const el = document.getElementById("historico-content");
+
+  if (!d.total) {
+    el.innerHTML = `<div id="no-draws-msg"><i class="fa-solid fa-inbox fa-2x mb-3"></i><br/>Sem sorteios na BD.</div>`;
+    document.getElementById("paginacao").innerHTML = "";
+    return;
+  }
+
+  const rows = (d.sorteios||[]).map(s => `
+    <tr>
+      <td class="text-muted small">${s.data}</td>
+      <td>${s.numeros.join(" · ")}</td>
+      <td>★${s.estrelas.join(" ★")}</td>
+      <td class="text-muted">${s.soma}</td>
+    </tr>`).join("");
+
+  el.innerHTML = `
+    <div class="card-dark">
+      <div class="d-flex justify-content-between mb-2">
+        <h5 class="mb-0"><i class="fa-solid fa-list me-2"></i>Sorteios</h5>
+        <span class="text-muted small">${d.total} registos</span>
+      </div>
+      <table class="table table-sm">
+        <thead><tr><th>Data</th><th>Números</th><th>Estrelas</th><th>Soma</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  // Pagination
+  const pg = document.getElementById("paginacao");
+  let btns = "";
+  for(let i=1;i<=d.pages;i++) {
+    const active = i===page ? "btn-em" : "btn-ghost";
+    btns += `<button class="btn btn-sm ${active}" onclick="loadHistorico(${i})">${i}</button>`;
+  }
+  pg.innerHTML = btns;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Manual insert
+// ════════════════════════════════════════════════════════════════════
+async function inserirManual() {
+  const data  = document.getElementById("m-data").value;
+  const nums  = document.getElementById("m-nums").value.split(",").map(s=>parseInt(s.trim())).filter(Boolean);
+  const stars = document.getElementById("m-stars").value.split(",").map(s=>parseInt(s.trim())).filter(Boolean);
+
+  if (!data || nums.length!==5 || stars.length!==2) {
+    toast("Preenche todos os campos correctamente", "warning"); return;
+  }
+
+  loading(true);
+  try {
+    const r = await fetch("/api/sorteio", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({data, numeros:nums, estrelas:stars})
+    });
+    const d = await r.json();
+    if (r.ok) {
+      toast(d.mensagem, d.ok ? "success" : "warning");
+      loadHistorico(1);
+      loadStatus();
+      document.getElementById("m-nums").value = "";
+      document.getElementById("m-stars").value = "";
+    } else {
+      toast(d.erro || "Erro", "error");
+    }
+  } finally { loading(false); }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Web scraping
+// ════════════════════════════════════════════════════════════════════
+async function actualizarWeb() {
+  const el = document.getElementById("scrape-result");
+  el.innerHTML = `<div class="text-muted"><span class="spinner-border spinner-border-sm me-2"></span>A contactar servidores...</div>`;
+  try {
+    const r = await fetch("/api/actualizar-web", {method:"POST"});
+    const d = await r.json();
+    if (r.ok && d.sorteio) {
+      const s = d.sorteio;
+      el.innerHTML = `
+        <div class="alert" style="background:#0d3320;border:1px solid #51cf66;color:#51cf66;border-radius:10px;">
+          <strong>✓ ${d.mensagem}</strong><br/>
+          Data: ${s.data}<br/>
+          Números: <strong>${s.numeros.join(" · ")}</strong><br/>
+          Estrelas: ★${s.estrelas.join(" ★")}
+        </div>`;
+      loadStatus();
+    } else {
+      el.innerHTML = `
+        <div class="alert" style="background:#3a1010;border:1px solid #ff6b6b;color:#ff6b6b;border-radius:10px;">
+          <strong>✗ ${d.erro}</strong><br/>
+          <small>Usa a inserção manual no separador "Histórico BD".</small>
+        </div>`;
+    }
+  } catch(e) {
+    el.innerHTML = `<div class="text-danger">Erro de ligação.</div>`;
+  }
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

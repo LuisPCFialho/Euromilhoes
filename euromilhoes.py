@@ -1,0 +1,1348 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+╔══════════════════════════════════════════════════════════════════════════════╗
+║          EUROMILHÕES - GERADOR PROFISSIONAL DE CHAVES v9.0                  ║
+║          Baseado na metodologia Lotterycodex BI-BP-AI-AP                    ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+Estratégias implementadas:
+  - 16 Padrões Equilibrados (Lotterycodex BI/BP/AI/AP)
+  - Filtro A: Soma configurável (padrão 80–190 | apertado 95–160)
+  - Filtro B: Máx 1 par consecutivo, 0 triplos
+  - Filtro C: Máx 2 números com mesmo dígito final
+  - Filtro D: Mín 3 décadas diferentes
+  - Filtro E: Máx 2 repetições do sorteio anterior
+  - Filtro F: Sistema de cores (últimos 9 sorteios)
+  - Filtro G: Regra do 31 – mín 2 números > 31 (anti-calendário)
+  - Filtro H: Rejeitar progressões aritméticas perfeitas
+  - Estrelas Equilibradas: sempre as 2 menos usadas
+"""
+
+import os
+import sys
+import json
+import random
+import sqlite3
+import datetime
+import csv
+import time
+from collections import Counter
+from pathlib import Path
+
+# ─── Dependency check ────────────────────────────────────────────────────────
+MISSING_DEPS = []
+try:
+    import requests
+    from bs4 import BeautifulSoup
+except ImportError:
+    MISSING_DEPS.append("requests beautifulsoup4")
+
+try:
+    import openpyxl
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+except ImportError:
+    MISSING_DEPS.append("openpyxl")
+
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
+    from rich.prompt import Prompt, IntPrompt, Confirm
+    from rich.layout import Layout
+    from rich.columns import Columns
+    from rich import box
+    from rich.rule import Rule
+    from rich.style import Style
+except ImportError:
+    MISSING_DEPS.append("rich")
+
+if MISSING_DEPS:
+    print("\n[ERRO] Dependências em falta. Instala com:")
+    print(f"  pip install {' '.join(MISSING_DEPS)}\n")
+    sys.exit(1)
+
+# ─── Global constants ─────────────────────────────────────────────────────────
+VERSION = "9.0"
+DB_PATH = Path(__file__).parent / "euromilhoes.db"
+EXCEL_DIR = Path(__file__).parent / "chaves_geradas"
+EXCEL_DIR.mkdir(exist_ok=True)
+
+console = Console()
+
+# Lotterycodex quadrants
+BI = [n for n in range(1, 26) if n % 2 != 0]   # Low-Odd:  1,3,5..25
+BP = [n for n in range(2, 25) if n % 2 == 0]    # Low-Even: 2,4,6..24
+AI = [n for n in range(27, 50) if n % 2 != 0]   # High-Odd: 27,29..49
+AP = [n for n in range(26, 51) if n % 2 == 0]   # High-Even:26,28..50
+
+# 16 balanced patterns [BI, BP, AI, AP]
+PADROES_EQUILIBRADOS = [
+    [1,1,1,2],[2,1,1,1],[1,2,1,1],[1,1,2,1],
+    [2,2,0,1],[1,0,2,2],[2,0,1,2],[2,1,0,2],
+    [2,0,2,1],[1,2,0,2],[2,2,1,0],[0,2,1,2],
+    [0,1,2,2],[2,1,2,0],[0,2,2,1],[1,2,2,0],
+]
+
+# Colour system thresholds
+# VERMELHOS: 0 appearances in last 9 draws → 1–3 in combo
+# VERDES: 1 appearance → 1–3 in combo
+# AZUIS: 2 appearances → 0–1 in combo
+# CASTANHOS: 3+ appearances → EXCLUDED (0 in combo)
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DATABASE MANAGER
+# ═════════════════════════════════════════════════════════════════════════════
+class DatabaseManager:
+    def __init__(self, db_path: Path = DB_PATH):
+        self.db_path = db_path
+        self._init_db()
+
+    def _init_db(self):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS sorteios (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    data        TEXT NOT NULL UNIQUE,
+                    n1 INTEGER, n2 INTEGER, n3 INTEGER, n4 INTEGER, n5 INTEGER,
+                    e1 INTEGER, e2 INTEGER,
+                    soma        INTEGER,
+                    fonte       TEXT DEFAULT 'manual'
+                );
+                CREATE TABLE IF NOT EXISTS metadata (
+                    chave TEXT PRIMARY KEY,
+                    valor TEXT
+                );
+                CREATE TABLE IF NOT EXISTS chaves_geradas (
+                    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                    data_geracao TEXT,
+                    numeros TEXT,
+                    estrelas TEXT,
+                    soma    INTEGER,
+                    padrao  TEXT
+                );
+            """)
+
+    def inserir_sorteio(self, data: str, numeros: list, estrelas: list, fonte: str = "manual") -> bool:
+        nums = sorted(numeros)
+        ests = sorted(estrelas)
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    "INSERT OR IGNORE INTO sorteios (data,n1,n2,n3,n4,n5,e1,e2,soma,fonte) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (data, nums[0], nums[1], nums[2], nums[3], nums[4],
+                     ests[0], ests[1], sum(nums), fonte)
+                )
+            return True
+        except Exception:
+            return False
+
+    def ultimo_sorteio(self) -> dict | None:
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT data,n1,n2,n3,n4,n5,e1,e2,soma FROM sorteios ORDER BY data DESC LIMIT 1"
+            ).fetchone()
+        if row:
+            return {"data": row[0], "numeros": [row[1],row[2],row[3],row[4],row[5]],
+                    "estrelas": [row[6],row[7]], "soma": row[8]}
+        return None
+
+    def ultimos_n_sorteios(self, n: int = 9) -> list[dict]:
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT data,n1,n2,n3,n4,n5,e1,e2 FROM sorteios ORDER BY data DESC LIMIT ?", (n,)
+            ).fetchall()
+        result = []
+        for row in rows:
+            result.append({"data": row[0], "numeros": [row[1],row[2],row[3],row[4],row[5]],
+                            "estrelas": [row[6],row[7]]})
+        return result
+
+    def todos_sorteios(self) -> list[dict]:
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT data,n1,n2,n3,n4,n5,e1,e2,soma FROM sorteios ORDER BY data DESC"
+            ).fetchall()
+        result = []
+        for row in rows:
+            result.append({"data": row[0], "numeros": [row[1],row[2],row[3],row[4],row[5]],
+                            "estrelas": [row[6],row[7]], "soma": row[8]})
+        return result
+
+    def total_sorteios(self) -> int:
+        with sqlite3.connect(self.db_path) as conn:
+            return conn.execute("SELECT COUNT(*) FROM sorteios").fetchone()[0]
+
+    def guardar_chave_gerada(self, numeros: list, estrelas: list, padrao: list):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO chaves_geradas (data_geracao,numeros,estrelas,soma,padrao) VALUES (?,?,?,?,?)",
+                (datetime.datetime.now().isoformat(),
+                 json.dumps(sorted(numeros)), json.dumps(sorted(estrelas)),
+                 sum(numeros), json.dumps(padrao))
+            )
+
+    def get_metadata(self, chave: str) -> str | None:
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute("SELECT valor FROM metadata WHERE chave=?", (chave,)).fetchone()
+        return row[0] if row else None
+
+    def set_metadata(self, chave: str, valor: str):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("INSERT OR REPLACE INTO metadata (chave,valor) VALUES (?,?)", (chave, valor))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WEB SCRAPER
+# ═════════════════════════════════════════════════════════════════════════════
+class EuromilhoesScraper:
+    HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "pt-PT,pt;q=0.9,en;q=0.8",
+    }
+    TIMEOUT = 15
+
+    def fetch_ultimo_sorteio(self) -> dict | None:
+        """Try multiple sources to get the latest EuroMillions draw."""
+        strategies = [
+            self._scrape_lotaria_net,
+            self._scrape_national_lottery_api,
+            self._scrape_euro_jackpot_results,
+        ]
+        for strategy in strategies:
+            try:
+                result = strategy()
+                if result:
+                    return result
+            except Exception:
+                continue
+        return None
+
+    def _scrape_lotaria_net(self) -> dict | None:
+        url = "https://www.lotaria.net/euromilhoes/resultados"
+        r = requests.get(url, headers=self.HEADERS, timeout=self.TIMEOUT)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        # Try common result container patterns
+        selectors = [
+            ("div", {"class": lambda c: c and "resultado" in c.lower()}),
+            ("div", {"class": lambda c: c and "result" in c.lower()}),
+            ("ul", {"class": lambda c: c and "ball" in c.lower()}),
+        ]
+        for tag, attrs in selectors:
+            container = soup.find(tag, attrs)
+            if container:
+                nums = self._extract_numbers_from_container(container)
+                if nums:
+                    return nums
+
+        # Fallback: find all number balls
+        balls = soup.find_all(["span", "li", "div"], class_=lambda c: c and (
+            "ball" in c.lower() or "numero" in c.lower() or "number" in c.lower()
+        ))
+        all_nums = []
+        for b in balls:
+            txt = b.get_text(strip=True)
+            if txt.isdigit():
+                all_nums.append(int(txt))
+
+        return self._parse_raw_numbers(all_nums)
+
+    def _scrape_national_lottery_api(self) -> dict | None:
+        # Try the unofficial API used by some Portuguese lottery sites
+        urls = [
+            "https://www.jogossantacasa.pt/web/SCCartazResult/euroMilhoes",
+            "https://api.lotaria.net/api/euromilhoes/last",
+        ]
+        for url in urls:
+            try:
+                r = requests.get(url, headers=self.HEADERS, timeout=self.TIMEOUT)
+                if r.status_code == 200:
+                    # Try JSON first
+                    try:
+                        data = r.json()
+                        return self._parse_json_result(data)
+                    except Exception:
+                        pass
+                    # Try HTML
+                    soup = BeautifulSoup(r.text, "html.parser")
+                    balls = soup.find_all(class_=lambda c: c and "ball" in str(c).lower())
+                    nums = []
+                    for b in balls:
+                        t = b.get_text(strip=True)
+                        if t.isdigit():
+                            nums.append(int(t))
+                    result = self._parse_raw_numbers(nums)
+                    if result:
+                        return result
+            except Exception:
+                continue
+        return None
+
+    def _scrape_euro_jackpot_results(self) -> dict | None:
+        """Fallback: try eurojackpot-style API with EuroMillions data."""
+        url = "https://www.euro-millions.com/results"
+        r = requests.get(url, headers=self.HEADERS, timeout=self.TIMEOUT)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        date_elem = soup.find(["time", "span", "div"], class_=lambda c: c and "date" in str(c).lower())
+        date_str = date_elem.get_text(strip=True) if date_elem else datetime.date.today().isoformat()
+
+        balls = soup.find_all(["li", "span", "div"], class_=lambda c: c and (
+            "ball" in str(c).lower() or "num" in str(c).lower()
+        ))
+        nums = []
+        for b in balls:
+            t = b.get_text(strip=True)
+            if t.isdigit():
+                nums.append(int(t))
+
+        return self._parse_raw_numbers(nums, date_str)
+
+    def _extract_numbers_from_container(self, container) -> dict | None:
+        texts = []
+        for elem in container.find_all(text=True):
+            txt = elem.strip()
+            if txt.isdigit():
+                texts.append(int(txt))
+        return self._parse_raw_numbers(texts)
+
+    def _parse_raw_numbers(self, nums: list, date_str: str = None) -> dict | None:
+        """Given a flat list of numbers, try to identify 5 main + 2 stars."""
+        if not date_str:
+            date_str = datetime.date.today().isoformat()
+
+        main_candidates = [n for n in nums if 1 <= n <= 50]
+        star_candidates = [n for n in nums if 1 <= n <= 12]
+
+        # Need exactly 5 unique main numbers and 2 unique stars
+        main_nums = list(dict.fromkeys(main_candidates))[:5]
+        star_nums = list(dict.fromkeys(star_candidates))[:2]
+
+        if len(main_nums) == 5 and len(star_nums) == 2:
+            return {"data": date_str, "numeros": sorted(main_nums), "estrelas": sorted(star_nums)}
+        return None
+
+    def _parse_json_result(self, data: dict) -> dict | None:
+        """Try common JSON field names."""
+        try:
+            # Various APIs use different field names
+            for nums_key in ["numbers", "numeros", "balls", "mainNumbers"]:
+                for stars_key in ["stars", "estrelas", "luckyStars", "bonusBalls"]:
+                    if nums_key in data and stars_key in data:
+                        nums = sorted([int(n) for n in data[nums_key]])[:5]
+                        stars = sorted([int(s) for s in data[stars_key]])[:2]
+                        date_str = data.get("date", data.get("data", datetime.date.today().isoformat()))
+                        if len(nums) == 5 and len(stars) == 2:
+                            return {"data": str(date_str), "numeros": nums, "estrelas": stars}
+        except Exception:
+            pass
+        return None
+
+    def fetch_historico(self, max_draws: int = 200) -> list[dict]:
+        """Try to fetch a batch of historical results."""
+        results = []
+        urls_to_try = [
+            f"https://www.lotaria.net/euromilhoes/arquivo?page=1",
+            f"https://www.euro-millions.com/results/2024",
+            f"https://www.euro-millions.com/results/2023",
+        ]
+        for url in urls_to_try:
+            try:
+                r = requests.get(url, headers=self.HEADERS, timeout=self.TIMEOUT)
+                if r.status_code != 200:
+                    continue
+                soup = BeautifulSoup(r.text, "html.parser")
+                # Look for result rows
+                rows = soup.find_all(["tr", "div", "article"], class_=lambda c: c and (
+                    "result" in str(c).lower() or "draw" in str(c).lower() or "sorteio" in str(c).lower()
+                ))
+                for row in rows[:max_draws]:
+                    nums_raw = []
+                    for elem in row.find_all(text=True):
+                        t = elem.strip()
+                        if t.isdigit():
+                            nums_raw.append(int(t))
+                    parsed = self._parse_raw_numbers(nums_raw)
+                    if parsed:
+                        results.append(parsed)
+            except Exception:
+                continue
+        return results
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# STATISTICS ANALYSER
+# ═════════════════════════════════════════════════════════════════════════════
+class StatisticsAnalyzer:
+    def __init__(self, db: DatabaseManager):
+        self.db = db
+
+    def classificar_cores(self, ultimos_9: list[dict]) -> dict:
+        """
+        Returns {"vermelhos": set, "verdes": set, "azuis": set, "castanhos": set}
+        based on how many times each number 1–50 appeared in the last 9 draws.
+        """
+        contagem = Counter()
+        for s in ultimos_9:
+            for n in s["numeros"]:
+                contagem[n] += 1
+
+        vermelhos, verdes, azuis, castanhos = set(), set(), set(), set()
+        for n in range(1, 51):
+            c = contagem[n]
+            if c == 0:
+                vermelhos.add(n)
+            elif c == 1:
+                verdes.add(n)
+            elif c == 2:
+                azuis.add(n)
+            else:  # 3+
+                castanhos.add(n)
+
+        return {"vermelhos": vermelhos, "verdes": verdes,
+                "azuis": azuis, "castanhos": castanhos}
+
+    def frequencia_numeros(self) -> dict:
+        todos = self.db.todos_sorteios()
+        freq = Counter()
+        for s in todos:
+            for n in s["numeros"]:
+                freq[n] += 1
+        return dict(freq)
+
+    def frequencia_estrelas(self) -> dict:
+        todos = self.db.todos_sorteios()
+        freq = Counter()
+        for s in todos:
+            for e in s["estrelas"]:
+                freq[e] += 1
+        return dict(freq)
+
+    def estatisticas_somas(self) -> dict:
+        todos = self.db.todos_sorteios()
+        somas = [s["soma"] for s in todos if s["soma"]]
+        if not somas:
+            return {}
+        return {
+            "min": min(somas), "max": max(somas),
+            "media": round(sum(somas) / len(somas), 1),
+            "mais_comum": Counter(somas).most_common(5),
+        }
+
+    def analise_padroes(self) -> dict:
+        todos = self.db.todos_sorteios()
+        padrao_count = Counter()
+        for s in todos:
+            nums = s["numeros"]
+            bi_c = sum(1 for n in nums if n in BI)
+            bp_c = sum(1 for n in nums if n in BP)
+            ai_c = sum(1 for n in nums if n in AI)
+            ap_c = sum(1 for n in nums if n in AP)
+            padrao = tuple([bi_c, bp_c, ai_c, ap_c])
+            padrao_count[padrao] += 1
+        return dict(padrao_count.most_common(16))
+
+    def numeros_atrasados(self, n: int = 10) -> list:
+        """Numbers that have not appeared for the longest time."""
+        todos = self.db.todos_sorteios()
+        ultima_vez = {}
+        for i, s in enumerate(reversed(todos)):  # oldest first
+            for num in s["numeros"]:
+                ultima_vez[num] = i
+        ausentes = []
+        for num in range(1, 51):
+            draws_ago = len(todos) - ultima_vez.get(num, -1) - 1
+            ausentes.append((num, draws_ago))
+        ausentes.sort(key=lambda x: x[1], reverse=True)
+        return ausentes[:n]
+
+    def sequencias_quentes(self, janela: int = 10) -> list:
+        """Numbers most frequent in the last `janela` draws."""
+        ultimos = self.db.ultimos_n_sorteios(janela)
+        freq = Counter()
+        for s in ultimos:
+            for n in s["numeros"]:
+                freq[n] += 1
+        return freq.most_common(10)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# FILTER ENGINE
+# ═════════════════════════════════════════════════════════════════════════════
+class FilterEngine:
+    """
+    All filters in order of computational cost (cheapest first).
+
+    Config keys (all optional, with defaults shown):
+      soma_range   : "padrao" (80–190) | "apertado" (95–160)
+      regra31      : True   – Filter G: at least 2 numbers > 31
+      progressao   : True   – Filter H: reject perfect arithmetic sequences
+    """
+
+    SOMA_RANGES = {
+        "padrao":   (80, 190),
+        "apertado": (95, 160),
+    }
+
+    def __init__(self, cores: dict, ultimo_sorteio: list | None = None,
+                 config: dict | None = None):
+        self.cores = cores
+        self.ultimo_sorteio = ultimo_sorteio or []
+        cfg = config or {}
+
+        rng = self.SOMA_RANGES.get(cfg.get("soma_range", "padrao"), (80, 190))
+        self.soma_min = cfg.get("soma_min", rng[0])
+        self.soma_max = cfg.get("soma_max", rng[1])
+        self.usar_regra31    = cfg.get("regra31",    True)
+        self.usar_progressao = cfg.get("progressao", True)
+
+        self.stats = {
+            "testadas": 0, "aprovadas": 0,
+            "reprovadas_soma": 0, "reprovadas_consecutivos": 0,
+            "reprovadas_finais": 0, "reprovadas_decadas": 0,
+            "reprovadas_repeticao": 0, "reprovadas_cores": 0,
+            "reprovadas_regra31": 0, "reprovadas_progressao": 0,
+        }
+
+    def verificar(self, chave: list) -> bool:
+        self.stats["testadas"] += 1
+        chave_s = sorted(chave)
+
+        # ── Filter A – Configurable sum range ────────────────────────────────
+        s = sum(chave_s)
+        if not (self.soma_min <= s <= self.soma_max):
+            self.stats["reprovadas_soma"] += 1
+            return False
+
+        # ── Filter B – Consecutive pairs / triples ────────────────────────────
+        pares = 0
+        for i in range(len(chave_s) - 1):
+            if chave_s[i+1] == chave_s[i] + 1:
+                pares += 1
+                if i < len(chave_s) - 2 and chave_s[i+2] == chave_s[i] + 2:
+                    self.stats["reprovadas_consecutivos"] += 1
+                    return False
+        if pares > 1:
+            self.stats["reprovadas_consecutivos"] += 1
+            return False
+
+        # ── Filter C – Same final digit (max 2 share same last digit) ─────────
+        finais = [n % 10 for n in chave_s]
+        if max(Counter(finais).values()) > 2:
+            self.stats["reprovadas_finais"] += 1
+            return False
+
+        # ── Filter D – Decades spread (min 3 different decades) ──────────────
+        decadas = {(n - 1) // 10 for n in chave_s}
+        if len(decadas) < 3:
+            self.stats["reprovadas_decadas"] += 1
+            return False
+
+        # ── Filter E – Repeat from last draw (max 2 shared numbers) ──────────
+        if self.ultimo_sorteio:
+            comuns = set(chave_s).intersection(set(self.ultimo_sorteio))
+            if len(comuns) > 2:
+                self.stats["reprovadas_repeticao"] += 1
+                return False
+
+        # ── Filter F – Colour system (last 9 draws) ───────────────────────────
+        v = self.cores.get("vermelhos", set())
+        g = self.cores.get("verdes", set())
+        a = self.cores.get("azuis", set())
+        c = self.cores.get("castanhos", set())
+
+        qtd_v = sum(1 for n in chave_s if n in v)
+        qtd_g = sum(1 for n in chave_s if n in g)
+        qtd_a = sum(1 for n in chave_s if n in a)
+        qtd_c = sum(1 for n in chave_s if n in c)
+
+        if not (1 <= qtd_v <= 3): self.stats["reprovadas_cores"] += 1; return False
+        if not (1 <= qtd_g <= 3): self.stats["reprovadas_cores"] += 1; return False
+        if not (0 <= qtd_a <= 1): self.stats["reprovadas_cores"] += 1; return False
+        if qtd_c > 0:             self.stats["reprovadas_cores"] += 1; return False
+
+        # ── Filter G – Regra do 31 (anti-calendário) ─────────────────────────
+        # Most players use birthdays (1–31). Forcing ≥2 numbers above 31
+        # reduces jackpot-sharing probability on a winning ticket.
+        if self.usar_regra31:
+            acima_31 = sum(1 for n in chave_s if n > 31)
+            if acima_31 < 2:
+                self.stats["reprovadas_regra31"] += 1
+                return False
+
+        # ── Filter H – Perfect arithmetic progression ─────────────────────────
+        # Rejects combinations like 5,10,15,20,25 or 3,9,15,21,27 where all
+        # gaps between consecutive sorted numbers are identical. These are
+        # "famous sequences" naive players choose far too often.
+        if self.usar_progressao:
+            diffs = [chave_s[i+1] - chave_s[i] for i in range(4)]
+            if len(set(diffs)) == 1:
+                self.stats["reprovadas_progressao"] += 1
+                return False
+
+        self.stats["aprovadas"] += 1
+        return True
+
+    def reset_stats(self):
+        for k in self.stats:
+            self.stats[k] = 0
+
+    def resumo_filtros(self) -> list[dict]:
+        """Return a human-readable list of filter names and their rejection counts."""
+        return [
+            {"id": "A", "nome": "Soma",              "reprovadas": self.stats["reprovadas_soma"],
+             "config": f"{self.soma_min}–{self.soma_max}"},
+            {"id": "B", "nome": "Consecutivos",       "reprovadas": self.stats["reprovadas_consecutivos"],
+             "config": "máx 1 par, 0 triplos"},
+            {"id": "C", "nome": "Dígito Final",       "reprovadas": self.stats["reprovadas_finais"],
+             "config": "máx 2 iguais"},
+            {"id": "D", "nome": "Décadas",            "reprovadas": self.stats["reprovadas_decadas"],
+             "config": "mín 3 diferentes"},
+            {"id": "E", "nome": "Repetição",          "reprovadas": self.stats["reprovadas_repeticao"],
+             "config": "máx 2 do sorteio anterior"},
+            {"id": "F", "nome": "Cores",              "reprovadas": self.stats["reprovadas_cores"],
+             "config": "V:1-3 | G:1-3 | A:0-1 | C:0"},
+            {"id": "G", "nome": "Regra do 31",        "reprovadas": self.stats["reprovadas_regra31"],
+             "config": "mín 2 números > 31", "ativo": self.usar_regra31},
+            {"id": "H", "nome": "Progressão Aritmét.","reprovadas": self.stats["reprovadas_progressao"],
+             "config": "rejeitar sequências perfeitas", "ativo": self.usar_progressao},
+        ]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# KEY GENERATOR
+# ═════════════════════════════════════════════════════════════════════════════
+class KeyGenerator:
+    def __init__(self, filter_engine: FilterEngine, db: DatabaseManager):
+        self.fe = filter_engine
+        self.db = db
+        self.contagem_estrelas = {i: 0 for i in range(1, 13)}
+        self._load_star_counts()
+
+    def _load_star_counts(self):
+        raw = self.db.get_metadata("contagem_estrelas")
+        if raw:
+            try:
+                loaded = json.loads(raw)
+                for k, v in loaded.items():
+                    self.contagem_estrelas[int(k)] = v
+            except Exception:
+                pass
+
+    def _save_star_counts(self):
+        self.db.set_metadata("contagem_estrelas", json.dumps(self.contagem_estrelas))
+
+    def escolher_estrelas_equilibradas(self) -> list:
+        disponiveis = list(range(1, 13))
+        random.shuffle(disponiveis)
+        disponiveis.sort(key=lambda x: self.contagem_estrelas[x])
+        e1, e2 = disponiveis[0], disponiveis[1]
+        self.contagem_estrelas[e1] += 1
+        self.contagem_estrelas[e2] += 1
+        return sorted([e1, e2])
+
+    def gerar_chave(self, max_tentativas: int = 100000) -> dict | None:
+        self.fe.reset_stats()
+        padrao = random.choice(PADROES_EQUILIBRADOS)
+        bi_n, bp_n, ai_n, ap_n = padrao
+
+        for _ in range(max_tentativas):
+            try:
+                nums = (
+                    random.sample(BI, bi_n) +
+                    random.sample(BP, bp_n) +
+                    random.sample(AI, ai_n) +
+                    random.sample(AP, ap_n)
+                )
+            except ValueError:
+                continue
+
+            if len(set(nums)) != 5:
+                continue
+
+            nums_sorted = sorted(nums)
+            if self.fe.verificar(nums_sorted):
+                estrelas = self.escolher_estrelas_equilibradas()
+                self._save_star_counts()
+                self.db.guardar_chave_gerada(nums_sorted, estrelas, padrao)
+                return {
+                    "numeros": nums_sorted,
+                    "estrelas": estrelas,
+                    "padrao": padrao,
+                    "soma": sum(nums_sorted),
+                    "tentativas": self.fe.stats["testadas"],
+                }
+
+        return None
+
+    def gerar_multiplas_chaves(self, quantidade: int) -> list[dict]:
+        chaves = []
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[cyan]{task.completed}/{task.total}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("[yellow]A gerar chaves...", total=quantidade)
+            tentativas_total = 0
+            for i in range(quantidade):
+                chave = self.gerar_chave()
+                if chave:
+                    chaves.append(chave)
+                    tentativas_total += chave["tentativas"]
+                progress.advance(task)
+        return chaves
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# EXCEL EXPORTER
+# ═════════════════════════════════════════════════════════════════════════════
+class ExcelExporter:
+    # Colours matching the system
+    FILL_VERMELHO  = PatternFill("solid", fgColor="FF9999")
+    FILL_VERDE     = PatternFill("solid", fgColor="99FF99")
+    FILL_AZUL      = PatternFill("solid", fgColor="99CCFF")
+    FILL_CASTANHO  = PatternFill("solid", fgColor="D2A679")
+    FILL_HEADER    = PatternFill("solid", fgColor="2E4057")
+    FILL_STAR      = PatternFill("solid", fgColor="FFD700")
+    FILL_SUM       = PatternFill("solid", fgColor="E8E8E8")
+    FILL_ROW_ALT   = PatternFill("solid", fgColor="F5F5F5")
+
+    def exportar(self, chaves: list[dict], cores: dict,
+                 nome_ficheiro: str | None = None) -> Path:
+        if not nome_ficheiro:
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            nome_ficheiro = f"chaves_{ts}.xlsx"
+
+        filepath = EXCEL_DIR / nome_ficheiro
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Chaves Geradas"
+
+        # ── Title block ──────────────────────────────────────────────────────
+        ws.merge_cells("C3:J3")
+        t = ws["C3"]
+        t.value = "EUROMILHÕES – CHAVES GERADAS"
+        t.font = Font(bold=True, size=16, color="FFFFFF", name="Calibri")
+        t.alignment = Alignment(horizontal="center", vertical="center")
+        t.fill = PatternFill("solid", fgColor="2E4057")
+        ws.row_dimensions[3].height = 30
+
+        ws.merge_cells("C4:J4")
+        sub = ws["C4"]
+        sub.value = f"Gerado em: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}  |  Total: {len(chaves)} chaves"
+        sub.font = Font(italic=True, size=10, color="666666")
+        sub.alignment = Alignment(horizontal="center")
+
+        # ── Legend ───────────────────────────────────────────────────────────
+        ws.merge_cells("C6:J6")
+        ws["C6"].value = "LEGENDA DE CORES"
+        ws["C6"].font = Font(bold=True, size=10, color="2E4057")
+
+        legend_items = [
+            ("C7", "VERMELHOS (0×)", "FF9999"),
+            ("E7", "VERDES (1×)", "99FF99"),
+            ("G7", "AZUIS (2×)", "99CCFF"),
+            ("I7", "CASTANHOS (3×+) – EXCLUÍDOS", "D2A679"),
+        ]
+        for cell_ref, label, colour in legend_items:
+            cell = ws[cell_ref]
+            cell.value = label
+            cell.fill = PatternFill("solid", fgColor=colour)
+            cell.font = Font(size=9, bold=True)
+            cell.alignment = Alignment(horizontal="center")
+
+        # ── Column headers at row 11 ─────────────────────────────────────────
+        headers = ["N1", "N2", "N3", "N4", "N5", "E1", "E2", "SOMA"]
+        thin = Side(style="thin", color="AAAAAA")
+        border = Border(top=thin, bottom=thin, left=thin, right=thin)
+
+        for col_idx, header in enumerate(headers, start=3):  # C=3
+            cell = ws.cell(row=11, column=col_idx, value=header)
+            cell.fill = self.FILL_HEADER
+            cell.font = Font(bold=True, color="FFFFFF", size=11)
+            cell.alignment = Alignment(horizontal="center")
+            cell.border = border
+            ws.column_dimensions[get_column_letter(col_idx)].width = 8
+
+        ws.row_dimensions[11].height = 22
+
+        # ── Data rows starting at row 12 ─────────────────────────────────────
+        for row_num, chave in enumerate(chaves, start=12):
+            fill_row = self.FILL_ROW_ALT if row_num % 2 == 0 else PatternFill("solid", fgColor="FFFFFF")
+            numeros = chave["numeros"]
+            estrelas = chave["estrelas"]
+
+            for col_offset, num in enumerate(numeros):  # cols C–G (3–7)
+                cell = ws.cell(row=row_num, column=3 + col_offset, value=num)
+                cell.alignment = Alignment(horizontal="center")
+                cell.border = border
+                # Colour by classification
+                if num in cores.get("vermelhos", set()):
+                    cell.fill = self.FILL_VERMELHO
+                elif num in cores.get("verdes", set()):
+                    cell.fill = self.FILL_VERDE
+                elif num in cores.get("azuis", set()):
+                    cell.fill = self.FILL_AZUL
+                elif num in cores.get("castanhos", set()):
+                    cell.fill = self.FILL_CASTANHO
+                else:
+                    cell.fill = fill_row
+
+            for col_offset, est in enumerate(estrelas):  # cols H–I (8–9)
+                cell = ws.cell(row=row_num, column=8 + col_offset, value=est)
+                cell.fill = self.FILL_STAR
+                cell.font = Font(bold=True)
+                cell.alignment = Alignment(horizontal="center")
+                cell.border = border
+
+            soma_cell = ws.cell(row=row_num, column=10, value=chave["soma"])
+            soma_cell.fill = self.FILL_SUM
+            soma_cell.alignment = Alignment(horizontal="center")
+            soma_cell.border = border
+            soma_cell.font = Font(bold=True, color="2E4057")
+
+        # ── Freeze panes ─────────────────────────────────────────────────────
+        ws.freeze_panes = "C12"
+
+        # ── Stats sheet ──────────────────────────────────────────────────────
+        ws2 = wb.create_sheet("Estatísticas")
+        ws2["A1"] = "DISTRIBUIÇÃO POR CORES"
+        ws2["A1"].font = Font(bold=True, size=12)
+
+        all_nums = [n for ch in chaves for n in ch["numeros"]]
+        colour_counts = {
+            "VERMELHOS": sum(1 for n in all_nums if n in cores.get("vermelhos", set())),
+            "VERDES":    sum(1 for n in all_nums if n in cores.get("verdes", set())),
+            "AZUIS":     sum(1 for n in all_nums if n in cores.get("azuis", set())),
+        }
+        for r, (label, count) in enumerate(colour_counts.items(), start=2):
+            ws2.cell(row=r, column=1, value=label)
+            ws2.cell(row=r, column=2, value=count)
+
+        somas = [ch["soma"] for ch in chaves]
+        ws2["A7"] = "SOMAS"
+        ws2["A7"].font = Font(bold=True)
+        ws2["A8"]  = "Mínima";  ws2["B8"]  = min(somas)
+        ws2["A9"]  = "Máxima";  ws2["B9"]  = max(somas)
+        ws2["A10"] = "Média";   ws2["B10"] = round(sum(somas)/len(somas), 1)
+
+        wb.save(filepath)
+        return filepath
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TERMINAL UI
+# ═════════════════════════════════════════════════════════════════════════════
+class TerminalUI:
+    def __init__(self):
+        self.db = DatabaseManager()
+        self.scraper = EuromilhoesScraper()
+        self.stats = StatisticsAnalyzer(self.db)
+        self.exporter = ExcelExporter()
+
+    # ── Helpers ──────────────────────────────────────────────────────────────
+    def _header(self):
+        console.print()
+        console.print(Panel(
+            Text.from_markup(
+                f"[bold cyan]EUROMILHÕES[/] [dim]v{VERSION}[/]  |  "
+                f"[yellow]Gerador Profissional de Chaves[/]\n"
+                f"[dim]Baseado na metodologia Lotterycodex BI-BP-AI-AP[/]"
+            ),
+            style="bold blue", box=box.DOUBLE_EDGE, padding=(0, 4)
+        ))
+
+    def _status_bar(self):
+        total = self.db.total_sorteios()
+        ultimo = self.db.ultimo_sorteio()
+        data_ult = ultimo["data"] if ultimo else "N/D"
+        console.print(
+            f"[dim]Base de dados:[/] [green]{total}[/] sorteios  |  "
+            f"[dim]Último sorteio:[/] [cyan]{data_ult}[/]",
+            justify="center"
+        )
+        console.print()
+
+    def _cor_tag(self, num: int, cores: dict) -> str:
+        if num in cores.get("vermelhos", set()): return f"[bold red]{num:2d}[/]"
+        if num in cores.get("verdes", set()):    return f"[bold green]{num:2d}[/]"
+        if num in cores.get("azuis", set()):     return f"[bold blue]{num:2d}[/]"
+        if num in cores.get("castanhos", set()): return f"[bold #8B4513]{num:2d}[/]"
+        return f"[white]{num:2d}[/]"
+
+    # ── Main menu ─────────────────────────────────────────────────────────────
+    def menu_principal(self):
+        while True:
+            self._header()
+            self._status_bar()
+
+            table = Table(box=box.ROUNDED, show_header=False, padding=(0,2))
+            table.add_column(style="bold cyan", width=4)
+            table.add_column()
+            items = [
+                ("1", "Gerar chaves"),
+                ("2", "Ver último sorteio + classificação de cores"),
+                ("3", "Actualizar base de dados (web scraping)"),
+                ("4", "Inserir sorteio manualmente"),
+                ("5", "Estatísticas e análise"),
+                ("6", "Ver estratégias utilizadas"),
+                ("7", "Importar histórico via CSV"),
+                ("8", "Backtesting (testar filtros no histórico)"),
+                ("0", "[dim]Sair[/]"),
+            ]
+            for num, label in items:
+                table.add_row(f"[{num}]", label)
+            console.print(table, justify="center")
+            console.print()
+
+            choice = Prompt.ask("[bold]Opção", default="1")
+            if   choice == "1": self.menu_gerar()
+            elif choice == "2": self.ver_ultimo_sorteio()
+            elif choice == "3": self.actualizar_db_web()
+            elif choice == "4": self.inserir_manual()
+            elif choice == "5": self.menu_estatisticas()
+            elif choice == "6": self.ver_estrategias()
+            elif choice == "7": self.importar_csv()
+            elif choice == "8": self.backtesting()
+            elif choice == "0": break
+            else:
+                console.print("[red]Opção inválida.[/]")
+
+    # ── Generate keys ─────────────────────────────────────────────────────────
+    def menu_gerar(self):
+        console.clear()
+        self._header()
+
+        # Prepare colours
+        ultimos_9 = self.db.ultimos_n_sorteios(9)
+        if len(ultimos_9) < 9:
+            console.print(f"[yellow]Aviso:[/] Apenas {len(ultimos_9)} sorteios na BD (recomendado: 9+).")
+
+        cores = self.stats.classificar_cores(ultimos_9)
+        ultimo = self.db.ultimo_sorteio()
+        ultimo_nums = ultimo["numeros"] if ultimo else []
+
+        # Show colour classification
+        self._mostrar_cores(cores)
+
+        qtd = IntPrompt.ask("[bold]Quantas chaves gerar?", default=10)
+        if qtd < 1 or qtd > 200:
+            console.print("[red]Valor inválido (1–200).[/]")
+            return
+
+        fe = FilterEngine(cores, ultimo_nums)
+        gen = KeyGenerator(fe, self.db)
+
+        chaves = gen.gerar_multiplas_chaves(qtd)
+
+        if not chaves:
+            console.print("[red]Não foi possível gerar chaves com os filtros actuais.[/]")
+            return
+
+        console.print()
+        self._mostrar_chaves(chaves, cores)
+
+        # Export to Excel?
+        if Confirm.ask("[bold]Exportar para Excel?", default=True):
+            path = self.exporter.exportar(chaves, cores)
+            console.print(f"[green]Ficheiro guardado:[/] {path}")
+
+        input("\nPressiona Enter para continuar...")
+
+    def _mostrar_cores(self, cores: dict):
+        table = Table(title="Classificação de Cores (últimos 9 sorteios)",
+                      box=box.SIMPLE_HEAD)
+        table.add_column("Cor", style="bold")
+        table.add_column("Critério")
+        table.add_column("Números", overflow="fold")
+        table.add_column("Qtd", justify="right")
+        table.add_column("Regra combo")
+
+        rows = [
+            ("VERMELHOS", "0 aparições", sorted(cores["vermelhos"]), "bold red", "1–3"),
+            ("VERDES",    "1 aparição",  sorted(cores["verdes"]),    "bold green", "1–3"),
+            ("AZUIS",     "2 aparições", sorted(cores["azuis"]),     "bold blue",  "0–1"),
+            ("CASTANHOS", "3+ aparições",sorted(cores["castanhos"]), "bold #8B4513", "EXCLUÍDOS"),
+        ]
+        for nome, crit, nums, style, regra in rows:
+            nums_str = " ".join(str(n) for n in nums)
+            table.add_row(
+                f"[{style}]{nome}[/]", crit, f"[dim]{nums_str}[/]",
+                str(len(nums)), regra
+            )
+        console.print(table)
+        console.print()
+
+    def _mostrar_chaves(self, chaves: list[dict], cores: dict):
+        table = Table(
+            title=f"[bold cyan]{len(chaves)} Chaves Geradas[/]",
+            box=box.ROUNDED, show_lines=False
+        )
+        for col in ["#", "N1", "N2", "N3", "N4", "N5", "E1", "E2", "Soma", "Padrão [BI BP AI AP]"]:
+            table.add_column(col, justify="center")
+
+        for i, ch in enumerate(chaves, 1):
+            nums_tagged = [self._cor_tag(n, cores) for n in ch["numeros"]]
+            stars = [f"[bold yellow]{e}[/]" for e in ch["estrelas"]]
+            padrao_str = str(ch["padrao"]).replace("[","").replace("]","")
+            table.add_row(
+                str(i), *nums_tagged, *stars,
+                f"[bold]{ch['soma']}[/]", padrao_str
+            )
+        console.print(table)
+
+    # ── Last draw ─────────────────────────────────────────────────────────────
+    def ver_ultimo_sorteio(self):
+        console.clear()
+        self._header()
+        ultimo = self.db.ultimo_sorteio()
+        if not ultimo:
+            console.print("[yellow]Nenhum sorteio na base de dados.[/]")
+        else:
+            cores = self.stats.classificar_cores(self.db.ultimos_n_sorteios(9))
+            nums_str = "  ".join(self._cor_tag(n, cores) for n in ultimo["numeros"])
+            stars_str = "  ".join(f"[bold yellow]{e}[/]" for e in ultimo["estrelas"])
+            console.print(Panel(
+                f"[dim]Data:[/] [cyan]{ultimo['data']}[/]\n\n"
+                f"Números: {nums_str}\n"
+                f"Estrelas: {stars_str}\n"
+                f"Soma: [bold]{ultimo['soma']}[/]",
+                title="Último Sorteio", border_style="cyan"
+            ))
+            console.print()
+            self._mostrar_cores(cores)
+
+        console.print()
+        input("Pressiona Enter para continuar...")
+
+    # ── Web update ────────────────────────────────────────────────────────────
+    def actualizar_db_web(self):
+        console.clear()
+        self._header()
+        console.print("[cyan]A tentar obter o último sorteio via internet...[/]\n")
+        with console.status("[bold green]A contactar servidores..."):
+            result = self.scraper.fetch_ultimo_sorteio()
+
+        if result:
+            console.print(Panel(
+                f"Data: [cyan]{result['data']}[/]\n"
+                f"Números: [bold]{result['numeros']}[/]\n"
+                f"Estrelas: [bold yellow]{result['estrelas']}[/]",
+                title="Sorteio encontrado", border_style="green"
+            ))
+            if Confirm.ask("Guardar na base de dados?", default=True):
+                ok = self.db.inserir_sorteio(result["data"], result["numeros"],
+                                              result["estrelas"], fonte="web")
+                console.print("[green]Guardado![/]" if ok else "[yellow]Já existe ou erro.[/]")
+        else:
+            console.print(
+                "[red]Não foi possível obter dados automaticamente.[/]\n"
+                "[dim]Os sites de lotaria podem ter alterado a sua estrutura.\n"
+                "Usa a opção 4 para inserir manualmente.[/]"
+            )
+
+        input("\nPressiona Enter para continuar...")
+
+    # ── Manual insert ─────────────────────────────────────────────────────────
+    def inserir_manual(self):
+        console.clear()
+        self._header()
+        console.print("[bold]Inserir sorteio manualmente[/]\n")
+
+        data = Prompt.ask("Data (YYYY-MM-DD)", default=datetime.date.today().isoformat())
+        try:
+            datetime.date.fromisoformat(data)
+        except ValueError:
+            console.print("[red]Data inválida.[/]"); return
+
+        console.print("Introduz os 5 números principais (1–50), separados por vírgulas:")
+        try:
+            nums_raw = Prompt.ask("Números")
+            nums = sorted([int(x.strip()) for x in nums_raw.split(",")])
+            if len(nums) != 5 or len(set(nums)) != 5:
+                raise ValueError
+            if not all(1 <= n <= 50 for n in nums):
+                raise ValueError
+        except (ValueError, TypeError):
+            console.print("[red]Números inválidos. Precisas de 5 números únicos entre 1 e 50.[/]")
+            return
+
+        console.print("Introduz as 2 estrelas (1–12), separadas por vírgulas:")
+        try:
+            stars_raw = Prompt.ask("Estrelas")
+            stars = sorted([int(x.strip()) for x in stars_raw.split(",")])
+            if len(stars) != 2 or len(set(stars)) != 2:
+                raise ValueError
+            if not all(1 <= s <= 12 for s in stars):
+                raise ValueError
+        except (ValueError, TypeError):
+            console.print("[red]Estrelas inválidas. Precisas de 2 estrelas únicas entre 1 e 12.[/]")
+            return
+
+        ok = self.db.inserir_sorteio(data, nums, stars, fonte="manual")
+        console.print("[green]Sorteio guardado![/]" if ok else "[yellow]Já existe na BD.[/]")
+        input("\nPressiona Enter para continuar...")
+
+    # ── Statistics ─────────────────────────────────────────────────────────────
+    def menu_estatisticas(self):
+        while True:
+            console.clear()
+            self._header()
+            console.print("[bold]ESTATÍSTICAS[/]\n")
+            choice = Prompt.ask(
+                "1) Frequência números  2) Frequência estrelas  3) Análise de padrões  "
+                "4) Números atrasados  5) Sequências quentes  0) Voltar",
+                default="0"
+            )
+            if   choice == "1": self._stats_freq_numeros()
+            elif choice == "2": self._stats_freq_estrelas()
+            elif choice == "3": self._stats_padroes()
+            elif choice == "4": self._stats_atrasados()
+            elif choice == "5": self._stats_quentes()
+            elif choice == "0": break
+
+    def _stats_freq_numeros(self):
+        console.clear()
+        self._header()
+        freq = self.stats.frequencia_numeros()
+        total = self.db.total_sorteios()
+        if not freq:
+            console.print("[yellow]Sem dados.[/]"); input(); return
+
+        table = Table(title="Frequência dos Números (1–50)", box=box.SIMPLE_HEAD)
+        table.add_column("Número", justify="right")
+        table.add_column("Vezes", justify="right")
+        table.add_column("% dos sorteios", justify="right")
+        table.add_column("Barra")
+
+        for n in range(1, 51):
+            v = freq.get(n, 0)
+            pct = (v / total * 100) if total > 0 else 0
+            bar_len = int(pct / 2)
+            table.add_row(str(n), str(v), f"{pct:.1f}%", "█" * bar_len)
+        console.print(table)
+        input("\nPressiona Enter...")
+
+    def _stats_freq_estrelas(self):
+        console.clear()
+        self._header()
+        freq = self.stats.frequencia_estrelas()
+        total = self.db.total_sorteios()
+        table = Table(title="Frequência das Estrelas (1–12)", box=box.SIMPLE_HEAD)
+        table.add_column("Estrela", justify="right")
+        table.add_column("Vezes", justify="right")
+        table.add_column("% dos sorteios", justify="right")
+        for n in range(1, 13):
+            v = freq.get(n, 0)
+            pct = (v / total * 100) if total > 0 else 0
+            table.add_row(str(n), str(v), f"{pct:.1f}%")
+        console.print(table)
+        input("\nPressiona Enter...")
+
+    def _stats_padroes(self):
+        console.clear()
+        self._header()
+        padroes = self.stats.analise_padroes()
+        total = self.db.total_sorteios()
+        table = Table(title="Padrões BI-BP-AI-AP Históricos", box=box.SIMPLE_HEAD)
+        table.add_column("Padrão [BI,BP,AI,AP]")
+        table.add_column("Equilibrado?", justify="center")
+        table.add_column("Ocorrências", justify="right")
+        table.add_column("% histórico", justify="right")
+
+        equilibrados_set = {tuple(p) for p in PADROES_EQUILIBRADOS}
+        for padrao, count in sorted(padroes.items(), key=lambda x: -x[1]):
+            eq = "[green]✓[/]" if padrao in equilibrados_set else "[red]✗[/]"
+            pct = (count / total * 100) if total > 0 else 0
+            table.add_row(str(list(padrao)), eq, str(count), f"{pct:.1f}%")
+        console.print(table)
+        input("\nPressiona Enter...")
+
+    def _stats_atrasados(self):
+        console.clear()
+        self._header()
+        atrasados = self.stats.numeros_atrasados(15)
+        table = Table(title="Números Mais Atrasados", box=box.SIMPLE_HEAD)
+        table.add_column("Número", justify="right")
+        table.add_column("Há quantos sorteios?", justify="right")
+        for num, draws_ago in atrasados:
+            table.add_row(str(num), str(draws_ago))
+        console.print(table)
+        input("\nPressiona Enter...")
+
+    def _stats_quentes(self):
+        console.clear()
+        self._header()
+        quentes = self.stats.sequencias_quentes(10)
+        table = Table(title="Números Mais Frequentes (últimos 10 sorteios)", box=box.SIMPLE_HEAD)
+        table.add_column("Número", justify="right")
+        table.add_column("Aparições", justify="right")
+        for num, count in quentes:
+            table.add_row(str(num), str(count))
+        console.print(table)
+        input("\nPressiona Enter...")
+
+    # ── Strategies ────────────────────────────────────────────────────────────
+    def ver_estrategias(self):
+        console.clear()
+        self._header()
+        console.print(Panel(
+            """[bold cyan]ESTRATÉGIAS E FILTROS ACTIVOS[/]
+
+[bold yellow]METODOLOGIA BASE: Lotterycodex BI-BP-AI-AP[/]
+Os 50 números são divididos em 4 quadrantes:
+  [red]BI[/] (Baixos-Ímpares) : { """ + ", ".join(str(n) for n in BI) + """ }
+  [green]BP[/] (Baixos-Pares)   : { """ + ", ".join(str(n) for n in BP) + """ }
+  [blue]AI[/] (Altos-Ímpares)  : { """ + ", ".join(str(n) for n in AI) + """ }
+  [cyan]AP[/] (Altos-Pares)    : { """ + ", ".join(str(n) for n in AP) + """ }
+
+[bold yellow]16 PADRÕES EQUILIBRADOS[/]
+Apenas combinações com distribuição equilibrada entre quadrantes.
+Estes 16 padrões cobrem ~1.333.800 combinações possíveis.
+
+[bold yellow]FILTROS ACTIVOS:[/]
+  [A] Soma configurável: padrão 80–190 | apertado 95–160
+      → ~93% dos sorteios históricos têm soma neste intervalo
+  [B] Máx 1 par consecutivo, 0 triplos consecutivos
+      → pares: ~42% dos sorteios | triplos: <1% → sempre eliminar
+  [C] Máx 2 números com o mesmo dígito final
+      → 3+ iguais representam <4% dos sorteios históricos
+  [D] Mín 3 décadas diferentes representadas
+      → evita concentração de números numa zona do boletim
+  [E] Máx 2 repetições do sorteio anterior
+      → restrição de curto prazo baseada em tendências
+  [F] Sistema de cores (últimos 9 sorteios):
+      • VERMELHOS (0×) → 1 a 3 na chave
+      • VERDES    (1×) → 1 a 3 na chave
+      • AZUIS     (2×) → 0 a 1 na chave
+      • CASTANHOS (3×+) → EXCLUÍDOS (0 na chave)
+  [G] Regra do 31 – mínimo 2 números acima de 31
+      → a maioria dos jogadores usa aniversários (1–31);
+        forçar números altos reduz partilha do jackpot
+  [H] Rejeitar progressões aritméticas perfeitas
+      → ex: 5,10,15,20,25 ou 3,9,15,21,27 são escolhas
+        demasiado populares e devem ser evitadas
+
+[bold yellow]ESTRELAS EQUILIBRADAS[/]
+O sistema memoriza quantas vezes cada estrela (1–12) foi usada
+e selecciona sempre as 2 com menor contagem → distribuição uniforme.
+""",
+            title="Estratégias", border_style="cyan", padding=(1, 2)
+        ))
+        input("Pressiona Enter para continuar...")
+
+    # ── CSV import ────────────────────────────────────────────────────────────
+    def importar_csv(self):
+        console.clear()
+        self._header()
+        console.print(
+            "[bold]Importar histórico via CSV[/]\n"
+            "[dim]Formato esperado: data,n1,n2,n3,n4,n5,e1,e2\n"
+            "Exemplo: 2024-01-05,3,12,24,37,45,2,9[/]\n"
+        )
+        path_str = Prompt.ask("Caminho do ficheiro CSV")
+        path = Path(path_str)
+        if not path.exists():
+            console.print("[red]Ficheiro não encontrado.[/]")
+            input(); return
+
+        imported = 0
+        errors = 0
+        with open(path, newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            for row in reader:
+                if len(row) < 8:
+                    errors += 1; continue
+                try:
+                    data = row[0].strip()
+                    nums = [int(row[i]) for i in range(1, 6)]
+                    stars = [int(row[i]) for i in range(6, 8)]
+                    if self.db.inserir_sorteio(data, nums, stars, fonte="csv"):
+                        imported += 1
+                    else:
+                        errors += 1
+                except (ValueError, IndexError):
+                    errors += 1
+
+        console.print(f"[green]Importados:[/] {imported}  |  [red]Erros:[/] {errors}")
+        input("\nPressiona Enter para continuar...")
+
+    # ── Backtesting ───────────────────────────────────────────────────────────
+    def backtesting(self):
+        console.clear()
+        self._header()
+        console.print(
+            "[bold]BACKTESTING[/]\n"
+            "[dim]Verifica quantos sorteios históricos passariam nos filtros actuais.[/]\n"
+        )
+        todos = self.db.todos_sorteios()
+        if len(todos) < 10:
+            console.print("[yellow]Precisas de pelo menos 10 sorteios para backtesting.[/]")
+            input(); return
+
+        passaram = 0
+        falharam = 0
+        reprovados = Counter()
+
+        with Progress(SpinnerColumn(), TextColumn("{task.description}"),
+                      BarColumn(), TextColumn("{task.completed}/{task.total}"),
+                      console=console) as progress:
+            task = progress.add_task("[cyan]A analisar...", total=len(todos))
+
+            for i, sorteio in enumerate(todos):
+                # Use the 9 draws BEFORE this one for colour classification
+                contexto = todos[i+1:i+10] if i + 10 <= len(todos) else todos[i+1:]
+                cores = self.stats.classificar_cores(contexto)
+                anterior = todos[i+1]["numeros"] if i + 1 < len(todos) else []
+                fe = FilterEngine(cores, anterior)
+                fe.reset_stats()
+
+                if fe.verificar(sorteio["numeros"]):
+                    passaram += 1
+                else:
+                    for key, val in fe.stats.items():
+                        if key.startswith("reprovadas_") and val > 0:
+                            reprovados[key] += 1
+
+                falharam = (i + 1) - passaram
+                progress.advance(task)
+
+        total = len(todos)
+        pct = (passaram / total * 100) if total > 0 else 0
+
+        console.print(Panel(
+            f"Total sorteios analisados: [bold]{total}[/]\n"
+            f"Passaram nos filtros: [bold green]{passaram}[/] ({pct:.1f}%)\n"
+            f"Reprovaram: [bold red]{falharam}[/]\n\n"
+            + "\n".join(f"  {k.replace('reprovadas_','')}: {v}" for k, v in reprovados.most_common()),
+            title="Resultado do Backtesting", border_style="cyan"
+        ))
+        input("\nPressiona Enter para continuar...")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ENTRY POINT
+# ═════════════════════════════════════════════════════════════════════════════
+def main():
+    console.clear()
+    ui = TerminalUI()
+    try:
+        ui.menu_principal()
+    except KeyboardInterrupt:
+        console.print("\n[dim]Saindo...[/]")
+    console.print("\n[bold cyan]Obrigado por usar o Gerador de Chaves EuroMillhões v8![/]\n")
+
+
+if __name__ == "__main__":
+    main()
