@@ -380,6 +380,299 @@ class EuromilhoesScraper:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# HISTORICAL BULK SCRAPER
+# ═════════════════════════════════════════════════════════════════════════════
+import re as _re
+
+class HistoricoScraper:
+    """
+    Scrapes the COMPLETE EuroMillions history year by year (2004 → present).
+    Uses a generator so progress can be streamed to the caller.
+
+    Yield dict types:
+      {"tipo": "inicio",       "total_anos": N}
+      {"tipo": "progresso",    "ano": Y, "step": i, "total": N}
+      {"tipo": "ano_ok",       "ano": Y, "encontrados": k, "total_acumulado": T}
+      {"tipo": "ano_erro",     "ano": Y, "msg": "..."}
+      {"tipo": "concluido",    "total": T, "inseridos_db": I, "ficheiro": "..."}
+    """
+
+    START_YEAR = 2004   # EuroMillions first draw: 7 Feb 2004
+    DELAY      = 1.2    # seconds between HTTP requests (be polite)
+
+    HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/122.0.0.0 Safari/537.36"
+        ),
+        "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-GB,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+        "DNT": "1",
+    }
+
+    MONTHS = {
+        "jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,
+        "jul":7,"aug":8,"sep":9,"oct":10,"nov":11,"dec":12,
+        "january":1,"february":2,"march":3,"april":4,"june":6,"july":7,
+        "august":8,"september":9,"october":10,"november":11,"december":12,
+        "enero":1,"febrero":2,"marzo":3,"abril":4,"mayo":5,"junio":6,
+        "julio":7,"agosto":8,"septiembre":9,"octubre":10,"noviembre":11,"diciembre":12,
+    }
+
+    def scrape_completo(self, db: "DatabaseManager", ficheiro: Path):
+        """Generator – call with `for evento in scraper.scrape_completo(db, path):`"""
+        ano_atual  = datetime.date.today().year
+        anos       = list(range(self.START_YEAR, ano_atual + 1))
+        acumulado  = []
+
+        yield {"tipo": "inicio", "total_anos": len(anos)}
+
+        for i, ano in enumerate(anos):
+            yield {"tipo": "progresso", "ano": ano, "step": i + 1, "total": len(anos)}
+
+            try:
+                resultados = self._scrape_ano(ano)
+                acumulado.extend(resultados)
+                # Persist partial results after every year
+                self._salvar_ficheiro(ficheiro, acumulado)
+                yield {"tipo": "ano_ok", "ano": ano,
+                       "encontrados": len(resultados), "total_acumulado": len(acumulado)}
+            except Exception as exc:
+                yield {"tipo": "ano_erro", "ano": ano, "msg": str(exc)[:120]}
+
+            time.sleep(self.DELAY)
+
+        # Final DB import
+        inseridos = 0
+        for s in acumulado:
+            if db.inserir_sorteio(s["data"], s["numeros"], s["estrelas"], "historico"):
+                inseridos += 1
+
+        yield {"tipo": "concluido", "total": len(acumulado),
+               "inseridos_db": inseridos, "ficheiro": str(ficheiro)}
+
+    # ── Per-year scraping ─────────────────────────────────────────────────────
+    def _scrape_ano(self, ano: int) -> list[dict]:
+        for fn in [self._euro_millions_com, self._euro_millions_com_pt,
+                   self._lotaria_net_arquivo]:
+            try:
+                resultados = fn(ano)
+                if resultados:
+                    return resultados
+            except Exception:
+                continue
+        return []
+
+    def _euro_millions_com(self, ano: int) -> list[dict]:
+        url = f"https://www.euro-millions.com/results/{ano}"
+        r   = requests.get(url, headers=self.HEADERS, timeout=25)
+        if r.status_code != 200:
+            return []
+        return self._parse_html(r.text, ano)
+
+    def _euro_millions_com_pt(self, ano: int) -> list[dict]:
+        url = f"https://www.euro-millions.com/pt/resultados/{ano}"
+        r   = requests.get(url, headers=self.HEADERS, timeout=25)
+        if r.status_code != 200:
+            return []
+        return self._parse_html(r.text, ano)
+
+    def _lotaria_net_arquivo(self, ano: int) -> list[dict]:
+        url = f"https://www.lotaria.net/euromilhoes/arquivo/{ano}"
+        r   = requests.get(url, headers={**self.HEADERS, "Accept-Language": "pt-PT,pt;q=0.9"},
+                           timeout=25)
+        if r.status_code != 200:
+            return []
+        return self._parse_html(r.text, ano)
+
+    # ── HTML parsing ──────────────────────────────────────────────────────────
+    def _parse_html(self, html: str, ano: int) -> list[dict]:
+        soup    = BeautifulSoup(html, "html.parser")
+        results = []
+
+        # Remove noise
+        for tag in soup(["script", "style", "nav", "footer", "header"]):
+            tag.decompose()
+
+        # Strategy A – find result containers with balls
+        containers = soup.find_all(
+            ["article", "section", "div", "li"],
+            class_=lambda c: c and any(
+                w in str(c).lower() for w in
+                ["result", "draw", "lottery", "sorteio", "resultado"]
+            ),
+        )
+        for cont in containers:
+            d = self._parse_container(cont, ano)
+            if d:
+                results.append(d)
+
+        # Strategy B – table rows
+        if not results:
+            for table in soup.find_all("table"):
+                for row in table.find_all("tr"):
+                    d = self._parse_table_row(row, ano)
+                    if d:
+                        results.append(d)
+
+        # Strategy C – aggressive text regex fallback
+        if not results:
+            results = self._regex_fallback(soup.get_text(" "), ano)
+
+        return self._deduplicate(results)
+
+    def _parse_container(self, cont, ano: int) -> dict | None:
+        # ── Date ──
+        date_str = None
+        for elem in cont.find_all(["time", "span", "a", "h2", "h3", "h4", "p", "div"]):
+            raw = elem.get("datetime") or elem.get_text(" ", strip=True)
+            date_str = self._parse_date(raw, ano)
+            if date_str:
+                break
+        if not date_str:
+            return None
+
+        # ── Main numbers ──
+        main_nums = []
+        star_nums = []
+
+        # Try to find separate star container first
+        star_cont = cont.find(
+            class_=lambda c: c and any(w in str(c).lower() for w in ["star", "lucky", "bonus"])
+        )
+
+        ball_elems = cont.find_all(
+            ["li", "span", "div", "td"],
+            class_=lambda c: c and any(
+                w in str(c).lower() for w in ["ball", "num", "number", "main", "boule"]
+            ),
+        )
+        for b in ball_elems:
+            t = b.get_text(strip=True)
+            if t.isdigit():
+                n = int(t)
+                if star_cont and b in star_cont.descendants:
+                    if 1 <= n <= 12:
+                        star_nums.append(n)
+                elif 1 <= n <= 50:
+                    main_nums.append(n)
+
+        # If we couldn't distinguish, use range heuristic:
+        # after 5 main numbers, remaining small numbers are stars
+        if len(main_nums) >= 7 and not star_nums:
+            all_nums = sorted(set(main_nums))
+            main_nums = all_nums[:5]
+            star_nums = [n for n in all_nums[5:] if 1 <= n <= 12][:2]
+
+        if len(main_nums) >= 5 and len(star_nums) >= 2:
+            return {"data": date_str,
+                    "numeros": sorted(set(main_nums))[:5],
+                    "estrelas": sorted(set(star_nums))[:2]}
+        return None
+
+    def _parse_table_row(self, row, ano: int) -> dict | None:
+        cells = row.find_all(["td", "th"])
+        if len(cells) < 3:
+            return None
+        nums_in_row = []
+        date_str    = None
+        for cell in cells:
+            raw = cell.get_text(" ", strip=True)
+            if not date_str:
+                date_str = self._parse_date(raw, ano)
+            if raw.isdigit():
+                nums_in_row.append(int(raw))
+        if len(nums_in_row) >= 7 and date_str:
+            sorted_nums = sorted(set(nums_in_row))
+            main   = [n for n in sorted_nums if 1 <= n <= 50][:5]
+            stars  = [n for n in sorted_nums if 1 <= n <= 12][:2]
+            if len(main) == 5 and len(stars) == 2:
+                return {"data": date_str, "numeros": main, "estrelas": stars}
+        return None
+
+    def _regex_fallback(self, text: str, ano: int) -> list[dict]:
+        """
+        Last resort: scan plain text for lines that contain a date
+        followed by 7 space/punct-separated numbers.
+        """
+        results = []
+        # Find every sequence of 7+ integers on the same "block"
+        pattern = _re.compile(
+            r'(\d{1,2}[./ -]\d{1,2}[./ -]\d{4}|\d{4}[./ -]\d{2}[./ -]\d{2})'
+            r'[^\d]*'
+            r'(\d{1,2})\D+(\d{1,2})\D+(\d{1,2})\D+(\d{1,2})\D+(\d{1,2})'
+            r'\D+(\d{1,2})\D+(\d{1,2})'
+        )
+        for m in pattern.finditer(text):
+            date_str = self._parse_date(m.group(1), ano)
+            if not date_str:
+                continue
+            nums = [int(m.group(i)) for i in range(2, 9)]
+            main  = sorted([n for n in nums if 1 <= n <= 50])
+            stars = sorted([n for n in nums if 1 <= n <= 12])
+            if len(main) >= 5 and len(stars) >= 2:
+                results.append({"data": date_str,
+                                 "numeros": main[:5], "estrelas": stars[:2]})
+        return results
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+    def _parse_date(self, text: str, fallback_year: int = None) -> str | None:
+        if not text or len(text) < 4:
+            return None
+        text = text.strip()
+
+        # ISO: YYYY-MM-DD
+        m = _re.search(r'(\d{4})-(\d{1,2})-(\d{1,2})', text)
+        if m:
+            return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+
+        # DD/MM/YYYY or DD.MM.YYYY or DD-MM-YYYY
+        m = _re.search(r'(\d{1,2})[./-](\d{1,2})[./-](\d{4})', text)
+        if m:
+            return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+
+        # "Friday 12th January 2024" or "12 January 2024"
+        m = _re.search(r'(\d{1,2})\w*\s+([A-Za-z]+)\s+(\d{4})', text)
+        if m:
+            mon = self.MONTHS.get(m.group(2).lower()[:9])
+            if mon:
+                return f"{m.group(3)}-{mon:02d}-{int(m.group(1)):02d}"
+
+        # "January 12, 2024"
+        m = _re.search(r'([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})', text)
+        if m:
+            mon = self.MONTHS.get(m.group(1).lower()[:9])
+            if mon:
+                return f"{m.group(3)}-{mon:02d}-{int(m.group(2)):02d}"
+
+        return None
+
+    def _deduplicate(self, results: list[dict]) -> list[dict]:
+        seen = set()
+        out  = []
+        for r in results:
+            key = r["data"]
+            if key not in seen:
+                seen.add(key)
+                out.append(r)
+        return sorted(out, key=lambda x: x["data"])
+
+    @staticmethod
+    def _salvar_ficheiro(ficheiro: Path, sorteios: list[dict]):
+        data = {
+            "gerado_em": datetime.date.today().isoformat(),
+            "total":     len(sorteios),
+            "sorteios":  sorteios,
+        }
+        ficheiro.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+HISTORICO_PATH = Path(__file__).parent / "historico_completo.json"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # STATISTICS ANALYSER
 # ═════════════════════════════════════════════════════════════════════════════
 class StatisticsAnalyzer:

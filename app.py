@@ -3,20 +3,20 @@
 """
 Flask web server for the EuroMilhões key generator.
 Run with:  python app.py
-Then open: http://localhost:5050
+Then open: http://localhost:5051
 """
 
 import json
 import datetime
 import threading
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, Response, stream_with_context
 
 # Import core logic from euromilhoes.py
 from euromilhoes import (
     DatabaseManager, StatisticsAnalyzer, FilterEngine,
-    KeyGenerator, ExcelExporter, EuromilhoesScraper,
-    VERSION, PADROES_EQUILIBRADOS, BI, BP, AI, AP,
+    KeyGenerator, ExcelExporter, EuromilhoesScraper, HistoricoScraper,
+    VERSION, PADROES_EQUILIBRADOS, BI, BP, AI, AP, HISTORICO_PATH,
 )
 
 app = Flask(__name__)
@@ -262,10 +262,93 @@ def api_export_excel():
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# API – HISTORICO FILE STATUS
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/historico-status")
+def api_historico_status():
+    if not HISTORICO_PATH.exists():
+        return jsonify({"existe": False})
+    try:
+        data = json.loads(HISTORICO_PATH.read_text(encoding="utf-8"))
+        return jsonify({
+            "existe":       True,
+            "gerado_em":    data.get("gerado_em"),
+            "total":        data.get("total", 0),
+            "tamanho_kb":   round(HISTORICO_PATH.stat().st_size / 1024, 1),
+        })
+    except Exception as e:
+        return jsonify({"existe": True, "erro": str(e)})
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – IMPORT EXISTING FILE INTO DB (no re-scraping)
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/importar-ficheiro", methods=["POST"])
+def api_importar_ficheiro():
+    if not HISTORICO_PATH.exists():
+        return jsonify({"erro": "Ficheiro historico_completo.json não encontrado."}), 404
+    try:
+        data     = json.loads(HISTORICO_PATH.read_text(encoding="utf-8"))
+        sorteios = data.get("sorteios", [])
+        inseridos, ja_existiam = 0, 0
+        for s in sorteios:
+            ok = db.inserir_sorteio(s["data"], s["numeros"], s["estrelas"], "historico")
+            if ok:
+                inseridos += 1
+            else:
+                ja_existiam += 1
+        return jsonify({
+            "total_ficheiro": len(sorteios),
+            "inseridos":      inseridos,
+            "ja_existiam":    ja_existiam,
+        })
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – SCRAPE FULL HISTORY (SSE streaming)
+# ════════════════════════════════════════════════════════════════════════════
+_historico_lock = threading.Lock()
+
+@app.route("/api/scrape-historico-completo")
+def api_scrape_historico_completo():
+    """
+    Server-Sent Events endpoint.
+    Client connects and receives JSON events line by line.
+    """
+    if not _historico_lock.acquire(blocking=False):
+        return jsonify({"erro": "Já existe um scraping em curso."}), 429
+
+    def generate():
+        try:
+            scraper = HistoricoScraper()
+            for evento in scraper.scrape_completo(db, HISTORICO_PATH):
+                yield f"data: {json.dumps(evento, ensure_ascii=False)}\n\n"
+                # Keep connection alive during long pauses
+                if evento.get("tipo") == "progresso":
+                    yield ": keep-alive\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'tipo': 'erro_fatal', 'msg': str(exc)})}\n\n"
+        finally:
+            _historico_lock.release()
+
+    return Response(
+        stream_with_context(generate()),
+        content_type="text/event-stream",
+        headers={
+            "Cache-Control":    "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection":        "keep-alive",
+        },
+    )
+
+
+# ════════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     import os
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
     print(f"\n  EuroMilhoes v{VERSION} - Servidor Web")
     print("  ---------------------------------------")
-    print("  Acede em:  http://localhost:5050\n")
-    app.run(host="0.0.0.0", port=5050, debug=False)
+    print("  Acede em:  http://localhost:5051\n")
+    app.run(host="0.0.0.0", port=5051, debug=False)

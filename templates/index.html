@@ -345,16 +345,77 @@
       <i class="fa-solid fa-cloud-arrow-down"></i>
       <h3>Actualizar Base de Dados</h3>
     </div>
-    <div class="card-dark" style="max-width:600px;">
-      <h5><i class="fa-solid fa-spider me-2"></i>Web Scraping Automático</h5>
-      <p class="text-muted small">
-        Tenta obter o último sorteio EuroMilhões automaticamente de várias fontes
-        (lotaria.net, jogossantacasa.pt, euro-millions.com).
-      </p>
-      <button class="btn btn-em" onclick="actualizarWeb()">
-        <i class="fa-solid fa-cloud-arrow-down me-2"></i>Ir buscar último sorteio
-      </button>
-      <div id="scrape-result" class="mt-3"></div>
+
+    <div class="row g-3">
+      <!-- Last draw quick fetch -->
+      <div class="col-lg-5">
+        <div class="card-dark">
+          <h5><i class="fa-solid fa-bolt me-2"></i>Último Sorteio</h5>
+          <p class="text-muted small">
+            Obtém apenas o sorteio mais recente de várias fontes (lotaria.net,
+            jogossantacasa.pt, euro-millions.com).
+          </p>
+          <button class="btn btn-em" onclick="actualizarWeb()">
+            <i class="fa-solid fa-cloud-arrow-down me-2"></i>Ir buscar último sorteio
+          </button>
+          <div id="scrape-result" class="mt-3"></div>
+        </div>
+      </div>
+
+      <!-- Full history import -->
+      <div class="col-lg-7">
+        <div class="card-dark">
+          <h5><i class="fa-solid fa-clock-rotate-left me-2"></i>Histórico Completo (desde 2004)</h5>
+          <p class="text-muted small">
+            Faz scraping de <strong>todos</strong> os sorteios EuroMilhões desde o início
+            (Fev 2004) e guarda em <code>historico_completo.json</code> na pasta do programa.
+            Como os sorteios passados nunca mudam, o ficheiro só precisa de ser gerado uma vez.
+          </p>
+
+          <!-- File status banner -->
+          <div id="hist-file-status" class="mb-3"></div>
+
+          <!-- Action buttons -->
+          <div class="d-flex gap-2 flex-wrap mb-3">
+            <button class="btn btn-em" id="btn-scrape-hist" onclick="iniciarScrapeHistorico()">
+              <i class="fa-solid fa-spider me-2"></i>Importar Histórico Completo
+            </button>
+            <button class="btn btn-ghost" id="btn-load-ficheiro" onclick="importarFicheiro()" style="display:none;">
+              <i class="fa-solid fa-file-import me-2"></i>Carregar ficheiro existente para BD
+            </button>
+          </div>
+
+          <!-- Progress section (hidden until scraping starts) -->
+          <div id="hist-progress-section" style="display:none;">
+            <!-- Year progress bar -->
+            <div class="mb-2 d-flex justify-content-between align-items-center">
+              <span class="text-muted small" id="hist-prog-label">A iniciar...</span>
+              <span class="text-muted small" id="hist-prog-pct">0%</span>
+            </div>
+            <div style="background:#1a2540;border-radius:8px;height:14px;overflow:hidden;margin-bottom:12px;">
+              <div id="hist-prog-bar"
+                   style="height:100%;width:0%;background:linear-gradient(90deg,#e94560,#ffd700);
+                          border-radius:8px;transition:width .3s ease;"></div>
+            </div>
+
+            <!-- Live log -->
+            <div id="hist-log"
+                 style="background:#0d1220;border:1px solid #1e2a4a;border-radius:8px;
+                        padding:12px;height:200px;overflow-y:auto;font-family:monospace;font-size:.78rem;">
+            </div>
+
+            <!-- Summary counter -->
+            <div class="mt-2 d-flex gap-4">
+              <span class="text-muted small">Ano: <strong id="hist-cur-ano">–</strong></span>
+              <span class="text-muted small">Encontrados: <strong id="hist-total-found" style="color:#51cf66;">0</strong></span>
+              <span class="text-muted small">Erros: <strong id="hist-total-err" style="color:#ff6b6b;">0</strong></span>
+            </div>
+          </div>
+
+          <!-- Final result card -->
+          <div id="hist-resultado" style="display:none;"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -391,6 +452,7 @@ function showTab(name) {
   if (name === "estatisticas") loadEstatisticas();
   if (name === "estrategias") loadEstrategias();
   if (name === "historico")   loadHistorico(1);
+  if (name === "atualizar")   loadHistoricoStatus();
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -890,6 +952,165 @@ async function actualizarWeb() {
   } catch(e) {
     el.innerHTML = `<div class="text-danger">Erro de ligação.</div>`;
   }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Full historical scraping (SSE)
+// ════════════════════════════════════════════════════════════════════
+let _histSource = null;
+
+// Called when the "Actualizar BD" tab is shown
+async function loadHistoricoStatus() {
+  const r   = await fetch("/api/historico-status");
+  const d   = await r.json();
+  const el  = document.getElementById("hist-file-status");
+  const btn = document.getElementById("btn-load-ficheiro");
+
+  if (d.existe && !d.erro) {
+    el.innerHTML = `
+      <div style="background:#0d2a10;border:1px solid #51cf66;border-radius:8px;padding:10px 14px;">
+        <i class="fa-solid fa-file-check me-2" style="color:#51cf66;"></i>
+        <strong style="color:#51cf66;">historico_completo.json</strong> encontrado
+        &nbsp;·&nbsp; <span class="text-muted small">${d.total.toLocaleString()} sorteios</span>
+        &nbsp;·&nbsp; <span class="text-muted small">gerado em ${d.gerado_em}</span>
+        &nbsp;·&nbsp; <span class="text-muted small">${d.tamanho_kb} KB</span>
+      </div>`;
+    btn.style.display = "";
+  } else if (d.existe && d.erro) {
+    el.innerHTML = `<div class="text-warning small">Ficheiro existe mas com erro: ${d.erro}</div>`;
+    btn.style.display = "";
+  } else {
+    el.innerHTML = `
+      <div style="background:#1a2540;border:1px dashed #444;border-radius:8px;padding:10px 14px;color:#888;">
+        <i class="fa-solid fa-file-circle-xmark me-2"></i>
+        Ficheiro <code>historico_completo.json</code> ainda não existe.
+        Clica em "Importar Histórico Completo" para gerar.
+      </div>`;
+    btn.style.display = "none";
+  }
+}
+
+async function importarFicheiro() {
+  loading(true);
+  try {
+    const r = await fetch("/api/importar-ficheiro", {method:"POST"});
+    const d = await r.json();
+    if (r.ok) {
+      toast(`Importados ${d.inseridos.toLocaleString()} sorteios (${d.ja_existiam} já existiam)`);
+      loadStatus();
+    } else {
+      toast(d.erro || "Erro", "error");
+    }
+  } finally { loading(false); }
+}
+
+function iniciarScrapeHistorico() {
+  if (_histSource) {
+    toast("Já existe um scraping em curso.", "warning");
+    return;
+  }
+
+  // Show progress UI
+  document.getElementById("hist-progress-section").style.display = "";
+  document.getElementById("hist-resultado").style.display = "none";
+  document.getElementById("btn-scrape-hist").disabled = true;
+  document.getElementById("btn-load-ficheiro").disabled = true;
+
+  const log       = document.getElementById("hist-log");
+  const progBar   = document.getElementById("hist-prog-bar");
+  const progLabel = document.getElementById("hist-prog-label");
+  const progPct   = document.getElementById("hist-prog-pct");
+  const curAno    = document.getElementById("hist-cur-ano");
+  const totalFnd  = document.getElementById("hist-total-found");
+  const totalErr  = document.getElementById("hist-total-err");
+
+  let erros = 0;
+  log.innerHTML = "";
+
+  function logLine(html, colour="#aaa") {
+    log.insertAdjacentHTML("beforeend",
+      `<div style="color:${colour};margin-bottom:2px;">${html}</div>`);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  logLine("▶ A iniciar scraping do histórico completo (2004 → hoje)...", "#ffd700");
+
+  _histSource = new EventSource("/api/scrape-historico-completo");
+
+  _histSource.onmessage = function(e) {
+    try {
+      const d = JSON.parse(e.data);
+
+      if (d.tipo === "inicio") {
+        logLine(`📅 Total de anos a processar: <strong>${d.total_anos}</strong>`);
+
+      } else if (d.tipo === "progresso") {
+        const pct = Math.round((d.step / d.total) * 100);
+        progBar.style.width   = pct + "%";
+        progPct.textContent   = pct + "%";
+        progLabel.textContent = `A processar ${d.ano}... (${d.step}/${d.total})`;
+        curAno.textContent    = d.ano;
+
+      } else if (d.tipo === "ano_ok") {
+        const col = d.encontrados > 0 ? "#51cf66" : "#888";
+        logLine(
+          `✓ <strong style="color:${col};">${d.ano}</strong> → ${d.encontrados} sorteios` +
+          ` · total: ${d.total_acumulado.toLocaleString()}`, col
+        );
+        totalFnd.textContent = d.total_acumulado.toLocaleString();
+
+      } else if (d.tipo === "ano_erro") {
+        erros++;
+        totalErr.textContent = erros;
+        logLine(`✗ <strong style="color:#ff6b6b;">${d.ano}</strong> → erro: ${d.msg}`, "#ff6b6b");
+
+      } else if (d.tipo === "concluido") {
+        progBar.style.width   = "100%";
+        progPct.textContent   = "100%";
+        progLabel.textContent = "Concluído!";
+
+        logLine(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, "#333");
+        logLine(`✅ Histórico completo! ${d.total.toLocaleString()} sorteios · `+
+                `${d.inseridos_db.toLocaleString()} inseridos na BD`, "#ffd700");
+        logLine(`💾 Ficheiro: ${d.ficheiro}`, "#74c0fc");
+
+        document.getElementById("hist-resultado").style.display = "";
+        document.getElementById("hist-resultado").innerHTML = `
+          <div style="background:#0d2a10;border:1px solid #51cf66;border-radius:10px;padding:16px;margin-top:12px;">
+            <div class="d-flex align-items-center gap-3 mb-2">
+              <i class="fa-solid fa-circle-check fa-2x" style="color:#51cf66;"></i>
+              <div>
+                <strong style="color:#51cf66;">Histórico importado com sucesso!</strong><br/>
+                <span class="text-muted small">${d.total.toLocaleString()} sorteios · ${d.inseridos_db.toLocaleString()} adicionados à BD</span>
+              </div>
+            </div>
+            <code style="color:#74c0fc;font-size:.8rem;">historico_completo.json</code>
+            <span class="text-muted small ms-2">guardado na pasta do programa</span>
+          </div>`;
+
+        _histSource.close();
+        _histSource = null;
+        document.getElementById("btn-scrape-hist").disabled = false;
+        document.getElementById("btn-load-ficheiro").disabled = false;
+        loadStatus();
+        loadHistoricoStatus();
+
+      } else if (d.tipo === "erro_fatal") {
+        logLine(`💥 ERRO FATAL: ${d.msg}`, "#ff6b6b");
+        _histSource.close();
+        _histSource = null;
+        document.getElementById("btn-scrape-hist").disabled = false;
+      }
+    } catch(err) {
+      // skip keep-alive comments
+    }
+  };
+
+  _histSource.onerror = function() {
+    logLine("⚠ Ligação SSE interrompida.", "#ffd700");
+    if (_histSource) { _histSource.close(); _histSource = null; }
+    document.getElementById("btn-scrape-hist").disabled = false;
+  };
 }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
