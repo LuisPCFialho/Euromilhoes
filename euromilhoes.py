@@ -669,7 +669,118 @@ class HistoricoScraper:
         ficheiro.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-HISTORICO_PATH = Path(__file__).parent / "historico_completo.json"
+HISTORICO_PATH    = Path(__file__).parent / "historico_completo.json"
+EXCEL_SOURCE_PATH = Path(__file__).parent / "Euromilhões _ Todos os sorteios.xlsx"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# EXCEL IMPORTER
+# ═════════════════════════════════════════════════════════════════════════════
+import re as _re2
+
+class ExcelImporter:
+    """
+    Imports the complete draw history from the local Excel file.
+
+    File:  'Euromilhões _ Todos os sorteios.xlsx'
+    Sheet: 'EUROMILHÕES-Zeros'
+    Layout (1-based columns):
+      Col B (2)  : draw sequence number
+      Col C (3)  : date  (datetime object or string like '\xa013\xa0fev\xa02004')
+      Cols D–H (4–8) : 5 drawn numbers
+      Cols I–J (9–10): 2 lucky stars
+    Data starts at row 14 (row 13 is the upcoming-draw placeholder).
+    """
+
+    SHEET_NAME    = "EUROMILHÕES-Zeros"
+    DATA_START_ROW = 14   # row 13 = upcoming draw placeholder → skip
+
+    PT_MONTHS = {
+        "jan": 1, "fev": 2, "mar": 3, "abr": 4,
+        "mai": 5, "jun": 6, "jul": 7, "ago": 8,
+        "set": 9, "out": 10, "nov": 11, "dez": 12,
+    }
+
+    def __init__(self, excel_path: Path = None):
+        self.excel_path = excel_path or EXCEL_SOURCE_PATH
+
+    # ── Public API ────────────────────────────────────────────────────────────
+    def importar(self, db: "DatabaseManager") -> dict:
+        """Read the Excel file and insert all draws.  Returns summary dict."""
+        if not self.excel_path.exists():
+            raise FileNotFoundError(f"Ficheiro não encontrado: {self.excel_path}")
+
+        wb = openpyxl.load_workbook(self.excel_path, data_only=True, read_only=True)
+        try:
+            ws = wb[self.SHEET_NAME]
+        except KeyError:
+            wb.close()
+            raise ValueError(f"Folha '{self.SHEET_NAME}' não encontrada.")
+
+        inseridos = ja_existiam = erros = total_lido = 0
+
+        for row in ws.iter_rows(min_row=self.DATA_START_ROW, values_only=True):
+            draw_num              = row[1]   # Col B – draw sequence number
+            date_val              = row[2]   # Col C – date
+            n1, n2, n3, n4, n5   = row[3], row[4], row[5], row[6], row[7]
+            e1, e2               = row[8], row[9]
+
+            if draw_num is None:             # past end of data
+                break
+
+            data_str = self._parse_date(date_val)
+            if data_str is None:
+                erros += 1
+                continue
+
+            try:
+                nums  = sorted([int(n1), int(n2), int(n3), int(n4), int(n5)])
+                stars = sorted([int(e1), int(e2)])
+                assert len(set(nums))  == 5 and all(1 <= n <= 50 for n in nums)
+                assert len(set(stars)) == 2 and all(1 <= s <= 12 for s in stars)
+            except (TypeError, ValueError, AssertionError):
+                erros += 1
+                continue
+
+            total_lido += 1
+            ok = db.inserir_sorteio(data_str, nums, stars, fonte="excel")
+            if ok:
+                inseridos += 1
+            else:
+                ja_existiam += 1
+
+        wb.close()
+        return {
+            "inseridos":    inseridos,
+            "ja_existiam":  ja_existiam,
+            "erros":        erros,
+            "total_lido":   total_lido,
+        }
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+    def _parse_date(self, val) -> str | None:
+        if val is None:
+            return None
+        if isinstance(val, (datetime.datetime, datetime.date)):
+            if isinstance(val, datetime.datetime):
+                return val.date().isoformat()
+            return val.isoformat()
+        # String e.g. '\xa013\xa0fev\xa02004'
+        text = str(val).replace("\xa0", " ").strip()
+        parts = text.split()
+        if len(parts) >= 3:
+            try:
+                day   = int(parts[0])
+                month = self.PT_MONTHS.get(parts[1].lower()[:3])
+                year  = int(parts[2])
+                if month and 1 <= day <= 31 and 2004 <= year <= 2030:
+                    return f"{year}-{month:02d}-{day:02d}"
+            except (ValueError, IndexError):
+                pass
+        m = _re2.search(r"(\d{4})-(\d{2})-(\d{2})", text)
+        if m:
+            return m.group(0)
+        return None
 
 
 # ═════════════════════════════════════════════════════════════════════════════

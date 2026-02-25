@@ -364,12 +364,29 @@
 
       <!-- Full history import -->
       <div class="col-lg-7">
-        <div class="card-dark">
-          <h5><i class="fa-solid fa-clock-rotate-left me-2"></i>Histórico Completo (desde 2004)</h5>
+
+        <!-- ── Excel import (primary) ──────────────────────────────── -->
+        <div class="card-dark mb-3">
+          <h5><i class="fa-solid fa-file-excel me-2" style="color:#51cf66;"></i>Importar do Excel</h5>
           <p class="text-muted small">
-            Faz scraping de <strong>todos</strong> os sorteios EuroMilhões desde o início
-            (Fev 2004) e guarda em <code>historico_completo.json</code> na pasta do programa.
-            Como os sorteios passados nunca mudam, o ficheiro só precisa de ser gerado uma vez.
+            Importa todos os sorteios do ficheiro
+            <code>Euromilhões _ Todos os sorteios.xlsx</code> directamente para a base de dados.
+            Rápido, fiável e sem necessidade de internet.
+          </p>
+          <!-- Excel file status banner -->
+          <div id="excel-file-status" class="mb-3"></div>
+          <button class="btn btn-em" id="btn-importar-excel" onclick="importarExcel()">
+            <i class="fa-solid fa-file-import me-2"></i>Importar todos os sorteios do Excel
+          </button>
+          <div id="excel-resultado" class="mt-3"></div>
+        </div>
+
+        <!-- ── Web scraping (secondary / fallback) ─────────────────── -->
+        <div class="card-dark">
+          <h5><i class="fa-solid fa-clock-rotate-left me-2"></i>Histórico via Web <span class="badge bg-secondary ms-1" style="font-size:.65rem;">fallback</span></h5>
+          <p class="text-muted small">
+            Tenta fazer scraping de todos os sorteios desde 2004 via internet.
+            Pode demorar vários minutos e depende da disponibilidade dos sites.
           </p>
 
           <!-- File status banner -->
@@ -377,11 +394,11 @@
 
           <!-- Action buttons -->
           <div class="d-flex gap-2 flex-wrap mb-3">
-            <button class="btn btn-em" id="btn-scrape-hist" onclick="iniciarScrapeHistorico()">
-              <i class="fa-solid fa-spider me-2"></i>Importar Histórico Completo
+            <button class="btn btn-ghost" id="btn-scrape-hist" onclick="iniciarScrapeHistorico()">
+              <i class="fa-solid fa-spider me-2"></i>Scraping completo (web)
             </button>
             <button class="btn btn-ghost" id="btn-load-ficheiro" onclick="importarFicheiro()" style="display:none;">
-              <i class="fa-solid fa-file-import me-2"></i>Carregar ficheiro existente para BD
+              <i class="fa-solid fa-file-import me-2"></i>Carregar JSON para BD
             </button>
           </div>
 
@@ -401,7 +418,7 @@
             <!-- Live log -->
             <div id="hist-log"
                  style="background:#0d1220;border:1px solid #1e2a4a;border-radius:8px;
-                        padding:12px;height:200px;overflow-y:auto;font-family:monospace;font-size:.78rem;">
+                        padding:12px;height:180px;overflow-y:auto;font-family:monospace;font-size:.78rem;">
             </div>
 
             <!-- Summary counter -->
@@ -942,6 +959,10 @@ async function actualizarWeb() {
           Estrelas: ★${s.estrelas.join(" ★")}
         </div>`;
       loadStatus();
+      // Refresh history table if it is currently visible
+      if (document.getElementById("tab-historico").classList.contains("active")) {
+        loadHistorico(1);
+      }
     } else {
       el.innerHTML = `
         <div class="alert" style="background:#3a1010;border:1px solid #ff6b6b;color:#ff6b6b;border-radius:10px;">
@@ -961,6 +982,29 @@ let _histSource = null;
 
 // Called when the "Actualizar BD" tab is shown
 async function loadHistoricoStatus() {
+  // Check Excel source file
+  try {
+    const rx  = await fetch("/api/excel-status");
+    const dx  = await rx.json();
+    const elx = document.getElementById("excel-file-status");
+    if (dx.existe) {
+      elx.innerHTML = `
+        <div style="background:#0d2a10;border:1px solid #51cf66;border-radius:8px;padding:10px 14px;">
+          <i class="fa-solid fa-file-excel me-2" style="color:#51cf66;"></i>
+          <strong style="color:#51cf66;">${dx.ficheiro}</strong> encontrado
+          &nbsp;·&nbsp; <span class="text-muted small">${dx.tamanho_kb} KB</span>
+        </div>`;
+    } else {
+      elx.innerHTML = `
+        <div style="background:#1a2540;border:1px dashed #444;border-radius:8px;padding:10px 14px;color:#888;">
+          <i class="fa-solid fa-file-circle-xmark me-2"></i>
+          Ficheiro <code>${dx.ficheiro}</code> não encontrado na pasta do programa.
+        </div>`;
+      document.getElementById("btn-importar-excel").disabled = true;
+    }
+  } catch(e) {}
+
+  // Check historico JSON file
   const r   = await fetch("/api/historico-status");
   const d   = await r.json();
   const el  = document.getElementById("hist-file-status");
@@ -984,9 +1028,51 @@ async function loadHistoricoStatus() {
       <div style="background:#1a2540;border:1px dashed #444;border-radius:8px;padding:10px 14px;color:#888;">
         <i class="fa-solid fa-file-circle-xmark me-2"></i>
         Ficheiro <code>historico_completo.json</code> ainda não existe.
-        Clica em "Importar Histórico Completo" para gerar.
       </div>`;
     btn.style.display = "none";
+  }
+}
+
+async function importarExcel() {
+  const btn = document.getElementById("btn-importar-excel");
+  const el  = document.getElementById("excel-resultado");
+  btn.disabled = true;
+  el.innerHTML = `<div class="text-muted"><span class="spinner-border spinner-border-sm me-2"></span>A ler ficheiro Excel e a importar… pode demorar alguns segundos.</div>`;
+  try {
+    const r = await fetch("/api/importar-excel", {method:"POST"});
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      el.innerHTML = `
+        <div style="background:#0d2a10;border:1px solid #51cf66;border-radius:10px;padding:14px;" class="mt-2">
+          <div style="color:#51cf66;font-weight:600;margin-bottom:8px;">
+            <i class="fa-solid fa-circle-check me-2"></i>Importação concluída
+          </div>
+          <div class="row text-center g-2">
+            <div class="col-4">
+              <div style="font-size:1.4rem;font-weight:700;color:#51cf66;">${d.inseridos.toLocaleString()}</div>
+              <div class="text-muted small">inseridos</div>
+            </div>
+            <div class="col-4">
+              <div style="font-size:1.4rem;font-weight:700;color:#ffd700;">${d.ja_existiam.toLocaleString()}</div>
+              <div class="text-muted small">já existiam</div>
+            </div>
+            <div class="col-4">
+              <div style="font-size:1.4rem;font-weight:700;color:#aaa;">${d.total_bd.toLocaleString()}</div>
+              <div class="text-muted small">total na BD</div>
+            </div>
+          </div>
+          ${d.erros > 0 ? `<div class="text-warning small mt-2">${d.erros} linhas ignoradas (dados inválidos)</div>` : ""}
+        </div>`;
+      loadStatus();
+      toast(`${d.inseridos.toLocaleString()} sorteios importados do Excel`, "success");
+    } else {
+      el.innerHTML = `<div class="text-danger mt-2"><i class="fa-solid fa-triangle-exclamation me-1"></i>${d.erro}</div>`;
+      toast(d.erro || "Erro na importação", "error");
+    }
+  } catch(e) {
+    el.innerHTML = `<div class="text-danger mt-2">Erro de ligação ao servidor.</div>`;
+  } finally {
+    btn.disabled = false;
   }
 }
 

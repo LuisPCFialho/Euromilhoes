@@ -17,6 +17,7 @@ from euromilhoes import (
     DatabaseManager, StatisticsAnalyzer, FilterEngine,
     KeyGenerator, ExcelExporter, EuromilhoesScraper, HistoricoScraper,
     VERSION, PADROES_EQUILIBRADOS, BI, BP, AI, AP, HISTORICO_PATH,
+    ExcelImporter, EXCEL_SOURCE_PATH,
 )
 
 app = Flask(__name__)
@@ -342,6 +343,43 @@ def api_scrape_historico_completo():
             "Connection":        "keep-alive",
         },
     )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – IMPORT FROM LOCAL EXCEL FILE
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/importar-excel", methods=["POST"])
+def api_importar_excel():
+    """
+    Read 'Euromilhões _ Todos os sorteios.xlsx' from the program folder
+    and import all draws into the SQLite database.
+    """
+    try:
+        importer = ExcelImporter()
+        result   = importer.importar(db)
+        return jsonify({
+            "ok":           True,
+            "inseridos":    result["inseridos"],
+            "ja_existiam":  result["ja_existiam"],
+            "erros":        result["erros"],
+            "total_lido":   result["total_lido"],
+            "total_bd":     db.total_sorteios(),
+        })
+    except FileNotFoundError as e:
+        return jsonify({"erro": str(e)}), 404
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+
+@app.route("/api/excel-status")
+def api_excel_status():
+    """Check whether the source Excel file exists."""
+    exists = EXCEL_SOURCE_PATH.exists()
+    return jsonify({
+        "existe":   exists,
+        "ficheiro": EXCEL_SOURCE_PATH.name,
+        "tamanho_kb": round(EXCEL_SOURCE_PATH.stat().st_size / 1024, 1) if exists else None,
+    })
 
 
 # ════════════════════════════════════════════════════════════════════════════
