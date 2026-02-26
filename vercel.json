@@ -1,4 +1,5 @@
 {
+  "projectName": "euromilhoes",
   "builds": [
     {
       "src": "api/index.py",
