@@ -60,16 +60,22 @@ try:
 except ImportError:
     MISSING_DEPS.append("rich")
 
-if MISSING_DEPS:
+if MISSING_DEPS and not os.environ.get("VERCEL"):
     print("\n[ERRO] Dependências em falta. Instala com:")
     print(f"  pip install {' '.join(MISSING_DEPS)}\n")
     sys.exit(1)
 
 # ─── Global constants ─────────────────────────────────────────────────────────
 VERSION = "9.0"
-DB_PATH = Path(__file__).parent / "euromilhoes.db"
-EXCEL_DIR = Path(__file__).parent / "chaves_geradas"
-EXCEL_DIR.mkdir(exist_ok=True)
+_IS_VERCEL = bool(os.environ.get("VERCEL"))
+
+if _IS_VERCEL:
+    DB_PATH   = Path("/tmp/euromilhoes.db")
+    EXCEL_DIR = Path("/tmp/chaves_geradas")
+else:
+    DB_PATH   = Path(__file__).parent / "euromilhoes.db"
+    EXCEL_DIR = Path(__file__).parent / "chaves_geradas"
+EXCEL_DIR.mkdir(parents=True, exist_ok=True)
 
 console = Console()
 
@@ -670,8 +676,12 @@ class HistoricoScraper:
         ficheiro.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-HISTORICO_PATH    = Path(__file__).parent / "historico_completo.json"
-EXCEL_SOURCE_PATH = Path(__file__).parent / "Euromilhões _ Todos os sorteios.xlsx"
+if _IS_VERCEL:
+    HISTORICO_PATH    = Path("/tmp/historico_completo.json")
+    EXCEL_SOURCE_PATH = Path("/tmp/Euromilhões _ Todos os sorteios.xlsx")
+else:
+    HISTORICO_PATH    = Path(__file__).parent / "historico_completo.json"
+    EXCEL_SOURCE_PATH = Path(__file__).parent / "Euromilhões _ Todos os sorteios.xlsx"
 
 
 # ═════════════════════════════════════════════════════════════════════════════

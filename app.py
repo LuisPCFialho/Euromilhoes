@@ -6,6 +6,7 @@ Run with:  python app.py
 Then open: http://localhost:5051
 """
 
+import os
 import json
 import datetime
 import threading
@@ -19,6 +20,8 @@ from euromilhoes import (
     VERSION, PADROES_EQUILIBRADOS, BI, BP, AI, AP, HISTORICO_PATH,
     ExcelImporter, EXCEL_SOURCE_PATH,
 )
+
+_IS_VERCEL = bool(os.environ.get("VERCEL"))
 
 app = Flask(__name__)
 
@@ -359,7 +362,11 @@ def api_scrape_historico_completo():
     """
     Server-Sent Events endpoint.
     Client connects and receives JSON events line by line.
+    Disabled on Vercel (serverless timeout too short for full scrape).
     """
+    if _IS_VERCEL:
+        return jsonify({"erro": "Funcionalidade indisponível no Vercel. Use a versão local."}), 501
+
     if not _historico_lock.acquire(blocking=False):
         return jsonify({"erro": "Já existe um scraping em curso."}), 429
 

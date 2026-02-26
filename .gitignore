@@ -1,7 +1,8 @@
 __pycache__/
 *.pyc
 *.pyo
-*.db
 chaves_geradas/
 .env
 *.xlsx
+# Keep euromilhoes.db tracked (needed for Vercel deploy)
+!euromilhoes.db
