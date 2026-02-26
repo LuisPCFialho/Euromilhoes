@@ -96,7 +96,7 @@ PADROES_EQUILIBRADOS = [
 # Colour system thresholds
 # VERMELHOS: 0 appearances in last 9 draws → 1–3 in combo
 # VERDES: 1 appearance → 1–3 in combo
-# AZUIS: 2 appearances → 0–1 in combo
+# AZUIS: 2 appearances → 0–2 in combo
 # CASTANHOS: 3+ appearances → EXCLUDED (0 in combo)
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -980,8 +980,8 @@ class FilterEngine:
                          "Três ou mais iguais representam menos de 4% dos sorteios.",
         },
         "D": {
-            "nome": "Décadas",
-            "descricao": "Mín 3 décadas diferentes (0-9, 10-19, 20-29, 30-39, 40-49). "
+            "nome": "Dezenas",
+            "descricao": "Mín 3 dezenas diferentes (1-10, 11-20, 21-30, 31-40, 41-50). "
                          "Evita concentração de números numa só zona do boletim.",
         },
         "E": {
@@ -993,7 +993,7 @@ class FilterEngine:
             "nome": "Cores (9 sorteios)",
             "descricao": "Sistema de cores baseado nos últimos 9 sorteios: "
                          "Vermelhos (0×) → 1-3 por chave; Verdes (1×) → 1-3; "
-                         "Azuis (2×) → 0-1; Castanhos (3×+) → excluídos.",
+                         "Azuis (2×) → 0-2; Castanhos (3×+) → excluídos.",
         },
         "G": {
             "nome": "Regra do 31",
@@ -1113,7 +1113,7 @@ class FilterEngine:
 
             if not (1 <= qtd_v <= 3): self.stats["reprovadas_cores"] += 1; return False
             if not (1 <= qtd_g <= 3): self.stats["reprovadas_cores"] += 1; return False
-            if not (0 <= qtd_a <= 1): self.stats["reprovadas_cores"] += 1; return False
+            if not (0 <= qtd_a <= 2): self.stats["reprovadas_cores"] += 1; return False
             if qtd_c > 0:             self.stats["reprovadas_cores"] += 1; return False
 
         # ── Filter G – Regra do 31 (anti-calendário) ─────────────────────────
@@ -1540,7 +1540,7 @@ class TerminalUI:
         rows = [
             ("VERMELHOS", "0 aparições", sorted(cores["vermelhos"]), "bold red", "1–3"),
             ("VERDES",    "1 aparição",  sorted(cores["verdes"]),    "bold green", "1–3"),
-            ("AZUIS",     "2 aparições", sorted(cores["azuis"]),     "bold blue",  "0–1"),
+            ("AZUIS",     "2 aparições", sorted(cores["azuis"]),     "bold blue",  "0–2"),
             ("CASTANHOS", "3+ aparições",sorted(cores["castanhos"]), "bold #8B4513", "EXCLUÍDOS"),
         ]
         for nome, crit, nums, style, regra in rows:
@@ -1786,14 +1786,14 @@ Estes 16 padrões cobrem ~1.333.800 combinações possíveis.
       → pares: ~42% dos sorteios | triplos: <1% → sempre eliminar
   [C] Máx 2 números com o mesmo dígito final
       → 3+ iguais representam <4% dos sorteios históricos
-  [D] Mín 3 décadas diferentes representadas
+  [D] Mín 3 dezenas diferentes representadas (1-10, 11-20, 21-30, 31-40, 41-50)
       → evita concentração de números numa zona do boletim
   [E] Máx 2 repetições do sorteio anterior
       → restrição de curto prazo baseada em tendências
   [F] Sistema de cores (últimos 9 sorteios):
       • VERMELHOS (0×) → 1 a 3 na chave
       • VERDES    (1×) → 1 a 3 na chave
-      • AZUIS     (2×) → 0 a 1 na chave
+      • AZUIS     (2×) → 0 a 2 na chave
       • CASTANHOS (3×+) → EXCLUÍDOS (0 na chave)
   [G] Regra do 31 – mínimo 2 números acima de 31
       → a maioria dos jogadores usa aniversários (1–31);

@@ -119,9 +119,15 @@ def api_gerar():
 def api_ultimo_sorteio():
     ultimo = db.ultimo_sorteio()
     cores, ultimos_9 = _get_cores()
+    # Colors computed from the 9 draws BEFORE the last one, so the UI can show
+    # which colour each drawn number had at the moment the draw happened.
+    ultimos_10 = db.ultimos_n_sorteios(10)
+    anteriores = ultimos_10[1:] if len(ultimos_10) > 1 else ultimos_10
+    cores_antes = stats.classificar_cores(anteriores)
     return jsonify({
         "ultimo": ultimo,
         "cores": _cores_serializable(cores),
+        "cores_antes": _cores_serializable(cores_antes),
         "ultimos_9": ultimos_9,
     })
 
