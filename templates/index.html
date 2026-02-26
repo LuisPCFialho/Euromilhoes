@@ -639,7 +639,7 @@ function starHTML(s) {
 // Status bar
 // ════════════════════════════════════════════════════════════════════
 async function loadStatus() {
-  const r = await fetch("/api/status");
+  const r = await fetch("api/status");
   const d = await r.json();
   document.getElementById("sb-total").textContent  = d.total_sorteios;
   document.getElementById("sb-ultimo").textContent = d.ultimo_sorteio?.data ?? "–";
@@ -660,7 +660,7 @@ async function gerarChaves() {
 
   loading(true);
   try {
-    const resp = await fetch("/api/gerar", {
+    const resp = await fetch("api/gerar", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
@@ -771,7 +771,7 @@ async function exportarExcel() {
   if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
   loading(true);
   try {
-    const resp = await fetch("/api/export-excel", {
+    const resp = await fetch("api/export-excel", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({ chaves: lastChaves, cores: lastCores, filtros: lastFiltros, config: lastConfig })
@@ -789,7 +789,7 @@ async function exportarExcel() {
 // Last draw
 // ════════════════════════════════════════════════════════════════════
 async function loadUltimoSorteio() {
-  const d = await (await fetch("/api/ultimo-sorteio")).json();
+  const d = await (await fetch("api/ultimo-sorteio")).json();
   const el = document.getElementById("ultimo-content");
 
   if (!d.ultimo) {
@@ -863,7 +863,7 @@ function renderCoresHTML(cores) {
 // Statistics – sorted by frequency, no scrollable cards
 // ════════════════════════════════════════════════════════════════════
 async function loadEstatisticas() {
-  const d  = await (await fetch("/api/estatisticas")).json();
+  const d  = await (await fetch("api/estatisticas")).json();
   const el = document.getElementById("stats-content");
   if (!d.total_sorteios) {
     el.innerHTML = `<div id="no-draws-msg">Sem dados históricos. Insere sorteios primeiro.</div>`;
@@ -964,7 +964,7 @@ async function loadEstatisticas() {
 // Strategies
 // ════════════════════════════════════════════════════════════════════
 async function loadEstrategias() {
-  const d  = await (await fetch("/api/estrategias")).json();
+  const d  = await (await fetch("api/estrategias")).json();
   const el = document.getElementById("estrategias-content");
 
   const filtroRows = (d.filtros||[]).map(f => `
@@ -1042,7 +1042,7 @@ async function loadHistorico() {
   el.innerHTML = `<div class="text-center py-4"><div class="spinner-border text-warning mb-2"></div><br/><span style="color:#9ca3af;">A carregar histórico...</span></div>`;
 
   try {
-    const r = await fetch("/api/sorteios-agrupados");
+    const r = await fetch("api/sorteios-agrupados");
     const d = await r.json();
 
     if (!d.total) {
@@ -1119,7 +1119,7 @@ async function inserirManual() {
 
   loading(true);
   try {
-    const r = await fetch("/api/sorteio", {
+    const r = await fetch("api/sorteio", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({data, numeros:nums, estrelas:stars})
     });
@@ -1143,7 +1143,7 @@ async function actualizarWeb() {
   const el = document.getElementById("scrape-result");
   el.innerHTML = `<div style="color:#9ca3af;"><span class="spinner-border spinner-border-sm me-2"></span>A contactar servidores...</div>`;
   try {
-    const r = await fetch("/api/actualizar-web", {method:"POST"});
+    const r = await fetch("api/actualizar-web", {method:"POST"});
     const d = await r.json();
     if (r.ok && d.sorteio) {
       const s       = d.sorteio;
@@ -1183,7 +1183,7 @@ let _histSource = null;
 async function loadHistoricoStatus() {
   // Check Excel source file
   try {
-    const rx  = await fetch("/api/excel-status");
+    const rx  = await fetch("api/excel-status");
     const dx  = await rx.json();
     const elx = document.getElementById("excel-file-status");
     if (dx.existe) {
@@ -1204,7 +1204,7 @@ async function loadHistoricoStatus() {
   } catch(e) {}
 
   // Check historico JSON file
-  const r   = await fetch("/api/historico-status");
+  const r   = await fetch("api/historico-status");
   const d   = await r.json();
   const el  = document.getElementById("hist-file-status");
   const btn = document.getElementById("btn-load-ficheiro");
@@ -1236,7 +1236,7 @@ async function importarExcel() {
   btn.disabled = true;
   el.innerHTML = `<div style="color:#9ca3af;"><span class="spinner-border spinner-border-sm me-2"></span>A ler ficheiro Excel e a importar… pode demorar alguns segundos.</div>`;
   try {
-    const r = await fetch("/api/importar-excel", {method:"POST"});
+    const r = await fetch("api/importar-excel", {method:"POST"});
     const d = await r.json();
     if (r.ok && d.ok) {
       el.innerHTML = `
@@ -1276,7 +1276,7 @@ async function importarExcel() {
 async function importarFicheiro() {
   loading(true);
   try {
-    const r = await fetch("/api/importar-ficheiro", {method:"POST"});
+    const r = await fetch("api/importar-ficheiro", {method:"POST"});
     const d = await r.json();
     if (r.ok) {
       toast(`Importados ${d.inseridos.toLocaleString()} sorteios (${d.ja_existiam} já existiam)`);
@@ -1312,7 +1312,7 @@ function iniciarScrapeHistorico() {
   }
 
   logLine("▶ A iniciar scraping do histórico completo (2004 → hoje)...", "#ffd700");
-  _histSource = new EventSource("/api/scrape-historico-completo");
+  _histSource = new EventSource("api/scrape-historico-completo");
 
   _histSource.onmessage = function(e) {
     try {
