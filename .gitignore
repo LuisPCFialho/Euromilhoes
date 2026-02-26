@@ -6,3 +6,4 @@ chaves_geradas/
 *.xlsx
 # Keep euromilhoes.db tracked (needed for Vercel deploy)
 !euromilhoes.db
+.vercel
