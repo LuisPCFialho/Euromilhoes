@@ -226,6 +226,36 @@ def api_actualizar_web():
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# API – UPDATE MISSING DRAWS (since last DB entry)
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/actualizar-recentes", methods=["POST"])
+def api_actualizar_recentes():
+    if not _scrape_lock.acquire(blocking=False):
+        return jsonify({"erro": "Já existe um scraping em curso."}), 429
+
+    try:
+        ultimo = db.ultimo_sorteio()
+        if not ultimo:
+            return jsonify({"erro": "BD vazia. Importa primeiro o histórico."}), 400
+
+        desde_data = ultimo["data"]
+        scraper = HistoricoScraper()
+        resultado = scraper.scrape_desde(desde_data, db)
+
+        return jsonify({
+            "ok": True,
+            "desde": desde_data,
+            "encontrados": resultado["encontrados"],
+            "inseridos": resultado["inseridos"],
+            "sorteios": resultado["sorteios"],
+        })
+    except Exception as e:
+        return jsonify({"erro": f"Erro no scraping: {e}"}), 502
+    finally:
+        _scrape_lock.release()
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # API – STATISTICS
 # ════════════════════════════════════════════════════════════════════════════
 @app.route("/api/estatisticas")

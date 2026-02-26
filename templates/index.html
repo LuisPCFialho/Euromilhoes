@@ -432,6 +432,19 @@
           </button>
           <div id="scrape-result" class="mt-3"></div>
         </div>
+
+        <!-- ── Catch-up: fetch all missing draws ────────────────────── -->
+        <div class="card-dark mt-3">
+          <h5><i class="fa-solid fa-arrows-rotate me-2" style="color:#74c0fc;"></i>Atualizar Sorteios em Falta</h5>
+          <p style="color:#9ca3af;font-size:.88rem;">
+            Busca todos os sorteios entre o último registo na base de dados e hoje.
+            Ignora sorteios com números idênticos a registos existentes.
+          </p>
+          <button class="btn btn-em" id="btn-actualizar-recentes" onclick="actualizarRecentes()">
+            <i class="fa-solid fa-arrows-rotate me-2"></i>Buscar sorteios em falta
+          </button>
+          <div id="recentes-result" class="mt-3"></div>
+        </div>
       </div>
 
       <!-- Full history import -->
@@ -1172,6 +1185,52 @@ async function actualizarWeb() {
     }
   } catch(e) {
     el.innerHTML = `<div style="color:#ff6b6b;">Erro de ligação.</div>`;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Catch-up – fetch all missing draws since last DB entry
+// ════════════════════════════════════════════════════════════════════
+async function actualizarRecentes() {
+  const el  = document.getElementById("recentes-result");
+  const btn = document.getElementById("btn-actualizar-recentes");
+  btn.disabled = true;
+  el.innerHTML = `<div style="color:#9ca3af;"><span class="spinner-border spinner-border-sm me-2"></span>A buscar sorteios em falta... (pode demorar até 30s)</div>`;
+  try {
+    const r = await fetch("api/actualizar-recentes", {method:"POST"});
+    const d = await r.json();
+    if (r.ok) {
+      if (d.inseridos > 0) {
+        let rows = d.sorteios.map(s =>
+          `<tr><td>${s.data}</td><td>${s.numeros.join(" · ")}</td><td style="color:#ffd700;">★${s.estrelas.join(" ★")}</td></tr>`
+        ).join("");
+        el.innerHTML = `
+          <div class="alert" style="background:#0d3320;border:1px solid #51cf66;color:#51cf66;border-radius:10px;">
+            <strong>✓ ${d.inseridos} sorteio(s) inserido(s)</strong>
+            <small style="color:#9ca3af;"> (${d.encontrados} encontrado(s) desde ${d.desde})</small>
+          </div>
+          <table class="table table-sm" style="color:#d0d0d0;font-size:.85rem;">
+            <thead><tr><th>Data</th><th>Números</th><th>Estrelas</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+        loadStatus();
+      } else {
+        el.innerHTML = `
+          <div class="alert" style="background:#1a2000;border:1px solid #ffd700;color:#ffd700;border-radius:10px;">
+            <strong>⚠ Nenhum sorteio novo encontrado</strong><br/>
+            <small style="color:#9ca3af;">Último registo: ${d.desde} — a BD já está actualizada.</small>
+          </div>`;
+      }
+    } else {
+      el.innerHTML = `
+        <div class="alert" style="background:#3a1010;border:1px solid #ff6b6b;color:#ff6b6b;border-radius:10px;">
+          <strong>✗ ${d.erro}</strong>
+        </div>`;
+    }
+  } catch(e) {
+    el.innerHTML = `<div style="color:#ff6b6b;">Erro de ligação: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
   }
 }
 

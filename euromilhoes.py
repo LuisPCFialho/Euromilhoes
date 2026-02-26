@@ -460,6 +460,54 @@ class HistoricoScraper:
         yield {"tipo": "concluido", "total": len(acumulado),
                "inseridos_db": inseridos, "ficheiro": str(ficheiro)}
 
+    def scrape_desde(self, desde_data: str, db: "DatabaseManager") -> dict:
+        """Scrape draws newer than desde_data (ISO format) and insert into DB.
+        Only fetches the years needed (1-2 years max), so it's fast enough for Vercel.
+        Skips draws whose numbers+stars match any existing draw (anti-duplicate).
+        """
+        desde = datetime.date.fromisoformat(desde_data)
+        ano_atual = datetime.date.today().year
+        anos = list(range(desde.year, ano_atual + 1))
+
+        # Build set of existing number combos to reject duplicates with different dates
+        combinacoes_existentes = set()
+        for s in db.todos_sorteios():
+            chave = (tuple(sorted(s["numeros"])), tuple(sorted(s["estrelas"])))
+            combinacoes_existentes.add(chave)
+
+        todos = []
+        for ano in anos:
+            try:
+                resultados = self._scrape_ano(ano)
+                todos.extend(resultados)
+            except Exception:
+                continue
+            time.sleep(0.5)
+
+        # Filter only draws after the last known date
+        novos = [s for s in todos if s["data"] > desde_data]
+        # Deduplicate by date AND by number combination
+        vistos_datas = set()
+        unicos = []
+        for s in novos:
+            chave_nums = (tuple(sorted(s["numeros"])), tuple(sorted(s["estrelas"])))
+            if s["data"] not in vistos_datas and chave_nums not in combinacoes_existentes:
+                vistos_datas.add(s["data"])
+                combinacoes_existentes.add(chave_nums)
+                unicos.append(s)
+        unicos.sort(key=lambda s: s["data"])
+
+        inseridos = 0
+        for s in unicos:
+            if db.inserir_sorteio(s["data"], s["numeros"], s["estrelas"], "web-auto"):
+                inseridos += 1
+
+        return {
+            "encontrados": len(unicos),
+            "inseridos": inseridos,
+            "sorteios": unicos,
+        }
+
     # ── Per-year scraping ─────────────────────────────────────────────────────
     def _scrape_ano(self, ano: int) -> list[dict]:
         for fn in [self._euro_millions_com, self._euro_millions_com_pt,
