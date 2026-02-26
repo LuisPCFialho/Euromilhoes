@@ -16,8 +16,29 @@
       --em-verd:   #51cf66;
       --em-azul:   #74c0fc;
       --em-cast:   #c9956a;
+
+      /* Bootstrap dark-theme overrides — prevent white backgrounds with gray text */
+      --bs-body-bg:              #1a1a2e;
+      --bs-body-color:           #d0d0d0;
+      --bs-secondary-color:      #9ca3af;
+      --bs-emphasis-color:       #e0e0e0;
+      --bs-heading-color:        #e0e0e0;
+      --bs-link-color:           #74c0fc;
+      --bs-link-hover-color:     #a8d4fd;
+      --bs-border-color:         #2a2a4a;
+      --bs-table-bg:             transparent;
+      --bs-table-color:          #d0d0d0;
+      --bs-table-border-color:   #2a2a4a;
+      --bs-table-striped-bg:     rgba(255,255,255,.03);
+      --bs-table-hover-bg:       rgba(255,255,255,.05);
+      --bs-form-control-bg:      #1a2540;
+      --bs-form-control-color:   #e0e0e0;
     }
-    body { background: var(--em-dark); color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+    body { background: var(--em-dark); color: #d0d0d0; font-family: 'Segoe UI', sans-serif; }
+
+    /* Fix Bootstrap text-muted contrast on dark backgrounds */
+    .text-muted { color: #9ca3af !important; }
+    small       { color: #9ca3af; }
 
     /* ── Sidebar ── */
     #sidebar {
@@ -27,7 +48,7 @@
     }
     #sidebar .brand { padding:24px 20px 16px; border-bottom:1px solid #2a2a4a; }
     #sidebar .brand h5 { color: var(--em-gold); margin:0; font-weight:700; letter-spacing:.05em; }
-    #sidebar .brand small { color:#888; font-size:.75rem; }
+    #sidebar .brand small { color:#9ca3af; font-size:.75rem; }
     #sidebar nav { flex:1; padding:12px 8px; }
     #sidebar nav .nav-link {
       color:#aaa; border-radius:8px; padding:10px 14px; margin-bottom:2px;
@@ -35,7 +56,7 @@
     }
     #sidebar nav .nav-link:hover { background:#1f2a4a; color:#e0e0e0; }
     #sidebar nav .nav-link.active { background: var(--em-accent); color:#fff; }
-    #sidebar .status-bar { padding:16px; border-top:1px solid #2a2a4a; font-size:.78rem; color:#666; }
+    #sidebar .status-bar { padding:16px; border-top:1px solid #2a2a4a; font-size:.78rem; color:#9ca3af; }
 
     /* ── Main content ── */
     #main { margin-left:220px; padding:32px; min-height:100vh; }
@@ -61,21 +82,42 @@
     .ball-star  { background:#3a2d00; color:#ffd700; border-color:#ffd700; font-size:.85rem; }
 
     /* ── Key rows table ── */
-    .chave-row td { vertical-align:middle; padding:6px 10px; }
+    .chave-row td { vertical-align:middle; padding:6px 10px; color:#d0d0d0; }
     .chave-row:hover { background:#1e2a40 !important; }
 
-    /* ── Filter pills ── */
+    /* ── Filter pills (result display) ── */
     .filtro-pill {
       display:inline-flex; align-items:center; gap:6px;
       background:#1a2540; border:1px solid #2a3a60; border-radius:20px;
-      padding:5px 12px; font-size:.8rem; margin:4px;
+      padding:4px 10px; font-size:.78rem; margin:3px;
     }
-    .filtro-pill .dot { width:8px; height:8px; border-radius:50%; background: var(--em-verd); }
+    .filtro-pill.off { opacity:.45; border-style:dashed; }
+    .filtro-pill .dot { width:7px; height:7px; border-radius:50%; background: var(--em-verd); }
     .filtro-pill .dot.off { background:#666; }
 
+    /* ── Filter config rows (Gerar tab left panel) ── */
+    .filtro-cfg-row {
+      padding:7px 0;
+      border-bottom:1px solid #1a2240;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .filtro-cfg-row:last-child { border-bottom:none; }
+    .filtro-cfg-row .d-flex { align-items:center; }
+    .filtro-id-badge {
+      display:inline-flex; align-items:center; justify-content:center;
+      width:22px; height:22px; border-radius:5px;
+      background:#1a3a60; color:var(--em-azul);
+      font-size:.7rem; font-weight:700; flex-shrink:0;
+    }
+    .filtro-info-icon { color:#555; cursor:help; font-size:.78rem; }
+    .filtro-info-icon:hover { color:#9ca3af; }
+
     /* ── Stats bars ── */
-    .freq-bar { height:18px; background:#0d3320; border-radius:4px; overflow:hidden; }
+    .freq-bar { height:16px; background:#0d1a2e; border-radius:4px; overflow:hidden; }
     .freq-bar-fill { height:100%; background: linear-gradient(90deg, var(--em-verd), var(--em-azul)); border-radius:4px; transition:.3s; }
+    .freq-bar-fill.star { background: linear-gradient(90deg,#ffd700,#ff9966); }
 
     /* ── Colour legend chips ── */
     .colour-chip {
@@ -119,15 +161,55 @@
     select.form-select:focus, input.form-control:focus {
       background:#1a2540; color:#e0e0e0; border-color: var(--em-accent); box-shadow:none;
     }
+    select option { background:#1a2540; color:#e0e0e0; }
     .form-check-input:checked { background-color: var(--em-gold); border-color: var(--em-gold); }
+    .form-check-input { border-color:#555; }
 
-    table.table { color:#ccc; }
-    table.table th { color:#888; border-color:#2a2a4a; }
+    table.table { color:#d0d0d0; }
+    table.table th { color:#9ca3af; border-color:#2a2a4a; font-size:.8rem; }
     table.table td { border-color:#1e1e3a; }
 
     .badge-padrao { background:#1a3a60; color:var(--em-azul); font-size:.72rem; padding:3px 8px; border-radius:8px; }
 
-    #no-draws-msg { color:#666; text-align:center; padding:40px; }
+    #no-draws-msg { color:#9ca3af; text-align:center; padding:40px; }
+
+    /* ── History accordion ── */
+    .hist-year-header {
+      cursor:pointer; padding:10px 16px;
+      background:#1a2a4a; border-radius:8px; margin-bottom:6px;
+      display:flex; align-items:center; justify-content:space-between;
+      user-select:none; color:#d0d0d0; transition:.15s;
+    }
+    .hist-year-header:hover { background:#1e3050; }
+    .hist-year-header .year-label { font-weight:700; font-size:1rem; color:var(--em-azul); }
+    .hist-year-header .year-count { font-size:.8rem; color:#9ca3af; }
+    .hist-year-header .toggle-icon { color:#9ca3af; font-size:.9rem; }
+    .hist-year-body { overflow:hidden; max-height:0; transition:max-height .35s ease; }
+    .hist-year-body.open { max-height:50000px; }
+    .hist-month-section { margin-bottom:12px; }
+    .hist-month-title {
+      color:var(--em-azul); font-size:.8rem; font-weight:600;
+      padding:5px 10px; background:#111a30; border-radius:6px;
+      margin-bottom:4px; display:inline-block;
+    }
+
+    /* ── Stats ── */
+    .freq-rank-hot  { color:var(--em-verd); font-weight:700; }
+    .freq-rank-cold { color:var(--em-azul); font-weight:700; }
+    .num-badge {
+      display:inline-flex; align-items:center; justify-content:center;
+      width:32px; height:32px; border-radius:50%; font-weight:700; font-size:.85rem;
+      background:#1e2a40; color:#d0d0d0;
+    }
+    .num-badge.hot  { background:#1a3010; color:var(--em-verd); border:1px solid var(--em-verd); }
+    .num-badge.cold { background:#0d2035; color:var(--em-azul); border:1px solid var(--em-azul); }
+
+    /* ── Active filters summary bar ── */
+    .filtros-ativos-bar {
+      background:#111a30; border:1px solid #1e2a4a; border-radius:8px;
+      padding:8px 12px; margin-bottom:12px; font-size:.8rem;
+    }
+    .filtros-ativos-bar .label { color:#9ca3af; margin-right:6px; }
   </style>
 </head>
 <body>
@@ -148,22 +230,22 @@
     <small>v{{ version }} – Gerador Profissional</small>
   </div>
   <nav>
-    <a class="nav-link active" href="#" onclick="showTab('gerar')">
+    <a class="nav-link active" href="#" onclick="showTab('gerar', this)">
       <i class="fa-solid fa-wand-magic-sparkles"></i> Gerar Chaves
     </a>
-    <a class="nav-link" href="#" onclick="showTab('sorteio')">
+    <a class="nav-link" href="#" onclick="showTab('sorteio', this)">
       <i class="fa-solid fa-trophy"></i> Último Sorteio
     </a>
-    <a class="nav-link" href="#" onclick="showTab('estatisticas')">
+    <a class="nav-link" href="#" onclick="showTab('estatisticas', this)">
       <i class="fa-solid fa-chart-bar"></i> Estatísticas
     </a>
-    <a class="nav-link" href="#" onclick="showTab('estrategias')">
+    <a class="nav-link" href="#" onclick="showTab('estrategias', this)">
       <i class="fa-solid fa-chess"></i> Estratégias
     </a>
-    <a class="nav-link" href="#" onclick="showTab('historico')">
+    <a class="nav-link" href="#" onclick="showTab('historico', this)">
       <i class="fa-solid fa-database"></i> Histórico BD
     </a>
-    <a class="nav-link" href="#" onclick="showTab('atualizar')">
+    <a class="nav-link" href="#" onclick="showTab('atualizar', this)">
       <i class="fa-solid fa-cloud-arrow-down"></i> Actualizar BD
     </a>
   </nav>
@@ -190,31 +272,17 @@
         <div class="card-dark">
           <h5><i class="fa-solid fa-sliders me-2"></i>Configuração</h5>
           <div class="mb-3">
-            <label class="form-label text-muted small">Quantidade de chaves</label>
+            <label class="form-label small" style="color:#9ca3af;">Quantidade de chaves</label>
             <input type="number" id="qtd" class="form-control" value="10" min="1" max="100"/>
           </div>
-          <div class="mb-3">
-            <label class="form-label text-muted small">Intervalo de Soma</label>
-            <select id="soma_range" class="form-select">
-              <option value="padrao">Padrão: 80–190 (recomendado)</option>
-              <option value="apertado">Apertado: 95–160 (purist)</option>
-            </select>
+
+          <!-- Filter toggles (generated by JS) -->
+          <div class="mb-1" style="color:#9ca3af;font-size:.8rem;font-weight:600;letter-spacing:.04em;">
+            FILTROS ACTIVOS
           </div>
-          <div class="mb-2">
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="regra31" checked/>
-              <label class="form-check-label" for="regra31">Filtro G – Regra do 31</label>
-            </div>
-            <small class="text-muted d-block ms-4" style="font-size:.75rem;">Mín 2 números &gt; 31</small>
-          </div>
-          <div class="mb-3">
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="progressao" checked/>
-              <label class="form-check-label" for="progressao">Filtro H – Anti-Progressão</label>
-            </div>
-            <small class="text-muted d-block ms-4" style="font-size:.75rem;">Rejeita sequências aritméticas</small>
-          </div>
-          <button class="btn btn-em w-100" onclick="gerarChaves()">
+          <div id="filtros-config-list"></div>
+
+          <button class="btn btn-em w-100 mt-3" onclick="gerarChaves()">
             <i class="fa-solid fa-play me-2"></i>Gerar Chaves
           </button>
         </div>
@@ -229,15 +297,17 @@
       <!-- Results panel -->
       <div class="col-lg-8">
         <div class="card-dark" id="results-panel" style="display:none;">
-          <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
             <h5 class="mb-0"><i class="fa-solid fa-list me-2"></i>Chaves Geradas</h5>
             <div class="d-flex gap-2">
-              <span id="gen-stats" class="text-muted small align-self-center"></span>
+              <span id="gen-stats" style="color:#9ca3af;font-size:.82rem;" class="align-self-center"></span>
               <button class="btn btn-ghost btn-sm" onclick="exportarExcel()">
                 <i class="fa-solid fa-file-excel me-1" style="color:#51cf66;"></i>Excel
               </button>
             </div>
           </div>
+          <!-- Active filters summary -->
+          <div id="filtros-usados-bar" class="filtros-ativos-bar" style="display:none;"></div>
           <div style="overflow-x:auto;">
             <table class="table table-sm" id="chaves-table">
               <thead>
@@ -268,8 +338,9 @@
       <h3>Último Sorteio</h3>
     </div>
     <div id="ultimo-content">
-      <div class="text-center text-muted py-5">
-        <div class="spinner-border text-warning mb-3"></div><br/>A carregar...
+      <div class="text-center py-5">
+        <div class="spinner-border text-warning mb-3"></div><br/>
+        <span style="color:#9ca3af;">A carregar...</span>
       </div>
     </div>
   </div>
@@ -282,8 +353,9 @@
       <h3>Estatísticas Históricas</h3>
     </div>
     <div id="stats-content">
-      <div class="text-center text-muted py-5">
-        <div class="spinner-border text-warning mb-3"></div><br/>A carregar...
+      <div class="text-center py-5">
+        <div class="spinner-border text-warning mb-3"></div><br/>
+        <span style="color:#9ca3af;">A carregar...</span>
       </div>
     </div>
   </div>
@@ -296,8 +368,9 @@
       <h3>Estratégias e Filtros Activos</h3>
     </div>
     <div id="estrategias-content">
-      <div class="text-center text-muted py-5">
-        <div class="spinner-border text-warning mb-3"></div><br/>A carregar...
+      <div class="text-center py-5">
+        <div class="spinner-border text-warning mb-3"></div><br/>
+        <span style="color:#9ca3af;">A carregar...</span>
       </div>
     </div>
   </div>
@@ -315,15 +388,15 @@
       <h5><i class="fa-solid fa-plus-circle me-2"></i>Inserir Sorteio Manualmente</h5>
       <div class="row g-2 align-items-end">
         <div class="col-auto">
-          <label class="form-label text-muted small">Data</label>
+          <label class="form-label small" style="color:#9ca3af;">Data</label>
           <input type="date" id="m-data" class="form-control" style="width:160px;"/>
         </div>
         <div class="col">
-          <label class="form-label text-muted small">Números (5, separados por vírgula)</label>
+          <label class="form-label small" style="color:#9ca3af;">Números (5, separados por vírgula)</label>
           <input type="text" id="m-nums" class="form-control" placeholder="ex: 3,14,27,38,45"/>
         </div>
         <div class="col-auto">
-          <label class="form-label text-muted small">Estrelas</label>
+          <label class="form-label small" style="color:#9ca3af;">Estrelas</label>
           <input type="text" id="m-stars" class="form-control" placeholder="ex: 2,9" style="width:120px;"/>
         </div>
         <div class="col-auto">
@@ -335,7 +408,6 @@
     </div>
 
     <div id="historico-content"></div>
-    <div class="d-flex justify-content-center gap-2 mt-3" id="paginacao"></div>
   </div>
 
 
@@ -351,7 +423,7 @@
       <div class="col-lg-5">
         <div class="card-dark">
           <h5><i class="fa-solid fa-bolt me-2"></i>Último Sorteio</h5>
-          <p class="text-muted small">
+          <p style="color:#9ca3af;font-size:.88rem;">
             Obtém apenas o sorteio mais recente de várias fontes (lotaria.net,
             jogossantacasa.pt, euro-millions.com).
           </p>
@@ -368,12 +440,11 @@
         <!-- ── Excel import (primary) ──────────────────────────────── -->
         <div class="card-dark mb-3">
           <h5><i class="fa-solid fa-file-excel me-2" style="color:#51cf66;"></i>Importar do Excel</h5>
-          <p class="text-muted small">
+          <p style="color:#9ca3af;font-size:.88rem;">
             Importa todos os sorteios do ficheiro
-            <code>Euromilhões _ Todos os sorteios.xlsx</code> directamente para a base de dados.
+            <code style="color:#74c0fc;">Euromilhões _ Todos os sorteios.xlsx</code> directamente para a base de dados.
             Rápido, fiável e sem necessidade de internet.
           </p>
-          <!-- Excel file status banner -->
           <div id="excel-file-status" class="mb-3"></div>
           <button class="btn btn-em" id="btn-importar-excel" onclick="importarExcel()">
             <i class="fa-solid fa-file-import me-2"></i>Importar todos os sorteios do Excel
@@ -383,16 +454,16 @@
 
         <!-- ── Web scraping (secondary / fallback) ─────────────────── -->
         <div class="card-dark">
-          <h5><i class="fa-solid fa-clock-rotate-left me-2"></i>Histórico via Web <span class="badge bg-secondary ms-1" style="font-size:.65rem;">fallback</span></h5>
-          <p class="text-muted small">
+          <h5><i class="fa-solid fa-clock-rotate-left me-2"></i>Histórico via Web
+            <span class="badge bg-secondary ms-1" style="font-size:.65rem;">fallback</span>
+          </h5>
+          <p style="color:#9ca3af;font-size:.88rem;">
             Tenta fazer scraping de todos os sorteios desde 2004 via internet.
             Pode demorar vários minutos e depende da disponibilidade dos sites.
           </p>
 
-          <!-- File status banner -->
           <div id="hist-file-status" class="mb-3"></div>
 
-          <!-- Action buttons -->
           <div class="d-flex gap-2 flex-wrap mb-3">
             <button class="btn btn-ghost" id="btn-scrape-hist" onclick="iniciarScrapeHistorico()">
               <i class="fa-solid fa-spider me-2"></i>Scraping completo (web)
@@ -402,34 +473,27 @@
             </button>
           </div>
 
-          <!-- Progress section (hidden until scraping starts) -->
           <div id="hist-progress-section" style="display:none;">
-            <!-- Year progress bar -->
             <div class="mb-2 d-flex justify-content-between align-items-center">
-              <span class="text-muted small" id="hist-prog-label">A iniciar...</span>
-              <span class="text-muted small" id="hist-prog-pct">0%</span>
+              <span style="color:#9ca3af;font-size:.85rem;" id="hist-prog-label">A iniciar...</span>
+              <span style="color:#9ca3af;font-size:.85rem;" id="hist-prog-pct">0%</span>
             </div>
             <div style="background:#1a2540;border-radius:8px;height:14px;overflow:hidden;margin-bottom:12px;">
               <div id="hist-prog-bar"
                    style="height:100%;width:0%;background:linear-gradient(90deg,#e94560,#ffd700);
                           border-radius:8px;transition:width .3s ease;"></div>
             </div>
-
-            <!-- Live log -->
             <div id="hist-log"
                  style="background:#0d1220;border:1px solid #1e2a4a;border-radius:8px;
-                        padding:12px;height:180px;overflow-y:auto;font-family:monospace;font-size:.78rem;">
+                        padding:12px;height:180px;overflow-y:auto;font-family:monospace;font-size:.78rem;color:#aaa;">
             </div>
-
-            <!-- Summary counter -->
             <div class="mt-2 d-flex gap-4">
-              <span class="text-muted small">Ano: <strong id="hist-cur-ano">–</strong></span>
-              <span class="text-muted small">Encontrados: <strong id="hist-total-found" style="color:#51cf66;">0</strong></span>
-              <span class="text-muted small">Erros: <strong id="hist-total-err" style="color:#ff6b6b;">0</strong></span>
+              <span style="color:#9ca3af;font-size:.85rem;">Ano: <strong id="hist-cur-ano" style="color:#d0d0d0;">–</strong></span>
+              <span style="color:#9ca3af;font-size:.85rem;">Encontrados: <strong id="hist-total-found" style="color:#51cf66;">0</strong></span>
+              <span style="color:#9ca3af;font-size:.85rem;">Erros: <strong id="hist-total-err" style="color:#ff6b6b;">0</strong></span>
             </div>
           </div>
 
-          <!-- Final result card -->
           <div id="hist-resultado" style="display:none;"></div>
         </div>
       </div>
@@ -441,35 +505,99 @@
 
 <script>
 // ════════════════════════════════════════════════════════════════════
+// Filter metadata – add new filters here (plus backend changes)
+// ════════════════════════════════════════════════════════════════════
+const FILTER_META = [
+  { id:'A', nome:'Soma',
+    tooltip:'Limita a soma dos 5 números ao intervalo configurado. ~93% dos sorteios históricos têm somas entre 80–190 (padrão) ou 95–160 (apertado).',
+    hasSub: true },
+  { id:'B', nome:'Consecutivos',
+    tooltip:'Permite no máximo 1 par de números consecutivos e proíbe triplos. Pares ocorrem em ~42% dos sorteios; triplos em menos de 1%.' },
+  { id:'C', nome:'Dígito Final',
+    tooltip:'Máx 2 números com o mesmo dígito final (ex: 3, 13, 23). Três ou mais iguais representam menos de 4% dos sorteios.' },
+  { id:'D', nome:'Décadas',
+    tooltip:'Mín 3 décadas diferentes representadas (0-9, 10-19, 20-29, 30-39, 40-49). Evita concentração numa zona do boletim.' },
+  { id:'E', nome:'Anti-Repetição',
+    tooltip:'Máx 2 números em comum com o sorteio anterior. Baseado em tendências de curto prazo observadas no histórico.' },
+  { id:'F', nome:'Cores (9 sorteios)',
+    tooltip:'Sistema de cores: Vermelhos (0×)→1-3; Verdes (1×)→1-3; Azuis (2×)→0-1; Castanhos (3×+)→excluídos da chave.' },
+  { id:'G', nome:'Regra do 31',
+    tooltip:'Mín 2 números acima de 31. A maioria dos jogadores usa aniversários (1-31); forçar números altos reduz a partilha do jackpot.' },
+  { id:'H', nome:'Anti-Progressão',
+    tooltip:'Rejeita progressões aritméticas perfeitas (ex: 5,10,15,20,25). Sequências uniformes são muito populares e devem ser evitadas.' },
+];
+
+// ════════════════════════════════════════════════════════════════════
 // State
 // ════════════════════════════════════════════════════════════════════
 let lastChaves  = [];
 let lastCores   = {};
-let histPage    = 1;
+let lastFiltros = [];
+let lastConfig  = {};
 
 // ════════════════════════════════════════════════════════════════════
 // Boot
 // ════════════════════════════════════════════════════════════════════
 document.addEventListener("DOMContentLoaded", () => {
+  renderFilterConfig();
   loadStatus();
-  // Set today's date as default for manual insert
   document.getElementById("m-data").value = new Date().toISOString().split("T")[0];
 });
 
 // ════════════════════════════════════════════════════════════════════
+// Generate filter config UI
+// ════════════════════════════════════════════════════════════════════
+function renderFilterConfig() {
+  const container = document.getElementById("filtros-config-list");
+  container.innerHTML = FILTER_META.map(f => `
+    <div class="filtro-cfg-row">
+      <div class="d-flex gap-2">
+        <div class="form-check form-switch mb-0 flex-shrink-0" style="padding-left:2.5em;">
+          <input class="form-check-input" type="checkbox" id="filtro-${f.id}" checked
+                 ${f.id==='A' ? 'onchange="onFiltroAToggle()"' : ''}
+                 style="cursor:pointer;"/>
+        </div>
+        <span class="filtro-id-badge">${f.id}</span>
+        <span style="font-size:.85rem;color:#d0d0d0;flex:1;">${f.nome}</span>
+        <i class="fa-solid fa-circle-question filtro-info-icon"
+           data-bs-toggle="tooltip" data-bs-placement="right"
+           data-bs-title="${f.tooltip.replace(/"/g,"&quot;")}"></i>
+      </div>
+      ${f.id==='A' ? `
+      <div id="filtro-A-sub" class="ps-4">
+        <select id="soma_range" class="form-select form-select-sm">
+          <option value="padrao">Padrão: 80–190 (recomendado)</option>
+          <option value="apertado">Apertado: 95–160 (purist)</option>
+        </select>
+      </div>` : ''}
+    </div>
+  `).join('');
+
+  // Initialise Bootstrap tooltips
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+    new bootstrap.Tooltip(el, { trigger:'hover' });
+  });
+}
+
+function onFiltroAToggle() {
+  const sub = document.getElementById("filtro-A-sub");
+  if (sub) sub.style.display = document.getElementById("filtro-A").checked ? "" : "none";
+}
+
+// ════════════════════════════════════════════════════════════════════
 // Navigation
 // ════════════════════════════════════════════════════════════════════
-function showTab(name) {
+function showTab(name, el) {
   document.querySelectorAll(".tab-pane").forEach(t => t.classList.remove("active"));
   document.querySelectorAll("#sidebar .nav-link").forEach(l => l.classList.remove("active"));
   document.getElementById("tab-" + name).classList.add("active");
-  event.target.closest(".nav-link").classList.add("active");
+  if (el) el.closest(".nav-link").classList.add("active");
 
-  if (name === "sorteio")     loadUltimoSorteio();
+  if (name === "sorteio")      loadUltimoSorteio();
   if (name === "estatisticas") loadEstatisticas();
-  if (name === "estrategias") loadEstrategias();
-  if (name === "historico")   loadHistorico(1);
-  if (name === "atualizar")   loadHistoricoStatus();
+  if (name === "estrategias")  loadEstrategias();
+  if (name === "historico")    loadHistorico();
+  if (name === "atualizar")    loadHistoricoStatus();
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -522,26 +650,37 @@ async function loadStatus() {
 // ════════════════════════════════════════════════════════════════════
 async function gerarChaves() {
   const qtd = parseInt(document.getElementById("qtd").value) || 10;
+
+  // Collect all filter states
+  const filterCfg = {};
+  FILTER_META.forEach(f => {
+    const el = document.getElementById(`filtro-${f.id}`);
+    filterCfg[`filtro_${f.id}`] = el ? el.checked : true;
+  });
+
   loading(true);
   try {
     const resp = await fetch("/api/gerar", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
-        quantidade:  qtd,
-        soma_range:  document.getElementById("soma_range").value,
-        regra31:     document.getElementById("regra31").checked,
-        progressao:  document.getElementById("progressao").checked,
+        quantidade: qtd,
+        soma_range: document.getElementById("soma_range").value,
+        ...filterCfg,
       })
     });
     const d = await resp.json();
     if (!resp.ok) { toast(d.erro || "Erro", "error"); return; }
 
-    lastChaves = d.chaves;
-    lastCores  = d.cores;
+    lastChaves  = d.chaves;
+    lastCores   = d.cores;
+    lastFiltros = d.filtros;
+    lastConfig  = d.config;
+
     renderChaves(d);
     renderCores(d.cores);
     renderFiltros(d.filtros, d.total_tentativas);
+    renderFiltrosUsados(d.filtros, d.config);
     toast(`${d.total_geradas} chaves geradas!`);
   } catch(e) {
     toast("Erro de ligação", "error");
@@ -559,16 +698,30 @@ function renderChaves(d) {
     const padrao = `<span class="badge-padrao">${ch.padrao.join("-")}</span>`;
     tbody.insertAdjacentHTML("beforeend", `
       <tr class="chave-row">
-        <td class="text-muted">${i+1}</td>
+        <td style="color:#9ca3af;">${i+1}</td>
         <td colspan="5">${nums}</td>
         <td colspan="2">${stars}</td>
-        <td><strong>${ch.soma}</strong></td>
+        <td><strong style="color:#d0d0d0;">${ch.soma}</strong></td>
         <td>${padrao}</td>
       </tr>`);
   });
   document.getElementById("gen-stats").textContent =
     `${d.total_geradas}/${d.total_pedidas} geradas · ${d.total_tentativas.toLocaleString()} testadas`;
   document.getElementById("results-panel").style.display = "";
+}
+
+function renderFiltrosUsados(filtros, config) {
+  const bar = document.getElementById("filtros-usados-bar");
+  if (!filtros || !filtros.length) { bar.style.display = "none"; return; }
+  const ativos   = filtros.filter(f => f.ativo).map(f => f.id);
+  const inativos = filtros.filter(f => !f.ativo).map(f => f.id);
+  let html = `<span class="label">Filtros:</span>`;
+  filtros.forEach(f => {
+    const cls = f.ativo ? "" : "off";
+    html += `<span class="filtro-pill ${cls}"><span class="dot ${cls}"></span><strong>[${f.id}]</strong>${f.nome}</span>`;
+  });
+  bar.innerHTML = html;
+  bar.style.display = "";
 }
 
 function renderCores(cores) {
@@ -582,7 +735,7 @@ function renderCores(cores) {
   panel.innerHTML = groups.map(g => `
     <div class="mb-2">
       <span class="colour-chip ${g.cls}">${g.label}</span>
-      <span class="text-muted small ms-1">→ ${g.regra}</span>
+      <span style="color:#9ca3af;font-size:.8rem;"> → ${g.regra}</span>
       <div class="mt-1 ms-2" style="font-size:.8rem;color:#888;">
         ${(cores[g.key]||[]).map(n => `<span class="badge me-1" style="background:#1a2540;color:#aaa;">${n}</span>`).join("")}
       </div>
@@ -592,18 +745,20 @@ function renderCores(cores) {
 
 function renderFiltros(filtros, totalTentativas) {
   const div = document.getElementById("filtros-content");
-  div.innerHTML = `<div class="mb-2 text-muted small">Total testadas: <strong>${totalTentativas.toLocaleString()}</strong></div>`;
+  div.innerHTML = `<div class="mb-2" style="color:#9ca3af;font-size:.85rem;">Total testadas: <strong style="color:#d0d0d0;">${totalTentativas.toLocaleString()}</strong></div>`;
   filtros.forEach(f => {
-    const ativo = f.ativo !== false;
-    const pct   = totalTentativas > 0 ? Math.round(f.reprovadas / totalTentativas * 100) : 0;
+    const pct = totalTentativas > 0 ? Math.round(f.reprovadas / totalTentativas * 100) : 0;
+    const dimClass = f.ativo ? "" : "off";
     div.insertAdjacentHTML("beforeend", `
-      <div class="d-flex align-items-center gap-2 mb-1">
-        <span class="filtro-pill">
-          <span class="dot ${ativo ? '' : 'off'}"></span>
+      <div class="d-flex align-items-start gap-2 mb-2">
+        <span class="filtro-pill ${dimClass}" style="min-width:160px;">
+          <span class="dot ${f.ativo ? '' : 'off'}"></span>
           <strong>[${f.id}]</strong> ${f.nome}
         </span>
-        <span class="text-muted small">${f.reprovadas.toLocaleString()} rejeitadas (${pct}%)</span>
-        <small class="text-muted" style="font-size:.72rem;">${f.config}</small>
+        <div>
+          <span style="color:#9ca3af;font-size:.82rem;">${f.reprovadas.toLocaleString()} rejeitadas (${pct}%)</span>
+          <div style="color:#666;font-size:.72rem;">${f.config}</div>
+        </div>
       </div>`);
   });
   document.getElementById("filtros-panel").style.display = "";
@@ -619,15 +774,13 @@ async function exportarExcel() {
     const resp = await fetch("/api/export-excel", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ chaves: lastChaves, cores: lastCores })
+      body: JSON.stringify({ chaves: lastChaves, cores: lastCores, filtros: lastFiltros, config: lastConfig })
     });
     if (!resp.ok) { toast("Erro ao exportar", "error"); return; }
     const blob = await resp.blob();
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
-    a.href = url;
-    a.download = "chaves_euromilhoes.xlsx";
-    a.click();
+    a.href = url; a.download = "chaves_euromilhoes.xlsx"; a.click();
     toast("Excel exportado!");
   } finally { loading(false); }
 }
@@ -642,7 +795,7 @@ async function loadUltimoSorteio() {
   if (!d.ultimo) {
     el.innerHTML = `<div id="no-draws-msg"><i class="fa-solid fa-inbox fa-2x mb-3"></i><br/>
       Sem sorteios na base de dados.<br/>
-      <small>Vai a "Actualizar BD" ou "Histórico" para inserir.</small></div>`;
+      <small>Vai a "Actualizar BD" para inserir.</small></div>`;
     return;
   }
 
@@ -651,12 +804,13 @@ async function loadUltimoSorteio() {
   const nums  = u.numeros.map(n => ballHTML(n, cores)).join("");
   const stars = u.estrelas.map(s => starHTML(s)).join("");
 
-  // Last 9 draws mini table
   const ultimos9Rows = (d.ultimos_9 || []).map((s, i) =>
-    `<tr><td class="text-muted small">${i === 0 ? "← Último" : `−${i+1}`}</td>
-     <td>${s.data}</td>
-     <td>${s.numeros.join(" · ")}</td>
-     <td>${s.estrelas.join(" · ")}</td></tr>`
+    `<tr>
+       <td style="color:#9ca3af;font-size:.82rem;">${i === 0 ? "← Último" : `−${i}`}</td>
+       <td style="color:#d0d0d0;">${s.data}</td>
+       <td style="color:#d0d0d0;">${s.numeros.join(" · ")}</td>
+       <td style="color:#ffd700;">★${s.estrelas.join(" ★")}</td>
+     </tr>`
   ).join("");
 
   el.innerHTML = `
@@ -665,11 +819,11 @@ async function loadUltimoSorteio() {
         <div class="card-dark">
           <div class="d-flex justify-content-between mb-2">
             <h5 class="mb-0"><i class="fa-solid fa-trophy me-2"></i>Resultado</h5>
-            <span class="text-muted small">${u.data}</span>
+            <span style="color:#9ca3af;font-size:.85rem;">${u.data}</span>
           </div>
           <div class="mb-3">${nums}</div>
           <div>${stars}</div>
-          <div class="mt-3 text-muted small">Soma: <strong class="text-white">${u.soma}</strong></div>
+          <div class="mt-3" style="color:#9ca3af;font-size:.85rem;">Soma: <strong style="color:#d0d0d0;">${u.soma}</strong></div>
         </div>
         <div class="card-dark">
           <h5><i class="fa-solid fa-palette me-2"></i>Cores Actuais</h5>
@@ -698,7 +852,7 @@ function renderCoresHTML(cores) {
   return groups.map(g => `
     <div class="mb-2">
       <span class="colour-chip ${g.cls}">${g.label}</span>
-      <span class="text-muted small"> → ${g.regra} · ${(cores[g.key]||[]).length} nº</span>
+      <span style="color:#9ca3af;font-size:.8rem;"> → ${g.regra} · ${(cores[g.key]||[]).length} nº</span>
       <div class="ms-2 mt-1" style="font-size:.78rem;color:#888;">
         ${(cores[g.key]||[]).map(n=>`<span class="badge me-1" style="background:#1a2540;color:#aaa;">${n}</span>`).join("")}
       </div>
@@ -706,7 +860,7 @@ function renderCoresHTML(cores) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Statistics
+// Statistics – sorted by frequency, no scrollable cards
 // ════════════════════════════════════════════════════════════════════
 async function loadEstatisticas() {
   const d  = await (await fetch("/api/estatisticas")).json();
@@ -718,73 +872,89 @@ async function loadEstatisticas() {
 
   const total = d.total_sorteios;
 
-  // Frequency bars for 1-50
-  const freqRows = Array.from({length:50}, (_,i) => {
-    const n   = i+1;
-    const cnt = d.frequencia_numeros[n] || 0;
-    const pct = total > 0 ? Math.round(cnt/total*100) : 0;
+  // Build hot/cold sets from API data
+  const hotSet   = new Set((d.quentes   || []).map(([n]) => n));
+  const coldSet  = new Set((d.atrasados || []).map(([n]) => n));
+
+  // Numbers sorted by frequency (descending)
+  const numEntries = Object.entries(d.frequencia_numeros)
+    .map(([n, cnt]) => [parseInt(n), cnt])
+    .sort((a, b) => b[1] - a[1]);
+  const maxNumCount = numEntries[0]?.[1] || 1;
+
+  const numRows = numEntries.map(([n, cnt], rank) => {
+    const pct    = total > 0 ? (cnt / total * 100).toFixed(1) : 0;
+    const barPct = Math.round(cnt / maxNumCount * 100);
+    const hotCls = hotSet.has(n)  ? "hot"  : coldSet.has(n) ? "cold" : "";
+    const icon   = hotSet.has(n)  ? "🔥 "  : coldSet.has(n) ? "❄️ "  : "";
     return `<tr>
-      <td class="text-muted" style="width:30px;">${n}</td>
-      <td><div class="freq-bar"><div class="freq-bar-fill" style="width:${pct}%;"></div></div></td>
-      <td class="text-muted small" style="width:60px;">${cnt}×</td>
-      <td class="text-muted small" style="width:50px;">${pct}%</td>
+      <td style="color:#555;width:28px;font-size:.75rem;">${rank+1}</td>
+      <td style="width:42px;"><span class="num-badge ${hotCls}">${n}</span></td>
+      <td><div class="freq-bar"><div class="freq-bar-fill" style="width:${barPct}%;"></div></div></td>
+      <td style="width:48px;color:#d0d0d0;font-size:.82rem;">${cnt}×</td>
+      <td style="width:46px;color:#9ca3af;font-size:.75rem;">${pct}%</td>
+      <td style="width:22px;font-size:.82rem;">${icon}</td>
     </tr>`;
   }).join("");
 
-  // Star frequency
-  const starRows = Array.from({length:12}, (_,i) => {
-    const n   = i+1;
-    const cnt = d.frequencia_estrelas[n] || 0;
-    const pct = total > 0 ? Math.round(cnt/total*100) : 0;
+  // Stars sorted by frequency
+  const starEntries = Object.entries(d.frequencia_estrelas)
+    .map(([n, cnt]) => [parseInt(n), cnt])
+    .sort((a, b) => b[1] - a[1]);
+  const maxStarCount = starEntries[0]?.[1] || 1;
+
+  const starRows = starEntries.map(([n, cnt]) => {
+    const pct    = total > 0 ? (cnt / total * 100).toFixed(1) : 0;
+    const barPct = Math.round(cnt / maxStarCount * 100);
     return `<tr>
-      <td class="text-muted" style="width:30px;">★${n}</td>
-      <td><div class="freq-bar"><div class="freq-bar-fill" style="width:${pct*2}%;background:linear-gradient(90deg,#ffd700,#ff6b6b);"></div></div></td>
-      <td class="text-muted small">${cnt}× (${pct}%)</td>
+      <td style="width:42px;"><span class="num-badge" style="border:1px solid #ffd700;color:#ffd700;background:#2a2000;">★${n}</span></td>
+      <td><div class="freq-bar"><div class="freq-bar-fill star" style="width:${barPct}%;"></div></div></td>
+      <td style="width:48px;color:#d0d0d0;font-size:.82rem;">${cnt}×</td>
+      <td style="width:46px;color:#9ca3af;font-size:.75rem;">${pct}%</td>
     </tr>`;
   }).join("");
-
-  // Hot / cold
-  const quentesHTML = (d.quentes||[]).map(([n,c]) =>
-    `<span class="ball ball-verm" title="${c} vezes">${n}</span>`).join("");
-  const atrasadosHTML = (d.atrasados||[]).map(([n,c]) =>
-    `<span class="ball ball-azul" title="Há ${c} sorteios">${n}</span>`).join("");
 
   // Sum stats
   const soma = d.somas || {};
 
   el.innerHTML = `
     <div class="row g-3">
-      <div class="col-lg-5">
+      <!-- Numbers frequency -->
+      <div class="col-lg-6">
         <div class="card-dark">
-          <h5>Frequência Números (1–50)</h5>
-          <div style="max-height:420px;overflow-y:auto;">
-            <table class="table table-sm">${freqRows}</table>
-          </div>
-        </div>
-      </div>
-      <div class="col-lg-4">
-        <div class="card-dark">
-          <h5>Frequência Estrelas (1–12)</h5>
-          <table class="table table-sm">${starRows}</table>
-        </div>
-        <div class="card-dark">
-          <h5>Somas Históricas</h5>
-          <table class="table table-sm">
-            <tr><td class="text-muted">Total sorteios</td><td><strong>${total}</strong></td></tr>
-            <tr><td class="text-muted">Mínima</td><td>${soma.min ?? "–"}</td></tr>
-            <tr><td class="text-muted">Máxima</td><td>${soma.max ?? "–"}</td></tr>
-            <tr><td class="text-muted">Média</td><td>${soma.media ?? "–"}</td></tr>
+          <h5>Frequência – Números (1–50)
+            <small style="color:#9ca3af;font-weight:400;font-size:.75rem;"> ordenado do mais para o menos frequente</small>
+          </h5>
+          <div style="font-size:.73rem;color:#666;margin-bottom:8px;">🔥 = quente (últimos 10) · ❄️ = atrasado</div>
+          <table class="table table-sm mb-0" style="table-layout:fixed;">
+            <tbody>${numRows}</tbody>
           </table>
         </div>
       </div>
-      <div class="col-lg-3">
+
+      <!-- Right column -->
+      <div class="col-lg-6">
+        <!-- Stars -->
         <div class="card-dark">
-          <h5>🔥 Mais Frequentes (10 sorteios)</h5>
-          <div>${quentesHTML || "<span class='text-muted'>–</span>"}</div>
+          <h5>Frequência – Estrelas (1–12)
+            <small style="color:#9ca3af;font-weight:400;font-size:.75rem;"> ordenado do mais para o menos frequente</small>
+          </h5>
+          <table class="table table-sm mb-0" style="table-layout:fixed;">
+            <tbody>${starRows}</tbody>
+          </table>
         </div>
+
+        <!-- Sums -->
         <div class="card-dark">
-          <h5>❄️ Mais Atrasados</h5>
-          <div>${atrasadosHTML || "<span class='text-muted'>–</span>"}</div>
+          <h5>Somas Históricas</h5>
+          <table class="table table-sm mb-0">
+            <tbody>
+              <tr><td style="color:#9ca3af;">Total sorteios</td><td style="color:#d0d0d0;"><strong>${total}</strong></td></tr>
+              <tr><td style="color:#9ca3af;">Mínima</td><td style="color:#d0d0d0;">${soma.min ?? "–"}</td></tr>
+              <tr><td style="color:#9ca3af;">Máxima</td><td style="color:#d0d0d0;">${soma.max ?? "–"}</td></tr>
+              <tr><td style="color:#9ca3af;">Média</td><td style="color:#d0d0d0;">${soma.media ?? "–"}</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>`;
@@ -800,10 +970,10 @@ async function loadEstrategias() {
   const filtroRows = (d.filtros||[]).map(f => `
     <div class="card-dark mb-2 p-3" style="border-left:3px solid #0f3460;">
       <div class="d-flex gap-3 align-items-start">
-        <span style="font-size:1.4rem;font-weight:800;color:#e94560;min-width:32px;">${f.id}</span>
+        <span style="font-size:1.2rem;font-weight:800;color:#e94560;min-width:28px;">${f.id}</span>
         <div>
           <strong style="color:#e0e0e0;">${f.nome}</strong>
-          <div class="text-muted small mt-1">${f.descricao}</div>
+          <div style="color:#9ca3af;font-size:.83rem;margin-top:3px;">${f.descricao}</div>
         </div>
       </div>
     </div>`).join("");
@@ -811,7 +981,7 @@ async function loadEstrategias() {
   const quadrantesHTML = Object.entries(d.quadrantes||{}).map(([k, q]) => `
     <div class="col-md-6 mb-3">
       <div class="card-dark p-3">
-        <strong style="color:#e94560;">${k}</strong> – ${q.descricao}
+        <strong style="color:#e94560;">${k}</strong> – <span style="color:#d0d0d0;">${q.descricao}</span>
         <div class="mt-1" style="font-size:.78rem;color:#888;">
           ${q.numeros.map(n=>`<span class="badge me-1" style="background:#1a2540;color:#aaa;">${n}</span>`).join("")}
         </div>
@@ -827,22 +997,22 @@ async function loadEstrategias() {
       <div class="col-lg-7">
         <div class="card-dark mb-3">
           <h5>Quadrantes BI-BP-AI-AP</h5>
-          <p class="text-muted small">Os 50 números estão divididos em 4 quadrantes. Cada chave é construída
+          <p style="color:#9ca3af;font-size:.85rem;">Os 50 números estão divididos em 4 quadrantes. Cada chave é construída
           escolhendo uma quantidade específica de cada quadrante, garantindo equilíbrio entre
           alto/baixo e ímpar/par.</p>
           <div class="row">${quadrantesHTML}</div>
           <div class="mt-3">
-            <span class="text-muted small">Universo total: </span>
-            <strong>${(d.total_combinacoes_universo||0).toLocaleString()}</strong>
-            <span class="text-muted small"> combinações · Aceites pelos padrões: </span>
+            <span style="color:#9ca3af;font-size:.85rem;">Universo total: </span>
+            <strong style="color:#d0d0d0;">${(d.total_combinacoes_universo||0).toLocaleString()}</strong>
+            <span style="color:#9ca3af;font-size:.85rem;"> combinações · Aceites pelos padrões: </span>
             <strong style="color:#51cf66;">${(d.total_combinacoes_aceites||0).toLocaleString()}</strong>
           </div>
         </div>
         <div class="card-dark">
           <h5>16 Padrões Equilibrados</h5>
           <div>${padroes}</div>
-          <p class="text-muted small mt-2">
-            Formato: [BI, BP, AI, AP]. Todos os padrões somam 5 (os 5 números da chave).
+          <p style="color:#9ca3af;font-size:.82rem;margin-top:10px;">
+            Formato: [BI, BP, AI, AP]. Todos os padrões somam 5.
             Cobrem 1.333.800 das 2.118.760 combinações possíveis.
           </p>
         </div>
@@ -854,7 +1024,7 @@ async function loadEstrategias() {
         </div>
         <div class="card-dark">
           <h5>Estrelas Equilibradas</h5>
-          <p class="text-muted small">
+          <p style="color:#9ca3af;font-size:.85rem;">
             O sistema memoriza quantas vezes cada estrela (1–12) foi usada e selecciona
             sempre as 2 com menor contagem. Garante distribuição uniforme ao longo das
             chaves geradas — diferença máxima de 1 entre a mais e menos usada.
@@ -865,48 +1035,74 @@ async function loadEstrategias() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// History
+// History – year/month accordion (no horizontal scroll)
 // ════════════════════════════════════════════════════════════════════
-async function loadHistorico(page) {
-  histPage = page;
-  const r  = await fetch(`/api/sorteios?page=${page}&per=20`);
-  const d  = await r.json();
+async function loadHistorico() {
   const el = document.getElementById("historico-content");
+  el.innerHTML = `<div class="text-center py-4"><div class="spinner-border text-warning mb-2"></div><br/><span style="color:#9ca3af;">A carregar histórico...</span></div>`;
 
-  if (!d.total) {
-    el.innerHTML = `<div id="no-draws-msg"><i class="fa-solid fa-inbox fa-2x mb-3"></i><br/>Sem sorteios na BD.</div>`;
-    document.getElementById("paginacao").innerHTML = "";
-    return;
+  try {
+    const r = await fetch("/api/sorteios-agrupados");
+    const d = await r.json();
+
+    if (!d.total) {
+      el.innerHTML = `<div id="no-draws-msg"><i class="fa-solid fa-inbox fa-2x mb-3"></i><br/>Sem sorteios na BD.</div>`;
+      return;
+    }
+
+    const currentYear = new Date().getFullYear().toString();
+    let html = `<div style="color:#9ca3af;font-size:.85rem;margin-bottom:12px;">${d.total.toLocaleString()} sorteios no total</div>`;
+
+    for (const ano of d.anos) {
+      const anoData  = d.dados[ano];
+      const meses    = Object.keys(anoData).sort().reverse();
+      const anoTotal = meses.reduce((s, m) => s + anoData[m].sorteios.length, 0);
+      const isOpen   = ano === currentYear;
+
+      html += `
+        <div class="hist-year-header" onclick="toggleAno('${ano}')">
+          <span class="year-label">${ano}</span>
+          <span class="year-count">${anoTotal} sorteios</span>
+          <span class="toggle-icon" id="ano-icon-${ano}">${isOpen ? '▼' : '►'}</span>
+        </div>
+        <div class="hist-year-body${isOpen ? ' open' : ''}" id="ano-body-${ano}">
+          <div style="padding:4px 0 12px 0;">`;
+
+      for (const mesKey of meses) {
+        const mes      = anoData[mesKey];
+        const mesRows  = mes.sorteios.map(s => `
+          <tr>
+            <td style="color:#9ca3af;font-size:.8rem;white-space:nowrap;">${s.data}</td>
+            <td style="color:#d0d0d0;">${s.numeros.join(" · ")}</td>
+            <td style="color:#ffd700;">★${s.estrelas.join(" ★")}</td>
+            <td style="color:#9ca3af;">${s.soma}</td>
+          </tr>`).join("");
+
+        html += `
+            <div class="hist-month-section">
+              <span class="hist-month-title">${mes.nome} – ${mes.sorteios.length} sorteio${mes.sorteios.length !== 1 ? 's' : ''}</span>
+              <table class="table table-sm mb-1" style="margin-top:4px;">
+                <thead><tr><th>Data</th><th>Números</th><th>Estrelas</th><th>Soma</th></tr></thead>
+                <tbody>${mesRows}</tbody>
+              </table>
+            </div>`;
+      }
+
+      html += `</div></div>`;
+    }
+
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div style="color:#ff6b6b;">Erro ao carregar histórico.</div>`;
   }
+}
 
-  const rows = (d.sorteios||[]).map(s => `
-    <tr>
-      <td class="text-muted small">${s.data}</td>
-      <td>${s.numeros.join(" · ")}</td>
-      <td>★${s.estrelas.join(" ★")}</td>
-      <td class="text-muted">${s.soma}</td>
-    </tr>`).join("");
-
-  el.innerHTML = `
-    <div class="card-dark">
-      <div class="d-flex justify-content-between mb-2">
-        <h5 class="mb-0"><i class="fa-solid fa-list me-2"></i>Sorteios</h5>
-        <span class="text-muted small">${d.total} registos</span>
-      </div>
-      <table class="table table-sm">
-        <thead><tr><th>Data</th><th>Números</th><th>Estrelas</th><th>Soma</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-
-  // Pagination
-  const pg = document.getElementById("paginacao");
-  let btns = "";
-  for(let i=1;i<=d.pages;i++) {
-    const active = i===page ? "btn-em" : "btn-ghost";
-    btns += `<button class="btn btn-sm ${active}" onclick="loadHistorico(${i})">${i}</button>`;
-  }
-  pg.innerHTML = btns;
+function toggleAno(ano) {
+  const body = document.getElementById(`ano-body-${ano}`);
+  const icon = document.getElementById(`ano-icon-${ano}`);
+  if (!body) return;
+  body.classList.toggle("open");
+  icon.textContent = body.classList.contains("open") ? "▼" : "►";
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -930,7 +1126,7 @@ async function inserirManual() {
     const d = await r.json();
     if (r.ok) {
       toast(d.mensagem, d.ok ? "success" : "warning");
-      loadHistorico(1);
+      loadHistorico();
       loadStatus();
       document.getElementById("m-nums").value = "";
       document.getElementById("m-stars").value = "";
@@ -941,27 +1137,31 @@ async function inserirManual() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Web scraping
+// Web scraping – latest draw
 // ════════════════════════════════════════════════════════════════════
 async function actualizarWeb() {
   const el = document.getElementById("scrape-result");
-  el.innerHTML = `<div class="text-muted"><span class="spinner-border spinner-border-sm me-2"></span>A contactar servidores...</div>`;
+  el.innerHTML = `<div style="color:#9ca3af;"><span class="spinner-border spinner-border-sm me-2"></span>A contactar servidores...</div>`;
   try {
     const r = await fetch("/api/actualizar-web", {method:"POST"});
     const d = await r.json();
     if (r.ok && d.sorteio) {
-      const s = d.sorteio;
+      const s       = d.sorteio;
+      const isNew   = d.ok;  // true = inserted, false = already existed
+      const color   = isNew ? "#51cf66" : "#ffd700";
+      const bg      = isNew ? "#0d3320" : "#1a2000";
+      const icon    = isNew ? "✓" : "⚠";
+      const title   = isNew ? d.mensagem : `${d.mensagem} — sem alterações na BD.`;
       el.innerHTML = `
-        <div class="alert" style="background:#0d3320;border:1px solid #51cf66;color:#51cf66;border-radius:10px;">
-          <strong>✓ ${d.mensagem}</strong><br/>
-          Data: ${s.data}<br/>
-          Números: <strong>${s.numeros.join(" · ")}</strong><br/>
-          Estrelas: ★${s.estrelas.join(" ★")}
+        <div class="alert" style="background:${bg};border:1px solid ${color};color:${color};border-radius:10px;">
+          <strong>${icon} ${title}</strong><br/>
+          Data: <span style="color:#d0d0d0;">${s.data}</span><br/>
+          Números: <strong style="color:#d0d0d0;">${s.numeros.join(" · ")}</strong><br/>
+          Estrelas: <span style="color:#ffd700;">★${s.estrelas.join(" ★")}</span>
         </div>`;
       loadStatus();
-      // Refresh history table if it is currently visible
       if (document.getElementById("tab-historico").classList.contains("active")) {
-        loadHistorico(1);
+        loadHistorico();
       }
     } else {
       el.innerHTML = `
@@ -971,7 +1171,7 @@ async function actualizarWeb() {
         </div>`;
     }
   } catch(e) {
-    el.innerHTML = `<div class="text-danger">Erro de ligação.</div>`;
+    el.innerHTML = `<div style="color:#ff6b6b;">Erro de ligação.</div>`;
   }
 }
 
@@ -980,7 +1180,6 @@ async function actualizarWeb() {
 // ════════════════════════════════════════════════════════════════════
 let _histSource = null;
 
-// Called when the "Actualizar BD" tab is shown
 async function loadHistoricoStatus() {
   // Check Excel source file
   try {
@@ -992,13 +1191,13 @@ async function loadHistoricoStatus() {
         <div style="background:#0d2a10;border:1px solid #51cf66;border-radius:8px;padding:10px 14px;">
           <i class="fa-solid fa-file-excel me-2" style="color:#51cf66;"></i>
           <strong style="color:#51cf66;">${dx.ficheiro}</strong> encontrado
-          &nbsp;·&nbsp; <span class="text-muted small">${dx.tamanho_kb} KB</span>
+          &nbsp;·&nbsp; <span style="color:#9ca3af;font-size:.82rem;">${dx.tamanho_kb} KB</span>
         </div>`;
     } else {
       elx.innerHTML = `
         <div style="background:#1a2540;border:1px dashed #444;border-radius:8px;padding:10px 14px;color:#888;">
           <i class="fa-solid fa-file-circle-xmark me-2"></i>
-          Ficheiro <code>${dx.ficheiro}</code> não encontrado na pasta do programa.
+          Ficheiro <code style="color:#74c0fc;">${dx.ficheiro}</code> não encontrado na pasta do programa.
         </div>`;
       document.getElementById("btn-importar-excel").disabled = true;
     }
@@ -1015,19 +1214,17 @@ async function loadHistoricoStatus() {
       <div style="background:#0d2a10;border:1px solid #51cf66;border-radius:8px;padding:10px 14px;">
         <i class="fa-solid fa-file-check me-2" style="color:#51cf66;"></i>
         <strong style="color:#51cf66;">historico_completo.json</strong> encontrado
-        &nbsp;·&nbsp; <span class="text-muted small">${d.total.toLocaleString()} sorteios</span>
-        &nbsp;·&nbsp; <span class="text-muted small">gerado em ${d.gerado_em}</span>
-        &nbsp;·&nbsp; <span class="text-muted small">${d.tamanho_kb} KB</span>
+        &nbsp;·&nbsp; <span style="color:#9ca3af;font-size:.82rem;">${d.total.toLocaleString()} sorteios · gerado em ${d.gerado_em} · ${d.tamanho_kb} KB</span>
       </div>`;
     btn.style.display = "";
   } else if (d.existe && d.erro) {
-    el.innerHTML = `<div class="text-warning small">Ficheiro existe mas com erro: ${d.erro}</div>`;
+    el.innerHTML = `<div style="color:#ffd700;font-size:.85rem;">Ficheiro existe mas com erro: ${d.erro}</div>`;
     btn.style.display = "";
   } else {
     el.innerHTML = `
       <div style="background:#1a2540;border:1px dashed #444;border-radius:8px;padding:10px 14px;color:#888;">
         <i class="fa-solid fa-file-circle-xmark me-2"></i>
-        Ficheiro <code>historico_completo.json</code> ainda não existe.
+        Ficheiro <code style="color:#74c0fc;">historico_completo.json</code> ainda não existe.
       </div>`;
     btn.style.display = "none";
   }
@@ -1037,7 +1234,7 @@ async function importarExcel() {
   const btn = document.getElementById("btn-importar-excel");
   const el  = document.getElementById("excel-resultado");
   btn.disabled = true;
-  el.innerHTML = `<div class="text-muted"><span class="spinner-border spinner-border-sm me-2"></span>A ler ficheiro Excel e a importar… pode demorar alguns segundos.</div>`;
+  el.innerHTML = `<div style="color:#9ca3af;"><span class="spinner-border spinner-border-sm me-2"></span>A ler ficheiro Excel e a importar… pode demorar alguns segundos.</div>`;
   try {
     const r = await fetch("/api/importar-excel", {method:"POST"});
     const d = await r.json();
@@ -1050,27 +1247,27 @@ async function importarExcel() {
           <div class="row text-center g-2">
             <div class="col-4">
               <div style="font-size:1.4rem;font-weight:700;color:#51cf66;">${d.inseridos.toLocaleString()}</div>
-              <div class="text-muted small">inseridos</div>
+              <div style="color:#9ca3af;font-size:.82rem;">inseridos</div>
             </div>
             <div class="col-4">
               <div style="font-size:1.4rem;font-weight:700;color:#ffd700;">${d.ja_existiam.toLocaleString()}</div>
-              <div class="text-muted small">já existiam</div>
+              <div style="color:#9ca3af;font-size:.82rem;">já existiam</div>
             </div>
             <div class="col-4">
               <div style="font-size:1.4rem;font-weight:700;color:#aaa;">${d.total_bd.toLocaleString()}</div>
-              <div class="text-muted small">total na BD</div>
+              <div style="color:#9ca3af;font-size:.82rem;">total na BD</div>
             </div>
           </div>
-          ${d.erros > 0 ? `<div class="text-warning small mt-2">${d.erros} linhas ignoradas (dados inválidos)</div>` : ""}
+          ${d.erros > 0 ? `<div style="color:#ffd700;font-size:.82rem;margin-top:8px;">${d.erros} linhas ignoradas (dados inválidos)</div>` : ""}
         </div>`;
       loadStatus();
       toast(`${d.inseridos.toLocaleString()} sorteios importados do Excel`, "success");
     } else {
-      el.innerHTML = `<div class="text-danger mt-2"><i class="fa-solid fa-triangle-exclamation me-1"></i>${d.erro}</div>`;
+      el.innerHTML = `<div style="color:#ff6b6b;margin-top:8px;"><i class="fa-solid fa-triangle-exclamation me-1"></i>${d.erro}</div>`;
       toast(d.erro || "Erro na importação", "error");
     }
   } catch(e) {
-    el.innerHTML = `<div class="text-danger mt-2">Erro de ligação ao servidor.</div>`;
+    el.innerHTML = `<div style="color:#ff6b6b;margin-top:8px;">Erro de ligação ao servidor.</div>`;
   } finally {
     btn.disabled = false;
   }
@@ -1091,12 +1288,8 @@ async function importarFicheiro() {
 }
 
 function iniciarScrapeHistorico() {
-  if (_histSource) {
-    toast("Já existe um scraping em curso.", "warning");
-    return;
-  }
+  if (_histSource) { toast("Já existe um scraping em curso.", "warning"); return; }
 
-  // Show progress UI
   document.getElementById("hist-progress-section").style.display = "";
   document.getElementById("hist-resultado").style.display = "none";
   document.getElementById("btn-scrape-hist").disabled = true;
@@ -1109,7 +1302,6 @@ function iniciarScrapeHistorico() {
   const curAno    = document.getElementById("hist-cur-ano");
   const totalFnd  = document.getElementById("hist-total-found");
   const totalErr  = document.getElementById("hist-total-err");
-
   let erros = 0;
   log.innerHTML = "";
 
@@ -1120,76 +1312,52 @@ function iniciarScrapeHistorico() {
   }
 
   logLine("▶ A iniciar scraping do histórico completo (2004 → hoje)...", "#ffd700");
-
   _histSource = new EventSource("/api/scrape-historico-completo");
 
   _histSource.onmessage = function(e) {
     try {
       const d = JSON.parse(e.data);
-
       if (d.tipo === "inicio") {
         logLine(`📅 Total de anos a processar: <strong>${d.total_anos}</strong>`);
-
       } else if (d.tipo === "progresso") {
         const pct = Math.round((d.step / d.total) * 100);
         progBar.style.width   = pct + "%";
         progPct.textContent   = pct + "%";
         progLabel.textContent = `A processar ${d.ano}... (${d.step}/${d.total})`;
         curAno.textContent    = d.ano;
-
       } else if (d.tipo === "ano_ok") {
         const col = d.encontrados > 0 ? "#51cf66" : "#888";
-        logLine(
-          `✓ <strong style="color:${col};">${d.ano}</strong> → ${d.encontrados} sorteios` +
-          ` · total: ${d.total_acumulado.toLocaleString()}`, col
-        );
+        logLine(`✓ <strong style="color:${col};">${d.ano}</strong> → ${d.encontrados} sorteios · total: ${d.total_acumulado.toLocaleString()}`, col);
         totalFnd.textContent = d.total_acumulado.toLocaleString();
-
       } else if (d.tipo === "ano_erro") {
         erros++;
         totalErr.textContent = erros;
         logLine(`✗ <strong style="color:#ff6b6b;">${d.ano}</strong> → erro: ${d.msg}`, "#ff6b6b");
-
       } else if (d.tipo === "concluido") {
-        progBar.style.width   = "100%";
-        progPct.textContent   = "100%";
+        progBar.style.width = "100%"; progPct.textContent = "100%";
         progLabel.textContent = "Concluído!";
-
-        logLine(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, "#333");
-        logLine(`✅ Histórico completo! ${d.total.toLocaleString()} sorteios · `+
-                `${d.inseridos_db.toLocaleString()} inseridos na BD`, "#ffd700");
-        logLine(`💾 Ficheiro: ${d.ficheiro}`, "#74c0fc");
-
+        logLine(`✅ Histórico completo! ${d.total.toLocaleString()} sorteios · ${d.inseridos_db.toLocaleString()} inseridos na BD`, "#ffd700");
         document.getElementById("hist-resultado").style.display = "";
         document.getElementById("hist-resultado").innerHTML = `
           <div style="background:#0d2a10;border:1px solid #51cf66;border-radius:10px;padding:16px;margin-top:12px;">
             <div class="d-flex align-items-center gap-3 mb-2">
               <i class="fa-solid fa-circle-check fa-2x" style="color:#51cf66;"></i>
               <div>
-                <strong style="color:#51cf66;">Histórico importado com sucesso!</strong><br/>
-                <span class="text-muted small">${d.total.toLocaleString()} sorteios · ${d.inseridos_db.toLocaleString()} adicionados à BD</span>
+                <strong style="color:#51cf66;">Histórico importado!</strong><br/>
+                <span style="color:#9ca3af;font-size:.85rem;">${d.total.toLocaleString()} sorteios · ${d.inseridos_db.toLocaleString()} adicionados à BD</span>
               </div>
             </div>
-            <code style="color:#74c0fc;font-size:.8rem;">historico_completo.json</code>
-            <span class="text-muted small ms-2">guardado na pasta do programa</span>
           </div>`;
-
-        _histSource.close();
-        _histSource = null;
+        _histSource.close(); _histSource = null;
         document.getElementById("btn-scrape-hist").disabled = false;
         document.getElementById("btn-load-ficheiro").disabled = false;
-        loadStatus();
-        loadHistoricoStatus();
-
+        loadStatus(); loadHistoricoStatus();
       } else if (d.tipo === "erro_fatal") {
         logLine(`💥 ERRO FATAL: ${d.msg}`, "#ff6b6b");
-        _histSource.close();
-        _histSource = null;
+        _histSource.close(); _histSource = null;
         document.getElementById("btn-scrape-hist").disabled = false;
       }
-    } catch(err) {
-      // skip keep-alive comments
-    }
+    } catch(err) {}
   };
 
   _histSource.onerror = function() {

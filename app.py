@@ -68,10 +68,18 @@ def api_gerar():
     body = request.get_json(silent=True) or {}
     quantidade = max(1, min(int(body.get("quantidade", 10)), 100))
 
+    # Support per-filter toggles (filtro_A … filtro_H).
+    # Fall back to legacy keys regra31/progressao for G and H.
     cfg = {
-        "soma_range":  body.get("soma_range", "padrao"),
-        "regra31":     bool(body.get("regra31", True)),
-        "progressao":  bool(body.get("progressao", True)),
+        "soma_range": body.get("soma_range", "padrao"),
+        "filtro_A":   bool(body.get("filtro_A", True)),
+        "filtro_B":   bool(body.get("filtro_B", True)),
+        "filtro_C":   bool(body.get("filtro_C", True)),
+        "filtro_D":   bool(body.get("filtro_D", True)),
+        "filtro_E":   bool(body.get("filtro_E", True)),
+        "filtro_F":   bool(body.get("filtro_F", True)),
+        "filtro_G":   bool(body.get("filtro_G", body.get("regra31",   True))),
+        "filtro_H":   bool(body.get("filtro_H", body.get("progressao", True))),
     }
 
     cores, _ = _get_cores()
@@ -132,6 +140,37 @@ def api_sorteios():
         "page": page,
         "per": per,
         "pages": (total + per - 1) // per,
+    })
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – ALL DRAWS GROUPED BY YEAR + MONTH
+# ════════════════════════════════════════════════════════════════════════════
+_MESES = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+          "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+
+@app.route("/api/sorteios-agrupados")
+def api_sorteios_agrupados():
+    todos = db.todos_sorteios()
+    dados: dict = {}
+    for s in todos:
+        year      = s["data"][:4]
+        month_num = int(s["data"][5:7])
+        month_key = s["data"][:7]          # "YYYY-MM"
+        if year not in dados:
+            dados[year] = {}
+        if month_key not in dados[year]:
+            dados[year][month_key] = {
+                "nome": _MESES[month_num],
+                "sorteios": [],
+            }
+        dados[year][month_key]["sorteios"].append(s)
+
+    anos_ordenados = sorted(dados.keys(), reverse=True)
+    return jsonify({
+        "total": len(todos),
+        "anos": anos_ordenados,
+        "dados": dados,
     })
 
 
@@ -252,11 +291,14 @@ def api_export_excel():
     if not chaves:
         return jsonify({"erro": "Sem chaves para exportar."}), 400
 
+    filtros = body.get("filtros", None)
+    config  = body.get("config",  None)
+
     cores, _ = _get_cores()
     # Convert colour lists back to sets
     cores_sets = {k: set(v) for k, v in cores.items()}
 
-    filepath = exporter.exportar(chaves, cores_sets)
+    filepath = exporter.exportar(chaves, cores_sets, filtros=filtros, config=config)
     return send_file(str(filepath), as_attachment=True,
                      download_name=filepath.name,
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

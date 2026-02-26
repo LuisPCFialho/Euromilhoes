@@ -127,17 +127,18 @@ class DatabaseManager:
             """)
 
     def inserir_sorteio(self, data: str, numeros: list, estrelas: list, fonte: str = "manual") -> bool:
+        """Insert a draw. Returns True if newly inserted, False if already existed or on error."""
         nums = sorted(numeros)
         ests = sorted(estrelas)
         try:
             with sqlite3.connect(self.db_path) as conn:
-                conn.execute(
+                cursor = conn.execute(
                     "INSERT OR IGNORE INTO sorteios (data,n1,n2,n3,n4,n5,e1,e2,soma,fonte) "
                     "VALUES (?,?,?,?,?,?,?,?,?,?)",
                     (data, nums[0], nums[1], nums[2], nums[3], nums[4],
                      ests[0], ests[1], sum(nums), fonte)
                 )
-            return True
+                return cursor.rowcount > 0
         except Exception:
             return False
 
@@ -884,13 +885,80 @@ class StatisticsAnalyzer:
 # ═════════════════════════════════════════════════════════════════════════════
 class FilterEngine:
     """
-    All filters in order of computational cost (cheapest first).
+    All filters ordered by computational cost (cheapest first).
+    All filters A-H can be independently toggled via config.
 
-    Config keys (all optional, with defaults shown):
-      soma_range   : "padrao" (80–190) | "apertado" (95–160)
-      regra31      : True   – Filter G: at least 2 numbers > 31
-      progressao   : True   – Filter H: reject perfect arithmetic sequences
+    Config keys (all optional, all default to True/active):
+      soma_range : "padrao" (80–190) | "apertado" (95–160)
+      filtro_A   : bool – Soma range
+      filtro_B   : bool – Consecutive pairs/triples
+      filtro_C   : bool – Same final digit
+      filtro_D   : bool – Decades spread
+      filtro_E   : bool – Repeat from last draw
+      filtro_F   : bool – Colour system (last 9 draws)
+      filtro_G   : bool – Regra do 31 (also accepts legacy key "regra31")
+      filtro_H   : bool – Anti-arithmetic-progression (also accepts legacy "progressao")
+
+    To add a new filter: add its id to ALL_FILTERS, add info to FILTER_INFO,
+    add stat key to stats dict, add check block in verificar(), add to STAT_MAP.
     """
+
+    ALL_FILTERS = list("ABCDEFGH")
+
+    FILTER_INFO = {
+        "A": {
+            "nome": "Soma",
+            "descricao": "Limita a soma dos 5 números ao intervalo configurado. "
+                         "Cerca de 93% dos sorteios históricos têm somas entre 80–190.",
+        },
+        "B": {
+            "nome": "Consecutivos",
+            "descricao": "Permite no máximo 1 par de números consecutivos e proíbe triplos. "
+                         "Pares ocorrem em ~42% dos sorteios; triplos em menos de 1%.",
+        },
+        "C": {
+            "nome": "Dígito Final",
+            "descricao": "Máx 2 números com o mesmo dígito final (ex: 3, 13, 23). "
+                         "Três ou mais iguais representam menos de 4% dos sorteios.",
+        },
+        "D": {
+            "nome": "Décadas",
+            "descricao": "Mín 3 décadas diferentes (0-9, 10-19, 20-29, 30-39, 40-49). "
+                         "Evita concentração de números numa só zona do boletim.",
+        },
+        "E": {
+            "nome": "Anti-Repetição",
+            "descricao": "Máx 2 números em comum com o sorteio anterior. "
+                         "Baseado em tendências de curto prazo observadas no histórico.",
+        },
+        "F": {
+            "nome": "Cores (9 sorteios)",
+            "descricao": "Sistema de cores baseado nos últimos 9 sorteios: "
+                         "Vermelhos (0×) → 1-3 por chave; Verdes (1×) → 1-3; "
+                         "Azuis (2×) → 0-1; Castanhos (3×+) → excluídos.",
+        },
+        "G": {
+            "nome": "Regra do 31",
+            "descricao": "Mín 2 números acima de 31. A maioria dos jogadores usa aniversários "
+                         "(1-31), forçar números altos reduz a partilha do jackpot.",
+        },
+        "H": {
+            "nome": "Anti-Progressão",
+            "descricao": "Rejeita progressões aritméticas perfeitas (ex: 5,10,15,20,25). "
+                         "Estas sequências são muito populares entre jogadores ingénuos.",
+        },
+    }
+
+    STAT_MAP = {
+        "A": "reprovadas_soma",
+        "B": "reprovadas_consecutivos",
+        "C": "reprovadas_finais",
+        "D": "reprovadas_decadas",
+        "E": "reprovadas_repeticao",
+        "F": "reprovadas_cores",
+        "G": "reprovadas_regra31",
+        "H": "reprovadas_progressao",
+    }
 
     SOMA_RANGES = {
         "padrao":   (80, 190),
@@ -906,10 +974,21 @@ class FilterEngine:
         rng = self.SOMA_RANGES.get(cfg.get("soma_range", "padrao"), (80, 190))
         self.soma_min = cfg.get("soma_min", rng[0])
         self.soma_max = cfg.get("soma_max", rng[1])
-        self.usar_regra31    = cfg.get("regra31",    True)
-        self.usar_progressao = cfg.get("progressao", True)
 
-        self.stats = {
+        # Build active_filters set – all enabled by default.
+        # Backward compat: G also accepts "regra31", H accepts "progressao".
+        self.active_filters: set[str] = set()
+        for f in self.ALL_FILTERS:
+            if f == "G":
+                default = cfg.get("regra31", True)
+            elif f == "H":
+                default = cfg.get("progressao", True)
+            else:
+                default = True
+            if cfg.get(f"filtro_{f}", default):
+                self.active_filters.add(f)
+
+        self.stats: dict[str, int] = {
             "testadas": 0, "aprovadas": 0,
             "reprovadas_soma": 0, "reprovadas_consecutivos": 0,
             "reprovadas_finais": 0, "reprovadas_decadas": 0,
@@ -922,72 +1001,72 @@ class FilterEngine:
         chave_s = sorted(chave)
 
         # ── Filter A – Configurable sum range ────────────────────────────────
-        s = sum(chave_s)
-        if not (self.soma_min <= s <= self.soma_max):
-            self.stats["reprovadas_soma"] += 1
-            return False
+        if "A" in self.active_filters:
+            s = sum(chave_s)
+            if not (self.soma_min <= s <= self.soma_max):
+                self.stats["reprovadas_soma"] += 1
+                return False
 
         # ── Filter B – Consecutive pairs / triples ────────────────────────────
-        pares = 0
-        for i in range(len(chave_s) - 1):
-            if chave_s[i+1] == chave_s[i] + 1:
-                pares += 1
-                if i < len(chave_s) - 2 and chave_s[i+2] == chave_s[i] + 2:
-                    self.stats["reprovadas_consecutivos"] += 1
-                    return False
-        if pares > 1:
-            self.stats["reprovadas_consecutivos"] += 1
-            return False
+        if "B" in self.active_filters:
+            pares = 0
+            for i in range(len(chave_s) - 1):
+                if chave_s[i+1] == chave_s[i] + 1:
+                    pares += 1
+                    if i < len(chave_s) - 2 and chave_s[i+2] == chave_s[i] + 2:
+                        self.stats["reprovadas_consecutivos"] += 1
+                        return False
+            if pares > 1:
+                self.stats["reprovadas_consecutivos"] += 1
+                return False
 
         # ── Filter C – Same final digit (max 2 share same last digit) ─────────
-        finais = [n % 10 for n in chave_s]
-        if max(Counter(finais).values()) > 2:
-            self.stats["reprovadas_finais"] += 1
-            return False
+        if "C" in self.active_filters:
+            finais = [n % 10 for n in chave_s]
+            if max(Counter(finais).values()) > 2:
+                self.stats["reprovadas_finais"] += 1
+                return False
 
         # ── Filter D – Decades spread (min 3 different decades) ──────────────
-        decadas = {(n - 1) // 10 for n in chave_s}
-        if len(decadas) < 3:
-            self.stats["reprovadas_decadas"] += 1
-            return False
+        if "D" in self.active_filters:
+            decadas = {(n - 1) // 10 for n in chave_s}
+            if len(decadas) < 3:
+                self.stats["reprovadas_decadas"] += 1
+                return False
 
         # ── Filter E – Repeat from last draw (max 2 shared numbers) ──────────
-        if self.ultimo_sorteio:
+        if "E" in self.active_filters and self.ultimo_sorteio:
             comuns = set(chave_s).intersection(set(self.ultimo_sorteio))
             if len(comuns) > 2:
                 self.stats["reprovadas_repeticao"] += 1
                 return False
 
         # ── Filter F – Colour system (last 9 draws) ───────────────────────────
-        v = self.cores.get("vermelhos", set())
-        g = self.cores.get("verdes", set())
-        a = self.cores.get("azuis", set())
-        c = self.cores.get("castanhos", set())
+        if "F" in self.active_filters:
+            v = self.cores.get("vermelhos", set())
+            g = self.cores.get("verdes", set())
+            a = self.cores.get("azuis", set())
+            c = self.cores.get("castanhos", set())
 
-        qtd_v = sum(1 for n in chave_s if n in v)
-        qtd_g = sum(1 for n in chave_s if n in g)
-        qtd_a = sum(1 for n in chave_s if n in a)
-        qtd_c = sum(1 for n in chave_s if n in c)
+            qtd_v = sum(1 for n in chave_s if n in v)
+            qtd_g = sum(1 for n in chave_s if n in g)
+            qtd_a = sum(1 for n in chave_s if n in a)
+            qtd_c = sum(1 for n in chave_s if n in c)
 
-        if not (1 <= qtd_v <= 3): self.stats["reprovadas_cores"] += 1; return False
-        if not (1 <= qtd_g <= 3): self.stats["reprovadas_cores"] += 1; return False
-        if not (0 <= qtd_a <= 1): self.stats["reprovadas_cores"] += 1; return False
-        if qtd_c > 0:             self.stats["reprovadas_cores"] += 1; return False
+            if not (1 <= qtd_v <= 3): self.stats["reprovadas_cores"] += 1; return False
+            if not (1 <= qtd_g <= 3): self.stats["reprovadas_cores"] += 1; return False
+            if not (0 <= qtd_a <= 1): self.stats["reprovadas_cores"] += 1; return False
+            if qtd_c > 0:             self.stats["reprovadas_cores"] += 1; return False
 
         # ── Filter G – Regra do 31 (anti-calendário) ─────────────────────────
-        # Most players use birthdays (1–31). Forcing ≥2 numbers above 31
-        # reduces jackpot-sharing probability on a winning ticket.
-        if self.usar_regra31:
+        if "G" in self.active_filters:
             acima_31 = sum(1 for n in chave_s if n > 31)
             if acima_31 < 2:
                 self.stats["reprovadas_regra31"] += 1
                 return False
 
         # ── Filter H – Perfect arithmetic progression ─────────────────────────
-        # Rejects combinations like 5,10,15,20,25 or 3,9,15,21,27 where all
-        # gaps between consecutive sorted numbers are identical. These are
-        # "famous sequences" naive players choose far too often.
-        if self.usar_progressao:
+        if "H" in self.active_filters:
             diffs = [chave_s[i+1] - chave_s[i] for i in range(4)]
             if len(set(diffs)) == 1:
                 self.stats["reprovadas_progressao"] += 1
@@ -1001,25 +1080,29 @@ class FilterEngine:
             self.stats[k] = 0
 
     def resumo_filtros(self) -> list[dict]:
-        """Return a human-readable list of filter names and their rejection counts."""
-        return [
-            {"id": "A", "nome": "Soma",              "reprovadas": self.stats["reprovadas_soma"],
-             "config": f"{self.soma_min}–{self.soma_max}"},
-            {"id": "B", "nome": "Consecutivos",       "reprovadas": self.stats["reprovadas_consecutivos"],
-             "config": "máx 1 par, 0 triplos"},
-            {"id": "C", "nome": "Dígito Final",       "reprovadas": self.stats["reprovadas_finais"],
-             "config": "máx 2 iguais"},
-            {"id": "D", "nome": "Décadas",            "reprovadas": self.stats["reprovadas_decadas"],
-             "config": "mín 3 diferentes"},
-            {"id": "E", "nome": "Repetição",          "reprovadas": self.stats["reprovadas_repeticao"],
-             "config": "máx 2 do sorteio anterior"},
-            {"id": "F", "nome": "Cores",              "reprovadas": self.stats["reprovadas_cores"],
-             "config": "V:1-3 | G:1-3 | A:0-1 | C:0"},
-            {"id": "G", "nome": "Regra do 31",        "reprovadas": self.stats["reprovadas_regra31"],
-             "config": "mín 2 números > 31", "ativo": self.usar_regra31},
-            {"id": "H", "nome": "Progressão Aritmét.","reprovadas": self.stats["reprovadas_progressao"],
-             "config": "rejeitar sequências perfeitas", "ativo": self.usar_progressao},
-        ]
+        """Return metadata + stats for every filter (including inactive ones)."""
+        result = []
+        for f_id in self.ALL_FILTERS:
+            info = self.FILTER_INFO[f_id]
+            config_str = {
+                "A": f"{self.soma_min}–{self.soma_max}",
+                "B": "máx 1 par, 0 triplos",
+                "C": "máx 2 iguais",
+                "D": "mín 3 décadas",
+                "E": "máx 2 do anterior",
+                "F": "V:1-3 | G:1-3 | A:0-1 | C:0",
+                "G": "mín 2 números > 31",
+                "H": "rejeitar sequências perfeitas",
+            }[f_id]
+            result.append({
+                "id":        f_id,
+                "nome":      info["nome"],
+                "descricao": info["descricao"],
+                "config":    config_str,
+                "reprovadas": self.stats[self.STAT_MAP[f_id]],
+                "ativo":     f_id in self.active_filters,
+            })
+        return result
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1123,7 +1206,9 @@ class ExcelExporter:
     FILL_ROW_ALT   = PatternFill("solid", fgColor="F5F5F5")
 
     def exportar(self, chaves: list[dict], cores: dict,
-                 nome_ficheiro: str | None = None) -> Path:
+                 nome_ficheiro: str | None = None,
+                 filtros: list[dict] | None = None,
+                 config: dict | None = None) -> Path:
         if not nome_ficheiro:
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             nome_ficheiro = f"chaves_{ts}.xlsx"
@@ -1240,6 +1325,27 @@ class ExcelExporter:
         ws2["A8"]  = "Mínima";  ws2["B8"]  = min(somas)
         ws2["A9"]  = "Máxima";  ws2["B9"]  = max(somas)
         ws2["A10"] = "Média";   ws2["B10"] = round(sum(somas)/len(somas), 1)
+
+        # ── Filters used ─────────────────────────────────────────────────────
+        if filtros:
+            ws2["A12"] = "FILTROS UTILIZADOS"
+            ws2["A12"].font = Font(bold=True, size=11)
+            ws2["B12"] = "ESTADO"
+            ws2["B12"].font = Font(bold=True, size=11)
+            ws2["C12"] = "CONFIGURAÇÃO"
+            ws2["C12"].font = Font(bold=True, size=11)
+            for r, f in enumerate(filtros, start=13):
+                ws2.cell(row=r, column=1, value=f"[{f['id']}] {f['nome']}")
+                status = "ACTIVO" if f.get("ativo", True) else "DESLIGADO"
+                cell_s = ws2.cell(row=r, column=2, value=status)
+                cell_s.font = Font(
+                    color="00AA00" if f.get("ativo", True) else "AA3333",
+                    bold=True
+                )
+                ws2.cell(row=r, column=3, value=f.get("config", ""))
+            ws2.column_dimensions["A"].width = 28
+            ws2.column_dimensions["B"].width = 12
+            ws2.column_dimensions["C"].width = 32
 
         wb.save(filepath)
         return filepath
