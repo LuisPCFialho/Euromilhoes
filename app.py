@@ -213,6 +213,18 @@ def api_actualizar_web():
         if not result:
             return jsonify({"erro": "Não foi possível obter dados. Tenta inserção manual."}), 502
 
+        # Reject if the numbers+stars match any existing draw (prevents
+        # duplicates when the scraper defaults to today's date)
+        nums_key = (tuple(sorted(result["numeros"])), tuple(sorted(result["estrelas"])))
+        for existing in db.todos_sorteios():
+            ex_key = (tuple(sorted(existing["numeros"])), tuple(sorted(existing["estrelas"])))
+            if nums_key == ex_key:
+                return jsonify({
+                    "ok": False,
+                    "sorteio": existing,
+                    "mensagem": f"Sorteio já existia na BD ({existing['data']}).",
+                })
+
         ok = db.inserir_sorteio(
             result["data"], result["numeros"], result["estrelas"], fonte="web-auto"
         )
