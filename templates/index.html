@@ -266,6 +266,10 @@
     <span id="sb-total">–</span> sorteios<br/>
     Último: <span id="sb-ultimo">–</span>
   </div>
+  <div style="padding:10px 16px 14px;border-top:1px solid #2a2a4a;text-align:center;font-size:.73rem;line-height:1.7;color:#6b7280;">
+    <div style="color:#9ca3af;">Autor: Luís Fialho</div>
+    <div>Versão 2.0 · 27.Fev.2026</div>
+  </div>
 </div>
 
 <!-- ── Main ── -->
@@ -1541,19 +1545,19 @@ async function loadPadroes() {
               <th>Padrão</th>
               <th style="width:110px;">Combinações</th>
               <th style="width:70px;">Prob. %</th>
-              <th style="width:130px;">Esp. / 100 sorteios</th>
+              <th style="width:160px;">Esperado / 1.000 Sorteios</th>
             </tr></thead>
             <tbody>`;
       currentGrupo = p.grupo;
     }
     const padStr = p.padrao.join("-");
-    const esp100 = (p.pct).toFixed(2);
+    const esp1000 = Math.round(p.pct * 10);
     html += `<tr>
       <td style="color:#9ca3af;">${p.num}</td>
       <td><span class="badge me-1" style="background:#0f2040;color:#74c0fc;font-family:monospace;font-size:.85rem;">${padStr}</span></td>
       <td style="color:#d0d0d0;">${p.combinacoes.toLocaleString()}</td>
       <td style="color:#d0d0d0;">${p.pct}%</td>
-      <td style="color:#9ca3af;">${esp100}%</td>
+      <td style="color:#9ca3af;">${esp1000}</td>
     </tr>`;
   }
   if (currentGrupo) html += `</tbody></table></div>`;
@@ -1577,12 +1581,20 @@ async function loadHistoricoPadroes() {
     const m = Object.values(_GRUPO_META).find((_,i) =>
       ["best","middle_high","middle_low","worst"][i] === g.chave) ||
       { color:"#d0d0d0", bg:"#0f2040" };
+    const difQtd = g.real - g.esperado;
+    const difPct = (parseFloat(g.pct_real) - parseFloat(g.pct_esp)).toFixed(1);
+    const dqColor = difQtd >= 0 ? "#51cf66" : "#ff6b6b";
+    const dpColor = parseFloat(difPct) >= 0 ? "#51cf66" : "#ff6b6b";
+    const dqStr = difQtd >= 0 ? `+${difQtd}` : `${difQtd}`;
+    const dpStr = parseFloat(difPct) >= 0 ? `+${difPct}` : `${difPct}`;
     return `<tr>
       <td style="color:${m.color};font-weight:600;">${g.nome}</td>
       <td style="color:#d0d0d0;">${g.esperado}</td>
       <td style="color:#9ca3af;">${g.pct_esp}%</td>
       <td style="color:#51cf66;font-weight:600;">${g.real}</td>
       <td style="color:#74c0fc;">${g.pct_real}%</td>
+      <td style="color:${dqColor};font-weight:600;">${dqStr}</td>
+      <td style="color:${dpColor};">${dpStr}%</td>
     </tr>`;
   }).join("");
 
@@ -1600,10 +1612,12 @@ async function loadHistoricoPadroes() {
             <thead><tr>
               <th style="width:36px;">#</th>
               <th>Padrão</th>
-              <th style="width:100px;">Teórico</th>
-              <th style="width:80px;">Esp. %</th>
-              <th style="width:100px;">Real</th>
-              <th style="width:80px;">Real %</th>
+              <th style="width:80px;">Teórico</th>
+              <th style="width:65px;">Esp. %</th>
+              <th style="width:80px;">Real</th>
+              <th style="width:65px;">Real %</th>
+              <th style="width:80px;">Dif. Qtd</th>
+              <th style="width:65px;">Dif. %</th>
             </tr></thead>
             <tbody>`;
       currentGrupo = p.grupo;
@@ -1611,6 +1625,12 @@ async function loadHistoricoPadroes() {
     const padStr = p.padrao.join("-");
     const m = _GRUPO_META[p.grupo];
     const teorico = Math.round(d.total * p.pct / 100);
+    const difQtdD = p.real - teorico;
+    const difPctD = (parseFloat(p.pct_real) - parseFloat(p.pct)).toFixed(1);
+    const dqDColor = difQtdD >= 0 ? "#51cf66" : "#ff6b6b";
+    const dpDColor = parseFloat(difPctD) >= 0 ? "#51cf66" : "#ff6b6b";
+    const dqDStr = difQtdD >= 0 ? `+${difQtdD}` : `${difQtdD}`;
+    const dpDStr = parseFloat(difPctD) >= 0 ? `+${difPctD}` : `${difPctD}`;
     detalheHTML += `<tr>
       <td style="color:#9ca3af;">${p.num}</td>
       <td><span class="badge me-1" style="background:#0f2040;color:#74c0fc;font-family:monospace;">${padStr}</span></td>
@@ -1618,6 +1638,8 @@ async function loadHistoricoPadroes() {
       <td style="color:#9ca3af;">${p.pct}%</td>
       <td style="color:#51cf66;font-weight:600;">${p.real}</td>
       <td style="color:#74c0fc;">${p.pct_real}%</td>
+      <td style="color:${dqDColor};font-weight:600;">${dqDStr}</td>
+      <td style="color:${dpDColor};">${dpDStr}%</td>
     </tr>`;
   }
   if (currentGrupo) detalheHTML += `</tbody></table></div>`;
@@ -1631,6 +1653,7 @@ async function loadHistoricoPadroes() {
           <th>Tipos de Padrões</th>
           <th>Esperada (Teórica)</th><th></th>
           <th>Verificada (Sorteios)</th><th></th>
+          <th>Dif. Qtd</th><th>Dif. %</th>
         </tr></thead>
         <tbody>${resumoRows}</tbody>
       </table>
