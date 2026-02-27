@@ -93,6 +93,101 @@ PADROES_EQUILIBRADOS = [
     [0,1,2,2],[2,1,2,0],[0,2,2,1],[1,2,2,0],
 ]
 
+# ── Full BI-BP-AI-AP pattern table (56 patterns, Lotterycodex) ────────────────
+# Each entry: num, padrao [BI,BP,AI,AP], combinacoes, pct, grupo
+# grupos: "best" | "middle_high" | "middle_low" | "worst"
+TODOS_PADROES_BIBPAIAP = [
+    # ── BEST (4) ──────────────────────────────────────────────────────────────
+    {"num":  1, "padrao": [1,1,1,2], "combinacoes": 146014, "pct": 6.89, "grupo": "best"},
+    {"num":  2, "padrao": [2,1,1,1], "combinacoes": 146016, "pct": 6.89, "grupo": "best"},
+    {"num":  3, "padrao": [1,2,1,1], "combinacoes": 133848, "pct": 6.32, "grupo": "best"},
+    {"num":  4, "padrao": [1,1,2,1], "combinacoes": 133848, "pct": 6.32, "grupo": "best"},
+    # ── MIDDLE-HIGH (12) ──────────────────────────────────────────────────────
+    {"num":  5, "padrao": [2,0,1,2], "combinacoes":  73008, "pct": 3.45, "grupo": "middle_high"},
+    {"num":  6, "padrao": [2,1,0,2], "combinacoes":  73008, "pct": 3.45, "grupo": "middle_high"},
+    {"num":  7, "padrao": [2,2,0,1], "combinacoes":  66924, "pct": 3.16, "grupo": "middle_high"},
+    {"num":  8, "padrao": [1,0,2,2], "combinacoes":  66924, "pct": 3.16, "grupo": "middle_high"},
+    {"num":  9, "padrao": [2,0,2,1], "combinacoes":  66924, "pct": 3.16, "grupo": "middle_high"},
+    {"num": 10, "padrao": [1,2,0,2], "combinacoes":  66924, "pct": 3.16, "grupo": "middle_high"},
+    {"num": 11, "padrao": [2,2,1,0], "combinacoes":  61776, "pct": 2.92, "grupo": "middle_high"},
+    {"num": 12, "padrao": [0,2,1,2], "combinacoes":  61776, "pct": 2.92, "grupo": "middle_high"},
+    {"num": 13, "padrao": [0,1,2,2], "combinacoes":  61776, "pct": 2.92, "grupo": "middle_high"},
+    {"num": 14, "padrao": [2,1,2,0], "combinacoes":  61776, "pct": 2.92, "grupo": "middle_high"},
+    {"num": 15, "padrao": [0,2,2,1], "combinacoes":  56628, "pct": 2.67, "grupo": "middle_high"},
+    {"num": 16, "padrao": [1,2,2,0], "combinacoes":  56628, "pct": 2.67, "grupo": "middle_high"},
+    # ── MIDDLE-LOW (12) ───────────────────────────────────────────────────────
+    {"num": 17, "padrao": [3,0,1,1], "combinacoes":  44616, "pct": 2.11, "grupo": "middle_low"},
+    {"num": 18, "padrao": [3,1,0,1], "combinacoes":  44616, "pct": 2.11, "grupo": "middle_low"},
+    {"num": 19, "padrao": [1,0,1,3], "combinacoes":  44616, "pct": 2.11, "grupo": "middle_low"},
+    {"num": 20, "padrao": [1,1,0,3], "combinacoes":  44616, "pct": 2.11, "grupo": "middle_low"},
+    {"num": 21, "padrao": [3,1,1,0], "combinacoes":  41184, "pct": 1.94, "grupo": "middle_low"},
+    {"num": 22, "padrao": [0,1,1,3], "combinacoes":  41184, "pct": 1.94, "grupo": "middle_low"},
+    {"num": 23, "padrao": [1,0,3,1], "combinacoes":  37180, "pct": 1.75, "grupo": "middle_low"},
+    {"num": 24, "padrao": [1,3,0,1], "combinacoes":  37180, "pct": 1.75, "grupo": "middle_low"},
+    {"num": 25, "padrao": [0,3,1,1], "combinacoes":  34320, "pct": 1.62, "grupo": "middle_low"},
+    {"num": 26, "padrao": [0,1,3,1], "combinacoes":  34320, "pct": 1.62, "grupo": "middle_low"},
+    {"num": 27, "padrao": [1,1,3,0], "combinacoes":  34320, "pct": 1.62, "grupo": "middle_low"},
+    {"num": 28, "padrao": [1,3,1,0], "combinacoes":  34320, "pct": 1.62, "grupo": "middle_low"},
+    # ── WORST (28) ────────────────────────────────────────────────────────────
+    {"num": 29, "padrao": [2,0,0,3], "combinacoes":  22308, "pct": 1.05, "grupo": "worst"},
+    {"num": 30, "padrao": [3,0,0,2], "combinacoes":  22308, "pct": 1.05, "grupo": "worst"},
+    {"num": 31, "padrao": [0,0,2,3], "combinacoes":  18876, "pct": 0.89, "grupo": "worst"},
+    {"num": 32, "padrao": [3,2,0,0], "combinacoes":  18876, "pct": 0.89, "grupo": "worst"},
+    {"num": 33, "padrao": [0,2,0,3], "combinacoes":  18876, "pct": 0.89, "grupo": "worst"},
+    {"num": 34, "padrao": [3,0,2,0], "combinacoes":  18876, "pct": 0.89, "grupo": "worst"},
+    {"num": 35, "padrao": [0,0,3,2], "combinacoes":  17160, "pct": 0.81, "grupo": "worst"},
+    {"num": 36, "padrao": [0,3,0,2], "combinacoes":  17160, "pct": 0.81, "grupo": "worst"},
+    {"num": 37, "padrao": [2,3,0,0], "combinacoes":  17160, "pct": 0.81, "grupo": "worst"},
+    {"num": 38, "padrao": [2,0,3,0], "combinacoes":  17160, "pct": 0.81, "grupo": "worst"},
+    {"num": 39, "padrao": [0,3,2,0], "combinacoes":  14520, "pct": 0.69, "grupo": "worst"},
+    {"num": 40, "padrao": [0,2,3,0], "combinacoes":  14520, "pct": 0.69, "grupo": "worst"},
+    {"num": 41, "padrao": [1,0,0,4], "combinacoes":   9296, "pct": 0.44, "grupo": "worst"},
+    {"num": 42, "padrao": [4,0,0,1], "combinacoes":   9296, "pct": 0.44, "grupo": "worst"},
+    {"num": 43, "padrao": [4,1,0,0], "combinacoes":   8580, "pct": 0.40, "grupo": "worst"},
+    {"num": 44, "padrao": [0,0,1,4], "combinacoes":   8580, "pct": 0.40, "grupo": "worst"},
+    {"num": 45, "padrao": [4,0,1,0], "combinacoes":   8580, "pct": 0.40, "grupo": "worst"},
+    {"num": 46, "padrao": [0,1,0,4], "combinacoes":   8580, "pct": 0.40, "grupo": "worst"},
+    {"num": 47, "padrao": [0,4,0,1], "combinacoes":   6435, "pct": 0.30, "grupo": "worst"},
+    {"num": 48, "padrao": [1,4,0,0], "combinacoes":   6435, "pct": 0.30, "grupo": "worst"},
+    {"num": 49, "padrao": [1,0,4,0], "combinacoes":   6435, "pct": 0.30, "grupo": "worst"},
+    {"num": 50, "padrao": [0,0,4,1], "combinacoes":   6435, "pct": 0.30, "grupo": "worst"},
+    {"num": 51, "padrao": [0,4,1,0], "combinacoes":   5940, "pct": 0.28, "grupo": "worst"},
+    {"num": 52, "padrao": [0,1,4,0], "combinacoes":   5940, "pct": 0.28, "grupo": "worst"},
+    {"num": 53, "padrao": [5,0,0,0], "combinacoes":   1287, "pct": 0.06, "grupo": "worst"},
+    {"num": 54, "padrao": [0,0,0,5], "combinacoes":   1287, "pct": 0.06, "grupo": "worst"},
+    {"num": 55, "padrao": [0,0,5,0], "combinacoes":    792, "pct": 0.04, "grupo": "worst"},
+    {"num": 56, "padrao": [0,5,0,0], "combinacoes":    792, "pct": 0.04, "grupo": "worst"},
+]
+
+# Lookup dict for fast classification: tuple(padrao) → pattern entry
+_PADRAO_LOOKUP = {tuple(p["padrao"]): p for p in TODOS_PADROES_BIBPAIAP}
+
+_BI_SET = set(BI)
+_BP_SET = set(BP)
+_AI_SET = set(AI)
+_AP_SET = set(AP)
+
+
+def classificar_padrao_bibpaiap(numeros: list) -> dict | None:
+    """Return the TODOS_PADROES_BIBPAIAP entry for a 5-number combination."""
+    key = (
+        sum(1 for n in numeros if n in _BI_SET),
+        sum(1 for n in numeros if n in _BP_SET),
+        sum(1 for n in numeros if n in _AI_SET),
+        sum(1 for n in numeros if n in _AP_SET),
+    )
+    return _PADRAO_LOOKUP.get(key)
+
+
+def classificar_padrao_cores(numeros: list, cores: dict) -> str:
+    """Return e.g. '2210' representing [V, v, A, C] counts for the drawn numbers."""
+    v = sum(1 for n in numeros if n in cores.get("vermelhos", set()))
+    g = sum(1 for n in numeros if n in cores.get("verdes", set()))
+    a = sum(1 for n in numeros if n in cores.get("azuis", set()))
+    c = sum(1 for n in numeros if n in cores.get("castanhos", set()))
+    return f"{v}{g}{a}{c}"
+
+
 # Colour system thresholds
 # VERMELHOS: 0 appearances in last 9 draws → 1–3 in combo
 # VERDES: 1 appearance → 1–3 in combo
@@ -936,6 +1031,52 @@ class StatisticsAnalyzer:
             for n in s["numeros"]:
                 freq[n] += 1
         return freq.most_common(10)
+
+    def historico_padroes(self) -> dict:
+        """Count how many historical draws match each of the 56 BI-BP-AI-AP patterns."""
+        todos = self.db.todos_sorteios()
+        total = len(todos)
+        contagem: dict[int, int] = {}
+        for s in todos:
+            p = classificar_padrao_bibpaiap(s["numeros"])
+            if p:
+                contagem[p["num"]] = contagem.get(p["num"], 0) + 1
+
+        # Group summaries
+        _grupos = [
+            {"chave": "best",        "nome": "Melhores (4)",       "nums": range(1,  5),  "pct_esp": 26.42},
+            {"chave": "middle_high", "nome": "Médio/Alto (12)",     "nums": range(5,  17), "pct_esp": 36.53},
+            {"chave": "middle_low",  "nome": "Médio/Baixo (12)",    "nums": range(17, 29), "pct_esp": 22.30},
+            {"chave": "worst",       "nome": "Baixo/Mto Baixo (28)","nums": range(29, 57), "pct_esp": 14.75},
+        ]
+        resumo_grupos = []
+        for g in _grupos:
+            real = sum(contagem.get(i, 0) for i in g["nums"])
+            esperado = round(total * g["pct_esp"] / 100)
+            resumo_grupos.append({
+                "nome":       g["nome"],
+                "chave":      g["chave"],
+                "esperado":   esperado,
+                "pct_esp":    g["pct_esp"],
+                "real":       real,
+                "pct_real":   round(real / total * 100, 2) if total > 0 else 0,
+            })
+
+        # Per-pattern detail
+        detalhe = []
+        for p in TODOS_PADROES_BIBPAIAP:
+            real = contagem.get(p["num"], 0)
+            detalhe.append({
+                "num":         p["num"],
+                "padrao":      p["padrao"],
+                "combinacoes": p["combinacoes"],
+                "pct":         p["pct"],
+                "grupo":       p["grupo"],
+                "real":        real,
+                "pct_real":    round(real / total * 100, 2) if total > 0 else 0,
+            })
+
+        return {"total": total, "resumo_grupos": resumo_grupos, "detalhe": detalhe}
 
 
 # ═════════════════════════════════════════════════════════════════════════════

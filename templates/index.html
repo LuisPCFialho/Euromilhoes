@@ -242,6 +242,12 @@
     <a class="nav-link" href="#" onclick="showTab('estrategias', this)">
       <i class="fa-solid fa-chess"></i> Estratégias
     </a>
+    <a class="nav-link" href="#" onclick="showTab('padroes', this)">
+      <i class="fa-solid fa-table-cells"></i> Padrões BI-BP-AI-AP
+    </a>
+    <a class="nav-link" href="#" onclick="showTab('hist-padroes', this)">
+      <i class="fa-solid fa-chart-column"></i> Histórico Padrões
+    </a>
     <a class="nav-link" href="#" onclick="showTab('historico', this)">
       <i class="fa-solid fa-database"></i> Histórico BD
     </a>
@@ -372,6 +378,30 @@
         <div class="spinner-border text-warning mb-3"></div><br/>
         <span style="color:#9ca3af;">A carregar...</span>
       </div>
+    </div>
+  </div>
+
+
+  <!-- ════════════ TAB: PADRÕES BI-BP-AI-AP ════════════ -->
+  <div id="tab-padroes" class="tab-pane">
+    <div class="section-header">
+      <i class="fa-solid fa-table-cells"></i>
+      <h3>Padrões BI-BP-AI-AP</h3>
+    </div>
+    <div id="padroes-content">
+      <div class="text-center py-4"><div class="spinner-border text-warning mb-2"></div><br/><span style="color:#9ca3af;">A carregar...</span></div>
+    </div>
+  </div>
+
+
+  <!-- ════════════ TAB: HISTÓRICO PADRÕES ════════════ -->
+  <div id="tab-hist-padroes" class="tab-pane">
+    <div class="section-header">
+      <i class="fa-solid fa-chart-column"></i>
+      <h3>Histórico Padrões BI-BP-AI-AP</h3>
+    </div>
+    <div id="hist-padroes-content">
+      <div class="text-center py-4"><div class="spinner-border text-warning mb-2"></div><br/><span style="color:#9ca3af;">A carregar...</span></div>
     </div>
   </div>
 
@@ -528,12 +558,12 @@ const FILTER_META = [
     tooltip:'Permite no máximo 1 par de números consecutivos e proíbe triplos. Pares ocorrem em ~42% dos sorteios; triplos em menos de 1%.' },
   { id:'C', nome:'Dígito Final',
     tooltip:'Máx 2 números com o mesmo dígito final (ex: 3, 13, 23). Três ou mais iguais representam menos de 4% dos sorteios.' },
-  { id:'D', nome:'Décadas',
-    tooltip:'Mín 3 décadas diferentes representadas (0-9, 10-19, 20-29, 30-39, 40-49). Evita concentração numa zona do boletim.' },
+  { id:'D', nome:'Dezenas',
+    tooltip:'Mín 3 dezenas diferentes representadas (1-10, 11-20, 21-30, 31-40, 41-50). Evita concentração numa zona do boletim.' },
   { id:'E', nome:'Anti-Repetição',
     tooltip:'Máx 2 números em comum com o sorteio anterior. Baseado em tendências de curto prazo observadas no histórico.' },
   { id:'F', nome:'Cores (9 sorteios)',
-    tooltip:'Sistema de cores: Vermelhos (0×)→1-3; Verdes (1×)→1-3; Azuis (2×)→0-1; Castanhos (3×+)→excluídos da chave.' },
+    tooltip:'Sistema de cores: Vermelhos (0×)→1-3; Verdes (1×)→1-3; Azuis (2×)→0-2; Castanhos (3×+)→excluídos da chave.' },
   { id:'G', nome:'Regra do 31',
     tooltip:'Mín 2 números acima de 31. A maioria dos jogadores usa aniversários (1-31); forçar números altos reduz a partilha do jackpot.' },
   { id:'H', nome:'Anti-Progressão',
@@ -606,11 +636,13 @@ function showTab(name, el) {
   document.getElementById("tab-" + name).classList.add("active");
   if (el) el.closest(".nav-link").classList.add("active");
 
-  if (name === "sorteio")      loadUltimoSorteio();
-  if (name === "estatisticas") loadEstatisticas();
-  if (name === "estrategias")  loadEstrategias();
-  if (name === "historico")    loadHistorico();
-  if (name === "atualizar")    loadHistoricoStatus();
+  if (name === "sorteio")       loadUltimoSorteio();
+  if (name === "estatisticas")  loadEstatisticas();
+  if (name === "estrategias")   loadEstrategias();
+  if (name === "padroes")       loadPadroes();
+  if (name === "hist-padroes")  loadHistoricoPadroes();
+  if (name === "historico")     loadHistorico();
+  if (name === "atualizar")     loadHistoricoStatus();
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -818,6 +850,37 @@ async function loadUltimoSorteio() {
   const nums  = u.numeros.map(n => ballHTML(n, coresAntes)).join("");
   const stars = u.estrelas.map(s => starHTML(s)).join("");
 
+  // Padrão Combinatório
+  const pc = d.padrao_combinatorio;
+  const pcHTML = pc
+    ? `<div class="mt-2" style="font-size:.85rem;">
+         <span style="color:#9ca3af;">Padrão Combinatório: </span>
+         <strong style="color:#74c0fc;">#${pc.num} – ${pc.padrao.join("-")}</strong>
+         <span style="color:#9ca3af;"> (${pc.pct}%)</span>
+         <span class="ms-2" style="font-size:.75rem;color:${
+           pc.grupo==="best"?"#51cf66":pc.grupo==="middle_high"?"#74c0fc":pc.grupo==="middle_low"?"#ffd700":"#ff9966"
+         };">${
+           pc.grupo==="best"?"★ Melhor":pc.grupo==="middle_high"?"Médio/Alto":pc.grupo==="middle_low"?"Médio/Baixo":"Baixo"
+         }</span>
+       </div>`
+    : "";
+
+  // Padrão das Cores
+  const pCorStr = d.padrao_cores || "";
+  const pCorLabels = {"V":"Verm","v":"Verd","A":"Azul","C":"Cast"};
+  let pCorDesc = "";
+  if (pCorStr.length === 4) {
+    const labels = ["V","v","A","C"];
+    pCorDesc = labels.map((l,i)=>`${pCorStr[i]}${l}`).join("-");
+  }
+  const pCorHTML = pCorStr
+    ? `<div class="mt-1" style="font-size:.85rem;">
+         <span style="color:#9ca3af;">Padrão das Cores: </span>
+         <strong style="color:#e0e0e0;">${pCorStr}</strong>
+         <span style="color:#9ca3af;font-size:.78rem;"> (${pCorDesc})</span>
+       </div>`
+    : "";
+
   const ultimos9Rows = (d.ultimos_9 || []).map((s, i) =>
     `<tr>
        <td style="color:#9ca3af;font-size:.82rem;">${i === 0 ? "← Último" : `−${i}`}</td>
@@ -838,6 +901,8 @@ async function loadUltimoSorteio() {
           <div class="mb-3">${nums}</div>
           <div>${stars}</div>
           <div class="mt-3" style="color:#9ca3af;font-size:.85rem;">Soma: <strong style="color:#d0d0d0;">${u.soma}</strong></div>
+          ${pcHTML}
+          ${pCorHTML}
         </div>
         <div class="card-dark">
           <h5><i class="fa-solid fa-palette me-2"></i>Cores antes do sorteio</h5>
@@ -1426,6 +1491,145 @@ function iniciarScrapeHistorico() {
     if (_histSource) { _histSource.close(); _histSource = null; }
     document.getElementById("btn-scrape-hist").disabled = false;
   };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Padrões BI-BP-AI-AP – full table
+// ════════════════════════════════════════════════════════════════════
+const _GRUPO_META = {
+  best:        { label:"Melhores (4)",        bg:"#0d3320", color:"#51cf66", border:"#51cf66" },
+  middle_high: { label:"Médio/Alto (12)",      bg:"#0d2040", color:"#74c0fc", border:"#74c0fc" },
+  middle_low:  { label:"Médio/Baixo (12)",     bg:"#2a2800", color:"#ffd700", border:"#ffd700" },
+  worst:       { label:"Baixo/Mto Baixo (28)", bg:"#2a1010", color:"#ff9966", border:"#ff9966" },
+};
+
+async function loadPadroes() {
+  const el = document.getElementById("padroes-content");
+  const d = await (await fetch("api/padroes-bibpaiap")).json();
+  const padroes = d.padroes || [];
+
+  let html = `
+    <div class="card-dark mb-3">
+      <h5><i class="fa-solid fa-table-cells me-2"></i>Tabela de Padrões BI-BP-AI-AP – Euromilhões 5/50</h5>
+      <p style="color:#9ca3af;font-size:.85rem;">
+        Os 50 números estão divididos em 4 quadrantes: <strong style="color:#e0e0e0;">BI</strong> Baixos Ímpares (1–25) ·
+        <strong style="color:#e0e0e0;">BP</strong> Baixos Pares (2–24) ·
+        <strong style="color:#e0e0e0;">AI</strong> Altos Ímpares (27–49) ·
+        <strong style="color:#e0e0e0;">AP</strong> Altos Pares (26–50).
+        Cada chave de 5 números pertence a um dos 56 padrões abaixo.
+        <span style="color:#9ca3af;font-size:.78rem;"> (Original: Edvin Hiltner / Lotterycodex · Adaptado por João Cruz Fialho)</span>
+      </p>
+    </div>`;
+
+  let currentGrupo = null;
+  for (const p of padroes) {
+    if (p.grupo !== currentGrupo) {
+      if (currentGrupo !== null) html += `</tbody></table></div>`;
+      const m = _GRUPO_META[p.grupo];
+      html += `
+        <div class="card-dark mb-3" style="border-left:3px solid ${m.border};">
+          <h5 style="color:${m.color};">${m.label}</h5>
+          <table class="table table-sm mb-0" style="font-size:.82rem;">
+            <thead><tr>
+              <th style="width:36px;">#</th>
+              <th>Padrão</th>
+              <th style="width:110px;">Combinações</th>
+              <th style="width:70px;">Prob. %</th>
+              <th style="width:130px;">Esp. / 100 sorteios</th>
+            </tr></thead>
+            <tbody>`;
+      currentGrupo = p.grupo;
+    }
+    const padStr = p.padrao.join("-");
+    const esp100 = (p.pct).toFixed(2);
+    html += `<tr>
+      <td style="color:#9ca3af;">${p.num}</td>
+      <td><span class="badge me-1" style="background:#0f2040;color:#74c0fc;font-family:monospace;font-size:.85rem;">${padStr}</span></td>
+      <td style="color:#d0d0d0;">${p.combinacoes.toLocaleString()}</td>
+      <td style="color:#d0d0d0;">${p.pct}%</td>
+      <td style="color:#9ca3af;">${esp100}%</td>
+    </tr>`;
+  }
+  if (currentGrupo) html += `</tbody></table></div>`;
+  el.innerHTML = html;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Histórico Padrões BI-BP-AI-AP
+// ════════════════════════════════════════════════════════════════════
+async function loadHistoricoPadroes() {
+  const el = document.getElementById("hist-padroes-content");
+  el.innerHTML = `<div class="text-center py-4"><div class="spinner-border text-warning mb-2"></div><br/><span style="color:#9ca3af;">A calcular...</span></div>`;
+  const d = await (await fetch("api/historico-padroes")).json();
+  if (!d.total) {
+    el.innerHTML = `<div id="no-draws-msg">Sem sorteios na BD.</div>`;
+    return;
+  }
+
+  // Summary table
+  const resumoRows = (d.resumo_grupos || []).map(g => {
+    const m = Object.values(_GRUPO_META).find((_,i) =>
+      ["best","middle_high","middle_low","worst"][i] === g.chave) ||
+      { color:"#d0d0d0", bg:"#0f2040" };
+    return `<tr>
+      <td style="color:${m.color};font-weight:600;">${g.nome}</td>
+      <td style="color:#d0d0d0;">${g.esperado}</td>
+      <td style="color:#9ca3af;">${g.pct_esp}%</td>
+      <td style="color:#51cf66;font-weight:600;">${g.real}</td>
+      <td style="color:#74c0fc;">${g.pct_real}%</td>
+    </tr>`;
+  }).join("");
+
+  // Per-group detail tables
+  let detalheHTML = "";
+  let currentGrupo = null;
+  for (const p of (d.detalhe || [])) {
+    if (p.grupo !== currentGrupo) {
+      if (currentGrupo !== null) detalheHTML += `</tbody></table></div>`;
+      const m = _GRUPO_META[p.grupo];
+      detalheHTML += `
+        <div class="card-dark mb-3" style="border-left:3px solid ${m.border};">
+          <h5 style="color:${m.color};">${m.label}</h5>
+          <table class="table table-sm mb-0" style="font-size:.82rem;">
+            <thead><tr>
+              <th style="width:36px;">#</th>
+              <th>Padrão</th>
+              <th style="width:100px;">Teórico</th>
+              <th style="width:80px;">Esp. %</th>
+              <th style="width:100px;">Real</th>
+              <th style="width:80px;">Real %</th>
+            </tr></thead>
+            <tbody>`;
+      currentGrupo = p.grupo;
+    }
+    const padStr = p.padrao.join("-");
+    const m = _GRUPO_META[p.grupo];
+    const teorico = Math.round(d.total * p.pct / 100);
+    detalheHTML += `<tr>
+      <td style="color:#9ca3af;">${p.num}</td>
+      <td><span class="badge me-1" style="background:#0f2040;color:#74c0fc;font-family:monospace;">${padStr}</span></td>
+      <td style="color:#9ca3af;">${teorico}</td>
+      <td style="color:#9ca3af;">${p.pct}%</td>
+      <td style="color:#51cf66;font-weight:600;">${p.real}</td>
+      <td style="color:#74c0fc;">${p.pct_real}%</td>
+    </tr>`;
+  }
+  if (currentGrupo) detalheHTML += `</tbody></table></div>`;
+
+  el.innerHTML = `
+    <div class="card-dark mb-3">
+      <h5>PROBABILIDADE DOS PADRÕES BI-BP-AI-AP SEREM SORTEADOS</h5>
+      <div style="color:#9ca3af;font-size:.83rem;margin-bottom:12px;">Desde Fevereiro.2004 até hoje · ${d.total.toLocaleString()} sorteios</div>
+      <table class="table table-sm mb-0">
+        <thead><tr>
+          <th>Tipos de Padrões</th>
+          <th>Esperada (Teórica)</th><th></th>
+          <th>Verificada (Sorteios)</th><th></th>
+        </tr></thead>
+        <tbody>${resumoRows}</tbody>
+      </table>
+    </div>
+    ${detalheHTML}`;
 }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

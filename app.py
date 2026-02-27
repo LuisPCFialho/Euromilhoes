@@ -19,6 +19,7 @@ from euromilhoes import (
     KeyGenerator, ExcelExporter, EuromilhoesScraper, HistoricoScraper,
     VERSION, PADROES_EQUILIBRADOS, BI, BP, AI, AP, HISTORICO_PATH,
     ExcelImporter, EXCEL_SOURCE_PATH,
+    TODOS_PADROES_BIBPAIAP, classificar_padrao_bibpaiap, classificar_padrao_cores,
 )
 
 _IS_VERCEL = bool(os.environ.get("VERCEL"))
@@ -124,11 +125,19 @@ def api_ultimo_sorteio():
     ultimos_10 = db.ultimos_n_sorteios(10)
     anteriores = ultimos_10[1:] if len(ultimos_10) > 1 else ultimos_10
     cores_antes = stats.classificar_cores(anteriores)
+
+    # BI-BP-AI-AP pattern and colour pattern for the last draw
+    padrao_comb = classificar_padrao_bibpaiap(ultimo["numeros"]) if ultimo else None
+    cores_antes_sets = {k: set(v) for k, v in _cores_serializable(cores_antes).items()}
+    padrao_cores_str = classificar_padrao_cores(ultimo["numeros"], cores_antes_sets) if ultimo else None
+
     return jsonify({
         "ultimo": ultimo,
         "cores": _cores_serializable(cores),
         "cores_antes": _cores_serializable(cores_antes),
         "ultimos_9": ultimos_9,
+        "padrao_combinatorio": padrao_comb,
+        "padrao_cores": padrao_cores_str,
     })
 
 
@@ -321,15 +330,34 @@ def api_estrategias():
             {"id": "A", "nome": "Soma",               "descricao": "Entre 80–190 (padrão) ou 95–160 (apertado). ~93% dos sorteios históricos."},
             {"id": "B", "nome": "Consecutivos",        "descricao": "Máx 1 par consecutivo, 0 triplos. Pares: ~42% histórico, triplos: <1%."},
             {"id": "C", "nome": "Dígito Final",        "descricao": "Máx 2 números com mesmo dígito final. 3+ iguais: <4% histórico."},
-            {"id": "D", "nome": "Décadas",             "descricao": "Mín 3 décadas diferentes (0-9, 10-19, 20-29, 30-39, 40-49)."},
+            {"id": "D", "nome": "Dezenas",              "descricao": "Mín 3 dezenas diferentes (1-10, 11-20, 21-30, 31-40, 41-50)."},
             {"id": "E", "nome": "Anti-Repetição",      "descricao": "Máx 2 números em comum com o sorteio anterior."},
-            {"id": "F", "nome": "Cores (9 sorteios)", "descricao": "VERMELHOS 1–3 | VERDES 1–3 | AZUIS 0–1 | CASTANHOS 0."},
+            {"id": "F", "nome": "Cores (9 sorteios)", "descricao": "VERMELHOS 1–3 | VERDES 1–3 | AZUIS 0–2 | CASTANHOS 0."},
             {"id": "G", "nome": "Regra do 31",         "descricao": "Mín 2 números > 31. Reduz partilha de jackpot com jogadores de aniversários."},
             {"id": "H", "nome": "Progressão Aritmét.", "descricao": "Rejeita sequências como 5,10,15,20,25. Muito populares → má escolha."},
         ],
         "estrelas": "O sistema memoriza o uso de cada estrela (1–12) e selecciona sempre as 2 menos usadas.",
         "cores_actuais": _cores_serializable(cores),
     })
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – BI-BP-AI-AP PATTERNS (full table)
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/padroes-bibpaiap")
+def api_padroes_bibpaiap():
+    return jsonify({
+        "padroes": TODOS_PADROES_BIBPAIAP,
+        "total_combinacoes": 2_118_760,
+    })
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – HISTORICAL PATTERN BREAKDOWN
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/historico-padroes")
+def api_historico_padroes():
+    return jsonify(stats.historico_padroes())
 
 
 # ════════════════════════════════════════════════════════════════════════════
