@@ -55,7 +55,7 @@
     }
     #sidebar nav .nav-link:hover { background:#1f2a4a; color:#e0e0e0; }
     #sidebar nav .nav-link.active { background: var(--em-accent); color:#fff; }
-    #sidebar .status-bar { padding:16px; border-top:1px solid #2a2a4a; font-size:.78rem; color:#9ca3af; }
+    #sidebar .status-bar { padding:16px; border-top:1px solid #2a2a4a; font-size:.78rem; color:#9ca3af; text-align:center; }
 
     /* ── Main content ── */
     #main { margin-left:220px; padding:32px; min-height:100vh; }
@@ -1053,6 +1053,69 @@ async function loadEstatisticas() {
 // ════════════════════════════════════════════════════════════════════
 // Strategies
 // ════════════════════════════════════════════════════════════════════
+let _filterHistogram = null;
+const _FILTER_NAMES = {
+  A:"Soma (80–190)", B:"Consecutivos", C:"Dígito Final",
+  D:"Dezenas (mín 3)", E:"Anti-Repetição", F:"Cores (9 sorteios)",
+  G:"Regra do 31", H:"Anti-Progressão"
+};
+
+function updateFilterCombined() {
+  if (!_filterHistogram) return;
+  const hist = _filterHistogram.histogram;
+  const total = _filterHistogram.total;
+  let activeMask = 0;
+  "ABCDEFGH".split("").forEach((f, i) => {
+    const cb = document.getElementById("fs-" + f);
+    if (cb && cb.checked) activeMask |= (1 << i);
+  });
+  let accepted = 0;
+  for (let m = 0; m < 256; m++) {
+    if ((m & activeMask) === activeMask) accepted += hist[m];
+  }
+  const eliminated = total - accepted;
+  const pct = ((eliminated / total) * 100).toFixed(1);
+  const el = document.getElementById("filter-combined-stat");
+  if (el) el.innerHTML = `
+    <div style="margin-top:14px;padding:14px;border-radius:10px;background:#0a1628;border:1px solid #1a3050;text-align:center;">
+      <div style="color:#9ca3af;font-size:.82rem;margin-bottom:6px;">Combinações com os filtros activos</div>
+      <div style="font-size:1.5rem;font-weight:700;color:#51cf66;">
+        ${accepted.toLocaleString()} <span style="font-size:.82rem;color:#9ca3af;font-weight:400;">aceites</span>
+      </div>
+      <div style="color:#ff6b6b;font-size:.85rem;">
+        ${eliminated.toLocaleString()} eliminadas (${pct}%)
+      </div>
+      <div style="color:#9ca3af;font-size:.75rem;margin-top:4px;">de ${total.toLocaleString()} combinações C(50,5)</div>
+    </div>`;
+}
+
+function renderFilterStatsCard(data) {
+  const el = document.getElementById("filter-stats-card");
+  if (!el) return;
+  const total = data.total;
+  let rows = "";
+  "ABCDEFGH".split("").forEach(f => {
+    const s = data.per_filter[f];
+    const pct = ((s.eliminadas / total) * 100).toFixed(1);
+    rows += `<div class="d-flex align-items-center gap-2 mb-2" style="font-size:.85rem;">
+      <input type="checkbox" id="fs-${f}" checked onchange="updateFilterCombined()"
+        style="width:15px;height:15px;accent-color:#e94560;cursor:pointer;">
+      <span style="font-weight:700;color:#e94560;min-width:18px;">${f}</span>
+      <span style="color:#d0d0d0;flex:1;">${_FILTER_NAMES[f]}</span>
+      <span style="color:#ff6b6b;white-space:nowrap;">−${s.eliminadas.toLocaleString()}</span>
+      <span style="color:#9ca3af;font-size:.78rem;min-width:46px;text-align:right;">${pct}%</span>
+    </div>`;
+  });
+  el.innerHTML = `
+    <h5><i class="fa-solid fa-filter me-2"></i>Eficácia dos Filtros</h5>
+    <div style="color:#9ca3af;font-size:.82rem;margin-bottom:10px;">
+      Cada filtro elimina as seguintes combinações de C(50,5) = ${total.toLocaleString()}
+    </div>
+    ${rows}
+    <div id="filter-combined-stat"></div>`;
+  updateFilterCombined();
+}
+
 async function loadEstrategias() {
   const d  = await (await fetch("api/estrategias")).json();
   const el = document.getElementById("estrategias-content");
@@ -1108,6 +1171,11 @@ async function loadEstrategias() {
         </div>
       </div>
       <div class="col-lg-5">
+        <div class="card-dark mb-3" id="filter-stats-card">
+          <h5><i class="fa-solid fa-filter me-2"></i>Eficácia dos Filtros</h5>
+          <div class="text-center py-3"><div class="spinner-border spinner-border-sm text-warning"></div>
+          <span style="color:#9ca3af;font-size:.85rem;margin-left:8px;">A calcular 2.118.760 combinações...</span></div>
+        </div>
         <div class="card-dark mb-3">
           <h5>Filtros Activos</h5>
           ${filtroRows}
@@ -1122,6 +1190,16 @@ async function loadEstrategias() {
         </div>
       </div>
     </div>`;
+
+  // Load filter stats asynchronously (computation-heavy)
+  fetch("api/filter-stats").then(r => r.json()).then(data => {
+    _filterHistogram = data;
+    renderFilterStatsCard(data);
+  }).catch(() => {
+    const fc = document.getElementById("filter-stats-card");
+    if (fc) fc.innerHTML = `<h5><i class="fa-solid fa-filter me-2"></i>Eficácia dos Filtros</h5>
+      <div style="color:#ff6b6b;font-size:.85rem;">Erro ao calcular. Tente novamente.</div>`;
+  });
 }
 
 // ════════════════════════════════════════════════════════════════════

@@ -10,6 +10,8 @@ import os
 import json
 import datetime
 import threading
+from itertools import combinations
+from collections import Counter as _Counter
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file, Response, stream_with_context
 
@@ -339,6 +341,127 @@ def api_estrategias():
         "estrelas": "O sistema memoriza o uso de cada estrela (1–12) e selecciona sempre as 2 menos usadas.",
         "cores_actuais": _cores_serializable(cores),
     })
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – FILTER STATS (histogram for interactive toggle)
+# ════════════════════════════════════════════════════════════════════════════
+_filter_cache = {"key": None, "data": None}
+
+
+def _compute_filter_histogram(cores, ultimo_nums):
+    """Iterate all C(50,5) combos once; build 256-entry histogram keyed by
+    an 8-bit mask (bit i = combo passes filter i).  The frontend can then
+    compute the accepted count for ANY filter combination instantly."""
+
+    # Lookup arrays for O(1) per-number checks (index 0..50)
+    is_v = [False] * 51
+    is_g = [False] * 51
+    is_a = [False] * 51
+    is_c = [False] * 51
+    is_u = [False] * 51
+    for n in cores.get("vermelhos", set()):
+        is_v[n] = True
+    for n in cores.get("verdes", set()):
+        is_g[n] = True
+    for n in cores.get("azuis", set()):
+        is_a[n] = True
+    for n in cores.get("castanhos", set()):
+        is_c[n] = True
+    for n in (ultimo_nums or []):
+        is_u[n] = True
+    has_ult = bool(ultimo_nums)
+
+    hist = [0] * 256
+
+    for combo in combinations(range(1, 51), 5):
+        n0, n1, n2, n3, n4 = combo
+        mask = 0
+
+        # A: sum 80-190
+        s = n0 + n1 + n2 + n3 + n4
+        if 80 <= s <= 190:
+            mask = 1
+
+        # B: max 1 consecutive pair, 0 triples
+        d01 = n1 - n0
+        d12 = n2 - n1
+        d23 = n3 - n2
+        d34 = n4 - n3
+        p = (d01 == 1) + (d12 == 1) + (d23 == 1) + (d34 == 1)
+        if p <= 1 and not (
+            (d01 == 1 and d12 == 1)
+            or (d12 == 1 and d23 == 1)
+            or (d23 == 1 and d34 == 1)
+        ):
+            mask |= 2
+
+        # C: max 2 same last digit
+        f = [0] * 10
+        f[n0 % 10] += 1
+        f[n1 % 10] += 1
+        f[n2 % 10] += 1
+        f[n3 % 10] += 1
+        f[n4 % 10] += 1
+        if max(f) <= 2:
+            mask |= 4
+
+        # D: min 3 decades
+        if len({(n0 - 1) // 10, (n1 - 1) // 10, (n2 - 1) // 10,
+                (n3 - 1) // 10, (n4 - 1) // 10}) >= 3:
+            mask |= 8
+
+        # E: max 2 from last draw
+        if not has_ult or (is_u[n0] + is_u[n1] + is_u[n2] + is_u[n3] + is_u[n4]) <= 2:
+            mask |= 16
+
+        # F: colors
+        qv = is_v[n0] + is_v[n1] + is_v[n2] + is_v[n3] + is_v[n4]
+        qg = is_g[n0] + is_g[n1] + is_g[n2] + is_g[n3] + is_g[n4]
+        qa = is_a[n0] + is_a[n1] + is_a[n2] + is_a[n3] + is_a[n4]
+        qc = is_c[n0] + is_c[n1] + is_c[n2] + is_c[n3] + is_c[n4]
+        if 1 <= qv <= 3 and 1 <= qg <= 3 and 0 <= qa <= 2 and qc == 0:
+            mask |= 32
+
+        # G: min 2 numbers > 31
+        if (n0 > 31) + (n1 > 31) + (n2 > 31) + (n3 > 31) + (n4 > 31) >= 2:
+            mask |= 64
+
+        # H: not perfect arithmetic progression
+        if not (d01 == d12 == d23 == d34):
+            mask |= 128
+
+        hist[mask] += 1
+
+    # Per-filter individual stats (from the histogram)
+    total = sum(hist)
+    per_filter = {}
+    for bit, fid in enumerate("ABCDEFGH"):
+        accepted = sum(hist[m] for m in range(256) if m & (1 << bit))
+        per_filter[fid] = {"aceites": accepted, "eliminadas": total - accepted}
+
+    return {"histogram": hist, "per_filter": per_filter, "total": total}
+
+
+@app.route("/api/filter-stats")
+def api_filter_stats():
+    cores, _ = _get_cores()
+    ultimo = db.ultimo_sorteio()
+    ultimo_nums = ultimo["numeros"] if ultimo else []
+
+    # Simple cache: avoid recomputing if data hasn't changed
+    cache_key = (tuple(sorted(cores.get("vermelhos", set()))),
+                 tuple(sorted(cores.get("verdes", set()))),
+                 tuple(sorted(cores.get("azuis", set()))),
+                 tuple(sorted(cores.get("castanhos", set()))),
+                 tuple(ultimo_nums))
+    if _filter_cache["key"] == cache_key and _filter_cache["data"]:
+        return jsonify(_filter_cache["data"])
+
+    result = _compute_filter_histogram(cores, ultimo_nums)
+    _filter_cache["key"] = cache_key
+    _filter_cache["data"] = result
+    return jsonify(result)
 
 
 # ════════════════════════════════════════════════════════════════════════════
