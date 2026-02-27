@@ -1341,7 +1341,13 @@ class KeyGenerator:
         padrao = random.choice(PADROES_EQUILIBRADOS)
         bi_n, bp_n, ai_n, ap_n = padrao
 
-        for _ in range(max_tentativas):
+        # Some patterns have too few AI+AP numbers to satisfy Filter G
+        # (e.g. [2,2,0,1] and [2,2,1,0] can only produce 1 number > 31).
+        # Rotating the pattern every 2000 attempts escapes those dead ends.
+        for i in range(max_tentativas):
+            if i > 0 and i % 2000 == 0:
+                padrao = random.choice(PADROES_EQUILIBRADOS)
+                bi_n, bp_n, ai_n, ap_n = padrao
             try:
                 nums = (
                     random.sample(BI, bi_n) +
