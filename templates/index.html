@@ -46,9 +46,8 @@
       background: var(--em-mid); border-right:1px solid #2a2a4a;
       display:flex; flex-direction:column; z-index:100;
     }
-    #sidebar .brand { padding:24px 20px 16px; border-bottom:1px solid #2a2a4a; }
-    #sidebar .brand h5 { color: var(--em-gold); margin:0; font-weight:700; letter-spacing:.05em; }
-    #sidebar .brand small { color:#9ca3af; font-size:.75rem; }
+    #sidebar .brand { padding:16px 20px 14px; border-bottom:1px solid #2a2a4a; text-align:center; }
+    #sidebar .brand img { width:170px; height:auto; display:block; margin:0 auto; }
     #sidebar nav { flex:1; padding:12px 8px; }
     #sidebar nav .nav-link {
       color:#aaa; border-radius:8px; padding:10px 14px; margin-bottom:2px;
@@ -234,8 +233,7 @@
 <!-- ── Sidebar ── -->
 <div id="sidebar">
   <div class="brand">
-    <h5><i class="fa-solid fa-star me-2"></i>EuroMilhões</h5>
-    <small>v{{ version }} – Gerador Profissional</small>
+    <img src="/static/logo.png" alt="Jackpot.pt">
   </div>
   <nav>
     <a class="nav-link active" href="#" onclick="showTab('gerar', this)">
