@@ -167,19 +167,21 @@
 
     table.table { color:#d0d0d0; table-layout:auto !important; }
     table.table th { color:#9ca3af; border-color:#2a2a4a; font-size:.8rem;
-                     position:relative; white-space:nowrap; }
+                     position:relative; white-space:nowrap; overflow:visible;
+                     user-select:none; }
     table.table td { border-color:#1e1e3a; }
 
     /* ── Resizable columns ── */
-    .tbl-scroll-wrap { overflow-x:auto; max-width:100%; }
     .col-resizer {
-      position:absolute; top:0; right:-3px; bottom:0; width:8px;
-      cursor:col-resize; z-index:2;
-      border-right:2px solid transparent; transition:border-color .12s;
+      position:absolute; top:0; right:0; bottom:0; width:5px;
+      cursor:col-resize; z-index:10;
     }
-    .col-resizer:hover, .col-resizer.is-resizing {
-      border-right-color:rgba(116,192,252,.7);
-      background:rgba(116,192,252,.1);
+    .col-resizer::after {
+      content:''; position:absolute; right:0; top:10%; bottom:10%; width:2px;
+      background:transparent; transition:background .12s;
+    }
+    .col-resizer:hover::after, .col-resizer.is-resizing::after {
+      background:rgba(116,192,252,.8);
     }
 
     .badge-padrao { background:#1a3a60; color:var(--em-azul); font-size:.72rem; padding:3px 8px; border-radius:8px; }
@@ -1647,21 +1649,21 @@ async function loadHistoricoPadroes() {
 
 // ════════════════════════════════════════════════════════════════════
 // Resizable + auto-fit columns (applies to ALL tables, static & dynamic)
+// Drag the right edge of any header to resize.
+// Double-click the edge to reset that column to auto width.
 // ════════════════════════════════════════════════════════════════════
 function makeTableResizable(table) {
   if (table.dataset.resizable) return;
   table.dataset.resizable = "1";
   table.style.tableLayout = "auto";
 
-  // Wrap in scrollable container if not already
-  if (!table.parentNode.classList.contains("tbl-scroll-wrap")) {
-    const wrap = document.createElement("div");
-    wrap.className = "tbl-scroll-wrap";
-    table.parentNode.insertBefore(wrap, table);
-    wrap.appendChild(table);
-  }
+  // Clear any inline fixed widths so browser can auto-fit first
+  table.querySelectorAll("th").forEach(th => {
+    th.style.removeProperty("width");
+    th.style.removeProperty("min-width");
+  });
 
-  table.querySelectorAll("th").forEach((th) => {
+  table.querySelectorAll("th").forEach(th => {
     if (th.querySelector(".col-resizer")) return;
     const resizer = document.createElement("div");
     resizer.className = "col-resizer";
@@ -1669,7 +1671,7 @@ function makeTableResizable(table) {
 
     let startX = 0, startW = 0;
 
-    resizer.addEventListener("mousedown", (e) => {
+    resizer.addEventListener("mousedown", e => {
       e.stopPropagation();
       e.preventDefault();
       startX = e.pageX;
@@ -1678,9 +1680,9 @@ function makeTableResizable(table) {
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
 
-      const onMove = (e) => {
+      const onMove = e => {
         const w = startW + (e.pageX - startX);
-        if (w > 24) { th.style.width = w + "px"; th.style.minWidth = w + "px"; }
+        if (w > 30) { th.style.width = w + "px"; th.style.minWidth = w + "px"; }
       };
       const onUp = () => {
         resizer.classList.remove("is-resizing");
@@ -1693,27 +1695,27 @@ function makeTableResizable(table) {
       document.addEventListener("mouseup", onUp);
     });
 
-    // Double-click: reset column to auto width
-    resizer.addEventListener("dblclick", (e) => {
+    // Double-click the right edge → reset that column to auto
+    resizer.addEventListener("dblclick", e => {
       e.stopPropagation();
-      th.style.width = "";
-      th.style.minWidth = "";
+      th.style.removeProperty("width");
+      th.style.removeProperty("min-width");
     });
   });
 }
 
-// Apply to all tables present at load time
+// Apply to all tables already in the DOM at load time
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll("table").forEach(makeTableResizable);
 });
 
-// Auto-apply to dynamically created tables (loadEstatisticas, etc.)
-new MutationObserver((mutations) => {
+// Auto-apply to tables created dynamically (statistics, patterns, history…)
+new MutationObserver(mutations => {
   for (const m of mutations) {
     for (const node of m.addedNodes) {
       if (node.nodeType !== 1) continue;
       if (node.tagName === "TABLE") makeTableResizable(node);
-      node.querySelectorAll && node.querySelectorAll("table:not([data-resizable])").forEach(makeTableResizable);
+      if (node.querySelectorAll) node.querySelectorAll("table:not([data-resizable])").forEach(makeTableResizable);
     }
   }
 }).observe(document.getElementById("main") || document.body, { childList: true, subtree: true });
