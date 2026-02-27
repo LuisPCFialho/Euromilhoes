@@ -165,9 +165,22 @@
     .form-check-input:checked { background-color: var(--em-gold); border-color: var(--em-gold); }
     .form-check-input { border-color:#555; }
 
-    table.table { color:#d0d0d0; }
-    table.table th { color:#9ca3af; border-color:#2a2a4a; font-size:.8rem; }
+    table.table { color:#d0d0d0; table-layout:auto !important; }
+    table.table th { color:#9ca3af; border-color:#2a2a4a; font-size:.8rem;
+                     position:relative; white-space:nowrap; }
     table.table td { border-color:#1e1e3a; }
+
+    /* ── Resizable columns ── */
+    .tbl-scroll-wrap { overflow-x:auto; max-width:100%; }
+    .col-resizer {
+      position:absolute; top:0; right:-3px; bottom:0; width:8px;
+      cursor:col-resize; z-index:2;
+      border-right:2px solid transparent; transition:border-color .12s;
+    }
+    .col-resizer:hover, .col-resizer.is-resizing {
+      border-right-color:rgba(116,192,252,.7);
+      background:rgba(116,192,252,.1);
+    }
 
     .badge-padrao { background:#1a3a60; color:var(--em-azul); font-size:.72rem; padding:3px 8px; border-radius:8px; }
 
@@ -1006,7 +1019,7 @@ async function loadEstatisticas() {
             <small style="color:#9ca3af;font-weight:400;font-size:.75rem;"> ordenado do mais para o menos frequente</small>
           </h5>
           <div style="font-size:.73rem;color:#666;margin-bottom:8px;">🔥 = quente (últimos 10) · ❄️ = atrasado</div>
-          <table class="table table-sm mb-0" style="table-layout:fixed;">
+          <table class="table table-sm mb-0" style="table-layout:auto;">
             <tbody>${numRows}</tbody>
           </table>
         </div>
@@ -1019,7 +1032,7 @@ async function loadEstatisticas() {
           <h5>Frequência – Estrelas (1–12)
             <small style="color:#9ca3af;font-weight:400;font-size:.75rem;"> ordenado do mais para o menos frequente</small>
           </h5>
-          <table class="table table-sm mb-0" style="table-layout:fixed;">
+          <table class="table table-sm mb-0" style="table-layout:auto;">
             <tbody>${starRows}</tbody>
           </table>
         </div>
@@ -1631,6 +1644,79 @@ async function loadHistoricoPadroes() {
     </div>
     ${detalheHTML}`;
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Resizable + auto-fit columns (applies to ALL tables, static & dynamic)
+// ════════════════════════════════════════════════════════════════════
+function makeTableResizable(table) {
+  if (table.dataset.resizable) return;
+  table.dataset.resizable = "1";
+  table.style.tableLayout = "auto";
+
+  // Wrap in scrollable container if not already
+  if (!table.parentNode.classList.contains("tbl-scroll-wrap")) {
+    const wrap = document.createElement("div");
+    wrap.className = "tbl-scroll-wrap";
+    table.parentNode.insertBefore(wrap, table);
+    wrap.appendChild(table);
+  }
+
+  table.querySelectorAll("th").forEach((th) => {
+    if (th.querySelector(".col-resizer")) return;
+    const resizer = document.createElement("div");
+    resizer.className = "col-resizer";
+    th.appendChild(resizer);
+
+    let startX = 0, startW = 0;
+
+    resizer.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      startX = e.pageX;
+      startW = th.offsetWidth;
+      resizer.classList.add("is-resizing");
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+
+      const onMove = (e) => {
+        const w = startW + (e.pageX - startX);
+        if (w > 24) { th.style.width = w + "px"; th.style.minWidth = w + "px"; }
+      };
+      const onUp = () => {
+        resizer.classList.remove("is-resizing");
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+
+    // Double-click: reset column to auto width
+    resizer.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      th.style.width = "";
+      th.style.minWidth = "";
+    });
+  });
+}
+
+// Apply to all tables present at load time
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll("table").forEach(makeTableResizable);
+});
+
+// Auto-apply to dynamically created tables (loadEstatisticas, etc.)
+new MutationObserver((mutations) => {
+  for (const m of mutations) {
+    for (const node of m.addedNodes) {
+      if (node.nodeType !== 1) continue;
+      if (node.tagName === "TABLE") makeTableResizable(node);
+      node.querySelectorAll && node.querySelectorAll("table:not([data-resizable])").forEach(makeTableResizable);
+    }
+  }
+}).observe(document.getElementById("main") || document.body, { childList: true, subtree: true });
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
