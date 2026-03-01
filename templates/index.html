@@ -200,6 +200,12 @@
       margin-bottom:4px; display:inline-block;
     }
 
+    .btn-delete-draw {
+      color:#ff6b6b; cursor:pointer; font-weight:700; font-size:.9rem;
+      opacity:.5; transition:opacity .15s;
+    }
+    .btn-delete-draw:hover { opacity:1; }
+
     /* ── Stats ── */
     .freq-rank-hot  { color:var(--em-verd); font-weight:700; }
     .freq-rank-cold { color:var(--em-azul); font-weight:700; }
@@ -268,7 +274,7 @@
   </div>
   <div style="padding:10px 16px 14px;border-top:1px solid #2a2a4a;text-align:center;font-size:.73rem;line-height:1.7;color:#6b7280;">
     <div style="color:#9ca3af;">Autor: Luís Fialho</div>
-    <div>Versão 2.0 · 27.Fev.2026</div>
+    <div>Versão 3.0 · 01.Mar.2026</div>
   </div>
 </div>
 
@@ -459,22 +465,8 @@
     </div>
 
     <div class="row g-3">
-      <!-- Last draw quick fetch -->
       <div class="col-lg-5">
         <div class="card-dark">
-          <h5><i class="fa-solid fa-bolt me-2"></i>Último Sorteio</h5>
-          <p style="color:#9ca3af;font-size:.88rem;">
-            Obtém apenas o sorteio mais recente de várias fontes (lotaria.net,
-            jogossantacasa.pt, euro-millions.com).
-          </p>
-          <button class="btn btn-em" onclick="actualizarWeb()">
-            <i class="fa-solid fa-cloud-arrow-down me-2"></i>Ir buscar último sorteio
-          </button>
-          <div id="scrape-result" class="mt-3"></div>
-        </div>
-
-        <!-- ── Catch-up: fetch all missing draws ────────────────────── -->
-        <div class="card-dark mt-3">
           <h5><i class="fa-solid fa-arrows-rotate me-2" style="color:#74c0fc;"></i>Atualizar Sorteios em Falta</h5>
           <p style="color:#9ca3af;font-size:.88rem;">
             Busca todos os sorteios entre o último registo na base de dados e hoje.
@@ -505,49 +497,13 @@
           <div id="excel-resultado" class="mt-3"></div>
         </div>
 
-        <!-- ── Web scraping (secondary / fallback) ─────────────────── -->
+        <!-- ── JSON file import ─────────────────── -->
         <div class="card-dark">
-          <h5><i class="fa-solid fa-clock-rotate-left me-2"></i>Histórico via Web
-            <span class="badge bg-secondary ms-1" style="font-size:.65rem;">fallback</span>
-          </h5>
-          <p style="color:#9ca3af;font-size:.88rem;">
-            Tenta fazer scraping de todos os sorteios desde 2004 via internet.
-            Pode demorar vários minutos e depende da disponibilidade dos sites.
-          </p>
-
+          <h5><i class="fa-solid fa-file-code me-2"></i>Importar JSON</h5>
           <div id="hist-file-status" class="mb-3"></div>
-
-          <div class="d-flex gap-2 flex-wrap mb-3">
-            <button class="btn btn-ghost" id="btn-scrape-hist" onclick="iniciarScrapeHistorico()">
-              <i class="fa-solid fa-spider me-2"></i>Scraping completo (web)
-            </button>
-            <button class="btn btn-ghost" id="btn-load-ficheiro" onclick="importarFicheiro()" style="display:none;">
-              <i class="fa-solid fa-file-import me-2"></i>Carregar JSON para BD
-            </button>
-          </div>
-
-          <div id="hist-progress-section" style="display:none;">
-            <div class="mb-2 d-flex justify-content-between align-items-center">
-              <span style="color:#9ca3af;font-size:.85rem;" id="hist-prog-label">A iniciar...</span>
-              <span style="color:#9ca3af;font-size:.85rem;" id="hist-prog-pct">0%</span>
-            </div>
-            <div style="background:#1a2540;border-radius:8px;height:14px;overflow:hidden;margin-bottom:12px;">
-              <div id="hist-prog-bar"
-                   style="height:100%;width:0%;background:linear-gradient(90deg,#e94560,#ffd700);
-                          border-radius:8px;transition:width .3s ease;"></div>
-            </div>
-            <div id="hist-log"
-                 style="background:#0d1220;border:1px solid #1e2a4a;border-radius:8px;
-                        padding:12px;height:180px;overflow-y:auto;font-family:monospace;font-size:.78rem;color:#aaa;">
-            </div>
-            <div class="mt-2 d-flex gap-4">
-              <span style="color:#9ca3af;font-size:.85rem;">Ano: <strong id="hist-cur-ano" style="color:#d0d0d0;">–</strong></span>
-              <span style="color:#9ca3af;font-size:.85rem;">Encontrados: <strong id="hist-total-found" style="color:#51cf66;">0</strong></span>
-              <span style="color:#9ca3af;font-size:.85rem;">Erros: <strong id="hist-total-err" style="color:#ff6b6b;">0</strong></span>
-            </div>
-          </div>
-
-          <div id="hist-resultado" style="display:none;"></div>
+          <button class="btn btn-ghost" id="btn-load-ficheiro" onclick="importarFicheiro()" style="display:none;">
+            <i class="fa-solid fa-file-import me-2"></i>Carregar JSON para BD
+          </button>
         </div>
       </div>
     </div>
@@ -575,7 +531,7 @@ const FILTER_META = [
   { id:'F', nome:'Cores (9 sorteios)',
     tooltip:'Sistema de cores: Vermelhos (0×)→1-3; Verdes (1×)→1-3; Azuis (2×)→0-2; Castanhos (3×+)→excluídos da chave.' },
   { id:'G', nome:'Regra do 31',
-    tooltip:'Mín 2 números acima de 31. A maioria dos jogadores usa aniversários (1-31); forçar números altos reduz a partilha do jackpot.' },
+    tooltip:'Mín 1 número acima de 31. A maioria dos jogadores usa aniversários (1-31); forçar números altos reduz a partilha do jackpot.' },
   { id:'H', nome:'Anti-Progressão',
     tooltip:'Rejeita progressões aritméticas perfeitas (ex: 5,10,15,20,25). Sequências uniformes são muito populares e devem ser evitadas.' },
 ];
@@ -787,7 +743,8 @@ function renderCores(cores) {
     { key:"azuis",     label:"AZUIS (2×)",     cls:"chip-azul", regra:"0–2" },
     { key:"castanhos", label:"CASTANHOS (3×+)",cls:"chip-cast", regra:"Excluídos" },
   ];
-  panel.innerHTML = groups.map(g => `
+  panel.innerHTML = `<div style="color:#9ca3af;font-size:.78rem;margin-bottom:10px;">Para o próximo sorteio · Baseado nos últimos 9 sorteios (inclui o último)</div>` +
+    groups.map(g => `
     <div class="mb-2">
       <span class="colour-chip ${g.cls}">${g.label}</span>
       <span style="color:#9ca3af;font-size:.8rem;"> → ${g.regra}</span>
@@ -906,7 +863,7 @@ async function loadUltimoSorteio() {
         <div class="card-dark">
           <div class="d-flex justify-content-between mb-2">
             <h5 class="mb-0"><i class="fa-solid fa-trophy me-2"></i>Resultado</h5>
-            <span style="color:#9ca3af;font-size:.85rem;">${u.data}</span>
+            <span style="color:#9ca3af;font-size:.85rem;">Data do Sorteio: ${u.data}</span>
           </div>
           <div class="mb-3">${nums}</div>
           <div>${stars}</div>
@@ -1047,7 +1004,116 @@ async function loadEstatisticas() {
           </table>
         </div>
       </div>
+    </div>` + renderQuentesFrios(d) + renderGaps(d) + renderTendenciaSomas(d);
+}
+
+function renderQuentesFrios(d) {
+  const qf = d.quentes_frios || [];
+  if (!qf.length) return "";
+  const sorted = [...qf].sort((a,b) => b.freq_recente - a.freq_recente || a.draws_since - b.draws_since);
+  const maxFR = Math.max(...sorted.map(x => x.freq_recente), 1);
+  const badges = sorted.map(x => {
+    const heat = x.freq_recente / maxFR;
+    const r = Math.round(200 * heat + 40);
+    const g = Math.round(50 + 30 * heat);
+    const b = Math.round(220 * (1 - heat) + 30);
+    const bg = `rgb(${r},${g},${b})`;
+    const border = x.due ? "border:2px solid #ffd700;" : "";
+    return `<span class="num-badge" style="background:${bg};color:#fff;margin:2px;${border}"
+      title="Recente: ${x.freq_recente}/15 · Atraso: ${x.draws_since} · Gap médio: ${x.avg_gap}">${x.num}</span>`;
+  }).join("");
+  return `
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card-dark">
+        <h5><i class="fa-solid fa-temperature-half me-2"></i>Quentes vs Frios
+          <small style="color:#9ca3af;font-weight:400;font-size:.75rem;">últimos 15 sorteios</small>
+        </h5>
+        <div style="font-size:.73rem;color:#666;margin-bottom:8px;">
+          <span style="color:#f04444;">&#9632;</span> Quente &rarr; <span style="color:#3344dd;">&#9632;</span> Frio &middot;
+          <span style="border:1px solid #ffd700;padding:0 3px;border-radius:3px;font-size:.7rem;color:#ffd700;">n</span> = em atraso (gap actual &gt; 1.5&times; média)
+        </div>
+        <div style="line-height:2.2;">${badges}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderGaps(d) {
+  const gaps = d.gaps || [];
+  if (!gaps.length) return "";
+  const top = gaps.slice(0, 15);
+  const rows = top.map((g, i) => {
+    const color = g.ratio >= 2.0 ? "#ff6b6b" : g.ratio >= 1.5 ? "#ffd700" : "#51cf66";
+    const barW = Math.min(Math.round(g.ratio / 3.0 * 100), 100);
+    return `<tr>
+      <td style="color:#555;width:24px;font-size:.75rem;">${i+1}</td>
+      <td style="width:42px;"><span class="num-badge">${g.num}</span></td>
+      <td style="color:#d0d0d0;font-size:.82rem;">Actual: <strong>${g.current_gap}</strong></td>
+      <td style="color:#9ca3af;font-size:.82rem;">Média: ${g.avg_gap}</td>
+      <td style="width:80px;"><div class="freq-bar"><div class="freq-bar-fill" style="width:${barW}%;background:${color};"></div></div></td>
+      <td style="color:${color};font-weight:700;font-size:.85rem;">${g.ratio}&times;</td>
+    </tr>`;
+  }).join("");
+  return `
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card-dark">
+        <h5><i class="fa-solid fa-hourglass-half me-2"></i>Análise de Gaps (Top 15 em atraso)
+          <small style="color:#9ca3af;font-weight:400;font-size:.75rem;">ratio = gap actual / gap médio</small>
+        </h5>
+        <div style="font-size:.73rem;color:#666;margin-bottom:8px;">
+          <span style="color:#ff6b6b;">&#9632;</span> ratio &ge; 2.0 (muito atrasado) &middot;
+          <span style="color:#ffd700;">&#9632;</span> ratio &ge; 1.5 &middot;
+          <span style="color:#51cf66;">&#9632;</span> normal
+        </div>
+        <table class="table table-sm mb-0"><tbody>${rows}</tbody></table>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderTendenciaSomas(d) {
+  const trend = d.tendencia_somas || [];
+  if (!trend.length) return "";
+  const minS = 50, maxS = 220, expected = 127.5;
+  const chartH = 100;
+  const scale = v => Math.round((v - minS) / (maxS - minS) * chartH);
+  const barW = Math.max(Math.floor(580 / Math.max(trend.length, 1)), 8);
+
+  const bars = trend.map(t => {
+    const h = scale(t.soma);
+    const color = t.soma > expected ? "#51cf66" : "#74c0fc";
+    return `<div style="display:inline-block;width:${barW}px;height:${chartH}px;position:relative;vertical-align:bottom;">
+      <div style="position:absolute;bottom:0;width:${barW-2}px;height:${h}px;background:${color};border-radius:2px 2px 0 0;opacity:.7;"
+           title="${t.data}: ${t.soma} (média móvel: ${t.media_movel})"></div>
     </div>`;
+  }).join("");
+
+  const expectedY = chartH - scale(expected);
+  const lastAvg = trend.length ? trend[trend.length - 1].media_movel : "–";
+
+  return `
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card-dark">
+        <h5><i class="fa-solid fa-chart-line me-2"></i>Tendência de Somas
+          <small style="color:#9ca3af;font-weight:400;font-size:.75rem;">últimos ${trend.length} sorteios</small>
+        </h5>
+        <div style="position:relative;overflow-x:auto;padding:4px 0;">
+          <div style="position:relative;height:${chartH}px;display:inline-flex;align-items:flex-end;">
+            ${bars}
+            <div style="position:absolute;top:${expectedY}px;left:0;right:0;height:1px;background:#ffd700;opacity:.6;"></div>
+          </div>
+          <div style="font-size:.72rem;color:#9ca3af;margin-top:4px;">
+            <span style="color:#ffd700;">&mdash;</span> Média esperada: 127.5 &middot;
+            <span style="color:#51cf66;">&#9632;</span> Acima &middot; <span style="color:#74c0fc;">&#9632;</span> Abaixo &middot;
+            Média real (últimos ${trend.length}): <strong style="color:#d0d0d0;">${lastAvg}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -1244,13 +1310,14 @@ async function loadHistorico() {
             <td style="color:#d0d0d0;">${s.numeros.join(" · ")}</td>
             <td style="color:#ffd700;">★${s.estrelas.join(" ★")}</td>
             <td style="color:#9ca3af;">${s.soma}</td>
+            <td style="text-align:center;"><span class="btn-delete-draw" onclick="eliminarSorteio('${s.data}')" title="Apagar sorteio">✕</span></td>
           </tr>`).join("");
 
         html += `
             <div class="hist-month-section">
               <span class="hist-month-title">${mes.nome} – ${mes.sorteios.length} sorteio${mes.sorteios.length !== 1 ? 's' : ''}</span>
               <table class="table table-sm mb-1" style="margin-top:4px;">
-                <thead><tr><th>Data</th><th>Números</th><th>Estrelas</th><th>Soma</th></tr></thead>
+                <thead><tr><th>Data</th><th>Números</th><th>Estrelas</th><th>Soma</th><th></th></tr></thead>
                 <tbody>${mesRows}</tbody>
               </table>
             </div>`;
@@ -1271,6 +1338,18 @@ function toggleAno(ano) {
   if (!body) return;
   body.classList.toggle("open");
   icon.textContent = body.classList.contains("open") ? "▼" : "►";
+}
+
+async function eliminarSorteio(data) {
+  if (!confirm(`Apagar o sorteio de ${data}?`)) return;
+  try {
+    const r = await fetch(`api/sorteio/${data}`, {method:"DELETE"});
+    const d = await r.json();
+    toast(d.mensagem, d.ok ? "success" : "warning");
+    if (d.ok) { loadHistorico(); loadStatus(); }
+  } catch(e) {
+    toast("Erro ao apagar sorteio.", "danger");
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -1302,45 +1381,6 @@ async function inserirManual() {
       toast(d.erro || "Erro", "error");
     }
   } finally { loading(false); }
-}
-
-// ════════════════════════════════════════════════════════════════════
-// Web scraping – latest draw
-// ════════════════════════════════════════════════════════════════════
-async function actualizarWeb() {
-  const el = document.getElementById("scrape-result");
-  el.innerHTML = `<div style="color:#9ca3af;"><span class="spinner-border spinner-border-sm me-2"></span>A contactar servidores...</div>`;
-  try {
-    const r = await fetch("api/actualizar-web", {method:"POST"});
-    const d = await r.json();
-    if (r.ok && d.sorteio) {
-      const s       = d.sorteio;
-      const isNew   = d.ok;  // true = inserted, false = already existed
-      const color   = isNew ? "#51cf66" : "#ffd700";
-      const bg      = isNew ? "#0d3320" : "#1a2000";
-      const icon    = isNew ? "✓" : "⚠";
-      const title   = isNew ? d.mensagem : `${d.mensagem} — sem alterações na BD.`;
-      el.innerHTML = `
-        <div class="alert" style="background:${bg};border:1px solid ${color};color:${color};border-radius:10px;">
-          <strong>${icon} ${title}</strong><br/>
-          Data: <span style="color:#d0d0d0;">${s.data}</span><br/>
-          Números: <strong style="color:#d0d0d0;">${s.numeros.join(" · ")}</strong><br/>
-          Estrelas: <span style="color:#ffd700;">★${s.estrelas.join(" ★")}</span>
-        </div>`;
-      loadStatus();
-      if (document.getElementById("tab-historico").classList.contains("active")) {
-        loadHistorico();
-      }
-    } else {
-      el.innerHTML = `
-        <div class="alert" style="background:#3a1010;border:1px solid #ff6b6b;color:#ff6b6b;border-radius:10px;">
-          <strong>✗ ${d.erro}</strong><br/>
-          <small>Usa a inserção manual no separador "Histórico BD".</small>
-        </div>`;
-    }
-  } catch(e) {
-    el.innerHTML = `<div style="color:#ff6b6b;">Erro de ligação.</div>`;
-  }
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -1388,11 +1428,6 @@ async function actualizarRecentes() {
     btn.disabled = false;
   }
 }
-
-// ════════════════════════════════════════════════════════════════════
-// Full historical scraping (SSE)
-// ════════════════════════════════════════════════════════════════════
-let _histSource = null;
 
 async function loadHistoricoStatus() {
   // Check Excel source file
@@ -1499,86 +1534,6 @@ async function importarFicheiro() {
       toast(d.erro || "Erro", "error");
     }
   } finally { loading(false); }
-}
-
-function iniciarScrapeHistorico() {
-  if (_histSource) { toast("Já existe um scraping em curso.", "warning"); return; }
-
-  document.getElementById("hist-progress-section").style.display = "";
-  document.getElementById("hist-resultado").style.display = "none";
-  document.getElementById("btn-scrape-hist").disabled = true;
-  document.getElementById("btn-load-ficheiro").disabled = true;
-
-  const log       = document.getElementById("hist-log");
-  const progBar   = document.getElementById("hist-prog-bar");
-  const progLabel = document.getElementById("hist-prog-label");
-  const progPct   = document.getElementById("hist-prog-pct");
-  const curAno    = document.getElementById("hist-cur-ano");
-  const totalFnd  = document.getElementById("hist-total-found");
-  const totalErr  = document.getElementById("hist-total-err");
-  let erros = 0;
-  log.innerHTML = "";
-
-  function logLine(html, colour="#aaa") {
-    log.insertAdjacentHTML("beforeend",
-      `<div style="color:${colour};margin-bottom:2px;">${html}</div>`);
-    log.scrollTop = log.scrollHeight;
-  }
-
-  logLine("▶ A iniciar scraping do histórico completo (2004 → hoje)...", "#ffd700");
-  _histSource = new EventSource("api/scrape-historico-completo");
-
-  _histSource.onmessage = function(e) {
-    try {
-      const d = JSON.parse(e.data);
-      if (d.tipo === "inicio") {
-        logLine(`📅 Total de anos a processar: <strong>${d.total_anos}</strong>`);
-      } else if (d.tipo === "progresso") {
-        const pct = Math.round((d.step / d.total) * 100);
-        progBar.style.width   = pct + "%";
-        progPct.textContent   = pct + "%";
-        progLabel.textContent = `A processar ${d.ano}... (${d.step}/${d.total})`;
-        curAno.textContent    = d.ano;
-      } else if (d.tipo === "ano_ok") {
-        const col = d.encontrados > 0 ? "#51cf66" : "#888";
-        logLine(`✓ <strong style="color:${col};">${d.ano}</strong> → ${d.encontrados} sorteios · total: ${d.total_acumulado.toLocaleString()}`, col);
-        totalFnd.textContent = d.total_acumulado.toLocaleString();
-      } else if (d.tipo === "ano_erro") {
-        erros++;
-        totalErr.textContent = erros;
-        logLine(`✗ <strong style="color:#ff6b6b;">${d.ano}</strong> → erro: ${d.msg}`, "#ff6b6b");
-      } else if (d.tipo === "concluido") {
-        progBar.style.width = "100%"; progPct.textContent = "100%";
-        progLabel.textContent = "Concluído!";
-        logLine(`✅ Histórico completo! ${d.total.toLocaleString()} sorteios · ${d.inseridos_db.toLocaleString()} inseridos na BD`, "#ffd700");
-        document.getElementById("hist-resultado").style.display = "";
-        document.getElementById("hist-resultado").innerHTML = `
-          <div style="background:#0d2a10;border:1px solid #51cf66;border-radius:10px;padding:16px;margin-top:12px;">
-            <div class="d-flex align-items-center gap-3 mb-2">
-              <i class="fa-solid fa-circle-check fa-2x" style="color:#51cf66;"></i>
-              <div>
-                <strong style="color:#51cf66;">Histórico importado!</strong><br/>
-                <span style="color:#9ca3af;font-size:.85rem;">${d.total.toLocaleString()} sorteios · ${d.inseridos_db.toLocaleString()} adicionados à BD</span>
-              </div>
-            </div>
-          </div>`;
-        _histSource.close(); _histSource = null;
-        document.getElementById("btn-scrape-hist").disabled = false;
-        document.getElementById("btn-load-ficheiro").disabled = false;
-        loadStatus(); loadHistoricoStatus();
-      } else if (d.tipo === "erro_fatal") {
-        logLine(`💥 ERRO FATAL: ${d.msg}`, "#ff6b6b");
-        _histSource.close(); _histSource = null;
-        document.getElementById("btn-scrape-hist").disabled = false;
-      }
-    } catch(err) {}
-  };
-
-  _histSource.onerror = function() {
-    logLine("⚠ Ligação SSE interrompida.", "#ffd700");
-    if (_histSource) { _histSource.close(); _histSource = null; }
-    document.getElementById("btn-scrape-hist").disabled = false;
-  };
 }
 
 // ════════════════════════════════════════════════════════════════════

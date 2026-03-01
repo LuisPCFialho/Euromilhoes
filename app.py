@@ -13,7 +13,7 @@ import threading
 from itertools import combinations
 from collections import Counter as _Counter
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify, send_file, Response, stream_with_context
+from flask import Flask, render_template, request, jsonify, send_file
 
 # Import core logic from euromilhoes.py
 from euromilhoes import (
@@ -22,6 +22,7 @@ from euromilhoes import (
     VERSION, PADROES_EQUILIBRADOS, BI, BP, AI, AP, HISTORICO_PATH,
     ExcelImporter, EXCEL_SOURCE_PATH,
     TODOS_PADROES_BIBPAIAP, classificar_padrao_bibpaiap, classificar_padrao_cores,
+    corrigir_data_sorteio,
 )
 
 _IS_VERCEL = bool(os.environ.get("VERCEL"))
@@ -43,6 +44,17 @@ def _cores_serializable(cores: dict) -> dict:
 def _get_cores():
     ultimos_9 = db.ultimos_n_sorteios(9)
     return stats.classificar_cores(ultimos_9), ultimos_9
+
+
+def _sync_historico_json():
+    """Re-export all DB draws to historico_completo.json so the file stays current."""
+    todos = db.todos_sorteios()
+    data = {
+        "gerado_em": datetime.date.today().isoformat(),
+        "total": len(todos),
+        "sorteios": todos,
+    }
+    HISTORICO_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -212,46 +224,22 @@ def api_inserir_sorteio():
     except (KeyError, ValueError, AssertionError) as e:
         return jsonify({"erro": f"Dados inválidos: {e}"}), 400
 
+    data = corrigir_data_sorteio(data)
     ok = db.inserir_sorteio(data, nums, stars, fonte="web-manual")
+    if ok:
+        _sync_historico_json()
     return jsonify({"ok": ok, "mensagem": "Guardado." if ok else "Já existia na BD."})
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# API – WEB SCRAPE LATEST DRAW
+# API – DELETE DRAW
 # ════════════════════════════════════════════════════════════════════════════
-@app.route("/api/actualizar-web", methods=["POST"])
-def api_actualizar_web():
-    if not _scrape_lock.acquire(blocking=False):
-        return jsonify({"erro": "Já existe um scraping em curso."}), 429
-
-    try:
-        scraper = EuromilhoesScraper()
-        result  = scraper.fetch_ultimo_sorteio()
-        if not result:
-            return jsonify({"erro": "Não foi possível obter dados. Tenta inserção manual."}), 502
-
-        # Reject if the numbers+stars match any existing draw (prevents
-        # duplicates when the scraper defaults to today's date)
-        nums_key = (tuple(sorted(result["numeros"])), tuple(sorted(result["estrelas"])))
-        for existing in db.todos_sorteios():
-            ex_key = (tuple(sorted(existing["numeros"])), tuple(sorted(existing["estrelas"])))
-            if nums_key == ex_key:
-                return jsonify({
-                    "ok": False,
-                    "sorteio": existing,
-                    "mensagem": f"Sorteio já existia na BD ({existing['data']}).",
-                })
-
-        ok = db.inserir_sorteio(
-            result["data"], result["numeros"], result["estrelas"], fonte="web-auto"
-        )
-        return jsonify({
-            "ok": ok,
-            "sorteio": result,
-            "mensagem": "Guardado com sucesso." if ok else "Sorteio já existia na BD.",
-        })
-    finally:
-        _scrape_lock.release()
+@app.route("/api/sorteio/<data>", methods=["DELETE"])
+def api_eliminar_sorteio(data):
+    ok = db.eliminar_sorteio(data)
+    if ok:
+        _sync_historico_json()
+    return jsonify({"ok": ok, "mensagem": "Eliminado." if ok else "Sorteio não encontrado."})
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -270,6 +258,9 @@ def api_actualizar_recentes():
         desde_data = ultimo["data"]
         scraper = HistoricoScraper()
         resultado = scraper.scrape_desde(desde_data, db)
+
+        if resultado["inseridos"] > 0:
+            _sync_historico_json()
 
         return jsonify({
             "ok": True,
@@ -296,6 +287,9 @@ def api_estatisticas():
     atrasados   = stats.numeros_atrasados(15)
     quentes     = stats.sequencias_quentes(10)
     total       = db.total_sorteios()
+    quentes_frios = stats.quentes_frios_completo(15)
+    gaps        = stats.analise_gaps()
+    tendencia   = stats.tendencia_somas(30)
 
     # Serialise pattern keys (tuples → strings)
     padroes_serial = {str(list(k)): v for k, v in padroes.items()}
@@ -308,6 +302,9 @@ def api_estatisticas():
         "padroes":             padroes_serial,
         "atrasados":           atrasados,
         "quentes":             quentes,
+        "quentes_frios":       quentes_frios,
+        "gaps":                gaps,
+        "tendencia_somas":     tendencia,
     })
 
 
@@ -335,7 +332,7 @@ def api_estrategias():
             {"id": "D", "nome": "Dezenas",              "descricao": "Mín 3 dezenas diferentes (1-10, 11-20, 21-30, 31-40, 41-50)."},
             {"id": "E", "nome": "Anti-Repetição",      "descricao": "Máx 2 números em comum com o sorteio anterior."},
             {"id": "F", "nome": "Cores (9 sorteios)", "descricao": "VERMELHOS 1–3 | VERDES 1–3 | AZUIS 0–2 | CASTANHOS 0."},
-            {"id": "G", "nome": "Regra do 31",         "descricao": "Mín 2 números > 31. Reduz partilha de jackpot com jogadores de aniversários."},
+            {"id": "G", "nome": "Regra do 31",         "descricao": "Mín 1 número > 31. Reduz partilha de jackpot com jogadores de aniversários."},
             {"id": "H", "nome": "Progressão Aritmét.", "descricao": "Rejeita sequências como 5,10,15,20,25. Muito populares → má escolha."},
         ],
         "estrelas": "O sistema memoriza o uso de cada estrela (1–12) e selecciona sempre as 2 menos usadas.",
@@ -423,8 +420,8 @@ def _compute_filter_histogram(cores, ultimo_nums):
         if 1 <= qv <= 3 and 1 <= qg <= 3 and 0 <= qa <= 2 and qc == 0:
             mask |= 32
 
-        # G: min 2 numbers > 31
-        if (n0 > 31) + (n1 > 31) + (n2 > 31) + (n3 > 31) + (n4 > 31) >= 2:
+        # G: min 1 number > 31
+        if (n0 > 31) + (n1 > 31) + (n2 > 31) + (n3 > 31) + (n4 > 31) >= 1:
             mask |= 64
 
         # H: not perfect arithmetic progression
@@ -549,48 +546,6 @@ def api_importar_ficheiro():
         })
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
-
-
-# ════════════════════════════════════════════════════════════════════════════
-# API – SCRAPE FULL HISTORY (SSE streaming)
-# ════════════════════════════════════════════════════════════════════════════
-_historico_lock = threading.Lock()
-
-@app.route("/api/scrape-historico-completo")
-def api_scrape_historico_completo():
-    """
-    Server-Sent Events endpoint.
-    Client connects and receives JSON events line by line.
-    Disabled on Vercel (serverless timeout too short for full scrape).
-    """
-    if _IS_VERCEL:
-        return jsonify({"erro": "Funcionalidade indisponível no Vercel. Use a versão local."}), 501
-
-    if not _historico_lock.acquire(blocking=False):
-        return jsonify({"erro": "Já existe um scraping em curso."}), 429
-
-    def generate():
-        try:
-            scraper = HistoricoScraper()
-            for evento in scraper.scrape_completo(db, HISTORICO_PATH):
-                yield f"data: {json.dumps(evento, ensure_ascii=False)}\n\n"
-                # Keep connection alive during long pauses
-                if evento.get("tipo") == "progresso":
-                    yield ": keep-alive\n\n"
-        except Exception as exc:
-            yield f"data: {json.dumps({'tipo': 'erro_fatal', 'msg': str(exc)})}\n\n"
-        finally:
-            _historico_lock.release()
-
-    return Response(
-        stream_with_context(generate()),
-        content_type="text/event-stream",
-        headers={
-            "Cache-Control":    "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection":        "keep-alive",
-        },
-    )
 
 
 # ════════════════════════════════════════════════════════════════════════════

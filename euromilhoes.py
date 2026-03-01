@@ -14,7 +14,7 @@ Estratégias implementadas:
   - Filtro D: Mín 3 décadas diferentes
   - Filtro E: Máx 2 repetições do sorteio anterior
   - Filtro F: Sistema de cores (últimos 9 sorteios)
-  - Filtro G: Regra do 31 – mín 2 números > 31 (anti-calendário)
+  - Filtro G: Regra do 31 – mín 1 número > 31 (anti-calendário)
   - Filtro H: Rejeitar progressões aritméticas perfeitas
   - Estrelas Equilibradas: sempre as 2 menos usadas
 """
@@ -64,6 +64,18 @@ if MISSING_DEPS and not os.environ.get("VERCEL"):
     print("\n[ERRO] Dependências em falta. Instala com:")
     print(f"  pip install {' '.join(MISSING_DEPS)}\n")
     sys.exit(1)
+
+# ─── Date correction (Euromilhões draws only on Tuesdays and Fridays) ─────────
+def corrigir_data_sorteio(data_str: str) -> str:
+    """If date is not a Tuesday or Friday, move back to the nearest previous Tue/Fri."""
+    d = datetime.date.fromisoformat(data_str)
+    weekday = d.weekday()  # Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5, Sun=6
+    if weekday in (1, 4):
+        return data_str
+    corrections = {0: 3, 2: 1, 3: 2, 5: 1, 6: 2}
+    d -= datetime.timedelta(days=corrections[weekday])
+    return d.isoformat()
+
 
 # ─── Global constants ─────────────────────────────────────────────────────────
 VERSION = "9.0"
@@ -227,8 +239,18 @@ class DatabaseManager:
                 );
             """)
 
+    def eliminar_sorteio(self, data: str) -> bool:
+        """Delete a draw by date. Returns True if a row was deleted."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("DELETE FROM sorteios WHERE data = ?", (data,))
+                return cursor.rowcount > 0
+        except Exception:
+            return False
+
     def inserir_sorteio(self, data: str, numeros: list, estrelas: list, fonte: str = "manual") -> bool:
         """Insert a draw. Returns True if newly inserted, False if already existed or on error."""
+        data = corrigir_data_sorteio(data)
         nums = sorted(numeros)
         ests = sorted(estrelas)
         try:
@@ -326,11 +348,58 @@ class EuromilhoesScraper:
                 continue
         return None
 
+    def _find_date_in_soup(self, soup) -> str | None:
+        """Try to find a draw date anywhere in the page."""
+        # Try <time> elements first
+        for t in soup.find_all("time"):
+            raw = t.get("datetime") or t.get_text(strip=True)
+            d = self._try_parse_date(raw)
+            if d:
+                return d
+        # Try elements with date-related class names
+        for elem in soup.find_all(["span", "div", "p", "h2", "h3", "h4"],
+                                  class_=lambda c: c and any(
+                                      w in str(c).lower() for w in ["date", "data", "draw-date"]
+                                  )):
+            d = self._try_parse_date(elem.get_text(strip=True))
+            if d:
+                return d
+        # Scan all text for a date pattern
+        import re
+        for text in soup.stripped_strings:
+            m = re.search(r'(\d{1,2})[./-](\d{1,2})[./-](\d{4})', text)
+            if m:
+                return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+            m = re.search(r'(\d{4})-(\d{1,2})-(\d{1,2})', text)
+            if m:
+                return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+        return None
+
+    @staticmethod
+    def _try_parse_date(text: str) -> str | None:
+        """Try to parse a date string, return ISO format or None."""
+        if not text or len(text) < 6:
+            return None
+        import re
+        m = re.search(r'(\d{4})-(\d{1,2})-(\d{1,2})', text)
+        if m:
+            return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+        m = re.search(r'(\d{1,2})[./-](\d{1,2})[./-](\d{4})', text)
+        if m:
+            return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+        return None
+
+    def _fallback_draw_date(self) -> str:
+        """When no date can be scraped, snap today to the most recent Tue/Fri."""
+        return corrigir_data_sorteio(datetime.date.today().isoformat())
+
     def _scrape_lotaria_net(self) -> dict | None:
         url = "https://www.lotaria.net/euromilhoes/resultados"
         r = requests.get(url, headers=self.HEADERS, timeout=self.TIMEOUT)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
+
+        date_str = self._find_date_in_soup(soup) or self._fallback_draw_date()
 
         # Try common result container patterns
         selectors = [
@@ -341,7 +410,7 @@ class EuromilhoesScraper:
         for tag, attrs in selectors:
             container = soup.find(tag, attrs)
             if container:
-                nums = self._extract_numbers_from_container(container)
+                nums = self._extract_numbers_from_container(container, date_str)
                 if nums:
                     return nums
 
@@ -355,7 +424,7 @@ class EuromilhoesScraper:
             if txt.isdigit():
                 all_nums.append(int(txt))
 
-        return self._parse_raw_numbers(all_nums)
+        return self._parse_raw_numbers(all_nums, date_str)
 
     def _scrape_national_lottery_api(self) -> dict | None:
         # Try the unofficial API used by some Portuguese lottery sites
@@ -375,13 +444,14 @@ class EuromilhoesScraper:
                         pass
                     # Try HTML
                     soup = BeautifulSoup(r.text, "html.parser")
+                    date_str = self._find_date_in_soup(soup) or self._fallback_draw_date()
                     balls = soup.find_all(class_=lambda c: c and "ball" in str(c).lower())
                     nums = []
                     for b in balls:
                         t = b.get_text(strip=True)
                         if t.isdigit():
                             nums.append(int(t))
-                    result = self._parse_raw_numbers(nums)
+                    result = self._parse_raw_numbers(nums, date_str)
                     if result:
                         return result
             except Exception:
@@ -395,8 +465,7 @@ class EuromilhoesScraper:
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
 
-        date_elem = soup.find(["time", "span", "div"], class_=lambda c: c and "date" in str(c).lower())
-        date_str = date_elem.get_text(strip=True) if date_elem else datetime.date.today().isoformat()
+        date_str = self._find_date_in_soup(soup) or self._fallback_draw_date()
 
         balls = soup.find_all(["li", "span", "div"], class_=lambda c: c and (
             "ball" in str(c).lower() or "num" in str(c).lower()
@@ -409,18 +478,18 @@ class EuromilhoesScraper:
 
         return self._parse_raw_numbers(nums, date_str)
 
-    def _extract_numbers_from_container(self, container) -> dict | None:
+    def _extract_numbers_from_container(self, container, date_str: str = None) -> dict | None:
         texts = []
         for elem in container.find_all(text=True):
             txt = elem.strip()
             if txt.isdigit():
                 texts.append(int(txt))
-        return self._parse_raw_numbers(texts)
+        return self._parse_raw_numbers(texts, date_str)
 
     def _parse_raw_numbers(self, nums: list, date_str: str = None) -> dict | None:
         """Given a flat list of numbers, try to identify 5 main + 2 stars."""
         if not date_str:
-            date_str = datetime.date.today().isoformat()
+            date_str = self._fallback_draw_date()
 
         main_candidates = [n for n in nums if 1 <= n <= 50]
         star_candidates = [n for n in nums if 1 <= n <= 12]
@@ -442,7 +511,7 @@ class EuromilhoesScraper:
                     if nums_key in data and stars_key in data:
                         nums = sorted([int(n) for n in data[nums_key]])[:5]
                         stars = sorted([int(s) for s in data[stars_key]])[:2]
-                        date_str = data.get("date", data.get("data", datetime.date.today().isoformat()))
+                        date_str = data.get("date", data.get("data", self._fallback_draw_date()))
                         if len(nums) == 5 and len(stars) == 2:
                             return {"data": str(date_str), "numeros": nums, "estrelas": stars}
         except Exception:
@@ -1032,6 +1101,90 @@ class StatisticsAnalyzer:
                 freq[n] += 1
         return freq.most_common(10)
 
+    def quentes_frios_completo(self, janela: int = 15) -> list[dict]:
+        """For every number 1-50: recent freq, total freq, draws since last, avg gap, due flag."""
+        todos = self.db.todos_sorteios()  # newest first
+        total = len(todos)
+        ultimos = todos[:janela]
+
+        freq_recente = Counter()
+        for s in ultimos:
+            for n in s["numeros"]:
+                freq_recente[n] += 1
+
+        freq_total = Counter()
+        for s in todos:
+            for n in s["numeros"]:
+                freq_total[n] += 1
+
+        result = []
+        for num in range(1, 51):
+            aparicoes = [i for i, s in enumerate(todos) if num in s["numeros"]]
+            draws_since = aparicoes[0] if aparicoes else total
+
+            if len(aparicoes) >= 2:
+                gaps = [aparicoes[j + 1] - aparicoes[j] for j in range(len(aparicoes) - 1)]
+                avg_gap = round(sum(gaps) / len(gaps), 1)
+            else:
+                avg_gap = float(total)
+
+            result.append({
+                "num": num,
+                "freq_recente": freq_recente.get(num, 0),
+                "freq_total": freq_total.get(num, 0),
+                "draws_since": draws_since,
+                "avg_gap": avg_gap,
+                "due": draws_since > avg_gap * 1.5 if avg_gap > 0 else False,
+            })
+        return result
+
+    def analise_gaps(self) -> list[dict]:
+        """For each number 1-50: current gap, avg gap, max gap, ratio, sorted by ratio desc."""
+        todos = self.db.todos_sorteios()  # newest first
+        total = len(todos)
+
+        result = []
+        for num in range(1, 51):
+            aparicoes = [i for i, s in enumerate(todos) if num in s["numeros"]]
+            current_gap = aparicoes[0] if aparicoes else total
+
+            if len(aparicoes) >= 2:
+                gaps = [aparicoes[j + 1] - aparicoes[j] for j in range(len(aparicoes) - 1)]
+                avg_gap = round(sum(gaps) / len(gaps), 1)
+                max_gap = max(gaps)
+            else:
+                avg_gap = float(total)
+                max_gap = total
+
+            ratio = round(current_gap / avg_gap, 2) if avg_gap > 0 else 0
+            result.append({
+                "num": num,
+                "current_gap": current_gap,
+                "avg_gap": avg_gap,
+                "max_gap": max_gap,
+                "ratio": ratio,
+                "total_aparicoes": len(aparicoes),
+            })
+        result.sort(key=lambda x: x["ratio"], reverse=True)
+        return result
+
+    def tendencia_somas(self, janela: int = 30) -> list[dict]:
+        """Sum per draw + running average for the last `janela` draws (chronological order)."""
+        todos = self.db.todos_sorteios()[:janela]  # newest first
+        todos.reverse()  # oldest first
+
+        result = []
+        running = 0
+        for i, s in enumerate(todos):
+            soma = s.get("soma") or sum(s["numeros"])
+            running += soma
+            result.append({
+                "data": s["data"],
+                "soma": soma,
+                "media_movel": round(running / (i + 1), 1),
+            })
+        return result
+
     def historico_padroes(self) -> dict:
         """Count how many historical draws match each of the 56 BI-BP-AI-AP patterns."""
         todos = self.db.todos_sorteios()
@@ -1138,7 +1291,7 @@ class FilterEngine:
         },
         "G": {
             "nome": "Regra do 31",
-            "descricao": "Mín 2 números acima de 31. A maioria dos jogadores usa aniversários "
+            "descricao": "Mín 1 número acima de 31. A maioria dos jogadores usa aniversários "
                          "(1-31), forçar números altos reduz a partilha do jackpot.",
         },
         "H": {
@@ -1260,7 +1413,7 @@ class FilterEngine:
         # ── Filter G – Regra do 31 (anti-calendário) ─────────────────────────
         if "G" in self.active_filters:
             acima_31 = sum(1 for n in chave_s if n > 31)
-            if acima_31 < 2:
+            if acima_31 < 1:
                 self.stats["reprovadas_regra31"] += 1
                 return False
 
@@ -1290,7 +1443,7 @@ class FilterEngine:
                 "D": "mín 3 décadas",
                 "E": "máx 2 do anterior",
                 "F": "V:1-3 | G:1-3 | A:0-1 | C:0",
-                "G": "mín 2 números > 31",
+                "G": "mín 1 número > 31",
                 "H": "rejeitar sequências perfeitas",
             }[f_id]
             result.append({
@@ -1341,9 +1494,8 @@ class KeyGenerator:
         padrao = random.choice(PADROES_EQUILIBRADOS)
         bi_n, bp_n, ai_n, ap_n = padrao
 
-        # Some patterns have too few AI+AP numbers to satisfy Filter G
-        # (e.g. [2,2,0,1] and [2,2,1,0] can only produce 1 number > 31).
-        # Rotating the pattern every 2000 attempts escapes those dead ends.
+        # Safety net: rotate pattern every 2000 attempts to avoid rare
+        # dead-end combinations where a pattern + active filters conflict.
         for i in range(max_tentativas):
             if i > 0 and i % 2000 == 0:
                 padrao = random.choice(PADROES_EQUILIBRADOS)
@@ -1942,7 +2094,7 @@ Estes 16 padrões cobrem ~1.333.800 combinações possíveis.
       • VERDES    (1×) → 1 a 3 na chave
       • AZUIS     (2×) → 0 a 2 na chave
       • CASTANHOS (3×+) → EXCLUÍDOS (0 na chave)
-  [G] Regra do 31 – mínimo 2 números acima de 31
+  [G] Regra do 31 – mínimo 1 número acima de 31
       → a maioria dos jogadores usa aniversários (1–31);
         forçar números altos reduz partilha do jackpot
   [H] Rejeitar progressões aritméticas perfeitas
