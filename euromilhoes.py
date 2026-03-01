@@ -625,13 +625,15 @@ class HistoricoScraper:
                "inseridos_db": inseridos, "ficheiro": str(ficheiro)}
 
     def scrape_desde(self, desde_data: str, db: "DatabaseManager") -> dict:
-        """Scrape draws newer than desde_data (ISO format) and insert into DB.
+        """Scrape missing draws and insert into DB.
+        Detects gaps (deleted draws) as well as new draws after the last entry.
         First tries the /results page (recent draws), then falls back to per-year scraping.
-        Skips draws whose numbers+stars match any existing draw (anti-duplicate).
         """
-        # Build set of existing number combos to reject duplicates with different dates
+        # Build sets of existing dates and number combos
+        existentes = db.todos_sorteios()
+        datas_existentes = {s["data"] for s in existentes}
         combinacoes_existentes = set()
-        for s in db.todos_sorteios():
+        for s in existentes:
             chave = (tuple(sorted(s["numeros"])), tuple(sorted(s["estrelas"])))
             combinacoes_existentes.add(chave)
 
@@ -651,14 +653,14 @@ class HistoricoScraper:
                     continue
                 time.sleep(0.5)
 
-        # Filter only draws after the last known date
-        novos = [s for s in todos if s["data"] > desde_data]
-        # Deduplicate by date AND by number combination
+        # Accept any scraped draw whose date is NOT in the DB (catches gaps + new draws)
         vistos_datas = set()
         unicos = []
-        for s in novos:
+        for s in todos:
             chave_nums = (tuple(sorted(s["numeros"])), tuple(sorted(s["estrelas"])))
-            if s["data"] not in vistos_datas and chave_nums not in combinacoes_existentes:
+            if (s["data"] not in datas_existentes
+                    and s["data"] not in vistos_datas
+                    and chave_nums not in combinacoes_existentes):
                 vistos_datas.add(s["data"])
                 combinacoes_existentes.add(chave_nums)
                 unicos.append(s)
