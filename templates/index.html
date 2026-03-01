@@ -464,6 +464,9 @@
     <a class="nav-link" href="#" onclick="showTab('historico', this)">
       <i class="fa-solid fa-database"></i> Histórico BD
     </a>
+    <a class="nav-link" href="#" onclick="showTab('verificar', this)">
+      <i class="fa-solid fa-receipt"></i> Verificar Aposta
+    </a>
     <a class="nav-link" href="#" onclick="showTab('atualizar', this)">
       <i class="fa-solid fa-cloud-arrow-down"></i> Actualizar BD
     </a>
@@ -481,7 +484,7 @@
   </div>
   <div style="padding:10px 16px 14px;border-top:1px solid #2a2a4a;text-align:center;font-size:.73rem;line-height:1.7;color:#6b7280;">
     <div style="color:#9ca3af;">Autor: Luís Fialho</div>
-    <div>Versão 30 · 01.Mar.2026</div>
+    <div>Versão 31 · 01.Mar.2026</div>
   </div>
 </div>
 
@@ -718,6 +721,68 @@
 
 
   <!-- ════════════ TAB: ACTUALIZAR ════════════ -->
+  <!-- ════════════ TAB: VERIFICAR APOSTA ════════════ -->
+  <div id="tab-verificar" class="tab-pane">
+    <div class="section-header">
+      <i class="fa-solid fa-receipt"></i>
+      <h3>Verificar Aposta</h3>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-lg-5">
+        <div class="card-dark">
+          <h5><i class="fa-solid fa-gamepad me-2" style="color:#74c0fc;"></i>A tua Aposta</h5>
+
+          <div class="mb-3">
+            <label class="form-label" style="color:#9ca3af;font-size:.85rem;">Sorteio</label>
+            <select class="form-select" id="verificar-sorteio" style="background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;">
+              <option value="">Seleccionar sorteio...</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" style="color:#9ca3af;font-size:.85rem;">
+              Números jogados <small>(5 a 15, separados por vírgula)</small>
+            </label>
+            <input type="text" class="form-control" id="verificar-numeros"
+                   placeholder="ex: 3, 8, 14, 22, 35, 41, 48"
+                   style="background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" style="color:#9ca3af;font-size:.85rem;">
+              Estrelas jogadas <small>(2 a 12, separadas por vírgula)</small>
+            </label>
+            <input type="text" class="form-control" id="verificar-estrelas"
+                   placeholder="ex: 2, 5, 7, 9"
+                   style="background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;">
+          </div>
+
+          <div id="verificar-info" class="mb-3" style="color:#74c0fc;font-size:.88rem;min-height:24px;"></div>
+
+          <button class="btn btn-em w-100" id="btn-verificar" onclick="verificarAposta()">
+            <i class="fa-solid fa-magnifying-glass me-2"></i>Verificar Aposta
+          </button>
+        </div>
+      </div>
+
+      <div class="col-lg-7">
+        <div class="card-dark" id="verificar-resultado" style="display:none;">
+          <h5><i class="fa-solid fa-clipboard-check me-2" style="color:#51cf66;"></i>Resultado</h5>
+          <div id="verificar-resultado-content"></div>
+        </div>
+        <div class="card-dark" id="verificar-placeholder">
+          <div class="text-center py-4" style="color:#6c757d;">
+            <i class="fa-solid fa-receipt fa-3x mb-3" style="opacity:.3;"></i>
+            <p>Insere os teus números e estrelas para verificar se ganhaste prémio num sorteio específico.</p>
+            <p style="font-size:.85rem;">Suporta <strong>apostas múltiplas</strong> — podes colocar mais de 5 números e/ou mais de 2 estrelas para verificar todas as combinações automaticamente.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
   <div id="tab-atualizar" class="tab-pane">
     <div class="section-header">
       <i class="fa-solid fa-cloud-arrow-down"></i>
@@ -736,6 +801,18 @@
             <i class="fa-solid fa-arrows-rotate me-2"></i>Buscar sorteios em falta
           </button>
           <div id="recentes-result" class="mt-3"></div>
+
+          <hr style="border-color:#2a2a4a;margin:16px 0;">
+
+          <h5><i class="fa-solid fa-coins me-2" style="color:#ffd700;"></i>Buscar Prémios em Falta</h5>
+          <p style="color:#9ca3af;font-size:.88rem;">
+            Importa dados de prémios (jackpot, valores por tier, vencedores) de euro-millions.com
+            para sorteios que ainda não têm esta informação. Máximo 50 por vez.
+          </p>
+          <button class="btn btn-em" id="btn-scrape-premios" onclick="scrapePremios()">
+            <i class="fa-solid fa-coins me-2"></i>Buscar prémios em falta
+          </button>
+          <div id="premios-result" class="mt-3"></div>
         </div>
       </div>
 
@@ -1059,6 +1136,7 @@ function showTab(name, el) {
   if (name === "padroes")       loadPadroes();
   if (name === "hist-padroes")  loadHistoricoPadroes();
   if (name === "historico")     loadHistorico();
+  if (name === "verificar")     loadVerificarSorteios();
   if (name === "atualizar")     loadHistoricoStatus();
 }
 
@@ -1562,9 +1640,10 @@ async function loadEstatisticas() {
     </div>` + `<div class="row g-3 mt-1"><div class="col-12">${heatmapHTML}</div></div>`
     + renderStreaks(d) + renderQuentesFrios(d) + renderGaps(d) + renderTendenciaSomas(d);
 
-  // Async: load decade timeline and append
-  renderDecadeTimeline().then(html => {
-    if (html) el.insertAdjacentHTML("beforeend", html);
+  // Async: load decade timeline and prize stats, then append
+  Promise.all([renderDecadeTimeline(), renderPrizeStats()]).then(([timeline, prizes]) => {
+    if (timeline) el.insertAdjacentHTML("beforeend", timeline);
+    if (prizes) el.insertAdjacentHTML("beforeend", prizes);
   });
 }
 
@@ -2790,6 +2869,330 @@ function getMomentum(num, qf) {
   if (ratio >= 1.5) return `<span class="trend-down" title="Em atraso">▼</span>`;
   if (entry.freq_recente >= 3) return `<span class="trend-up" title="Tendência quente">▲</span>`;
   return `<span class="trend-flat" title="Normal">─</span>`;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// SCRAPE PRIZES
+// ════════════════════════════════════════════════════════════════════
+async function scrapePremios() {
+  const btn = document.getElementById("btn-scrape-premios");
+  const result = document.getElementById("premios-result");
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner-border spinner-border-sm me-2"></div>A iniciar...';
+  result.innerHTML = "";
+
+  try {
+    const resp = await fetch("api/scrape-premios", { method: "POST" });
+    const data = await resp.json();
+    if (data.erro) {
+      result.innerHTML = `<div class="alert alert-warning">${data.erro}</div>`;
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-coins me-2"></i>Buscar prémios em falta';
+      return;
+    }
+    if (data.total === 0) {
+      result.innerHTML = `<div class="alert alert-success">${data.msg}</div>`;
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-coins me-2"></i>Buscar prémios em falta';
+      return;
+    }
+
+    result.innerHTML = `<div style="color:#74c0fc;font-size:.88rem;">${data.msg}</div>
+      <div class="progress mt-2" style="height:20px;background:#1a1a2e;">
+        <div class="progress-bar bg-warning" id="premios-progress" style="width:0%;transition:width .3s;"></div>
+      </div>
+      <div id="premios-progress-text" style="color:#9ca3af;font-size:.78rem;margin-top:4px;"></div>`;
+
+    // Poll status
+    const poll = setInterval(async () => {
+      try {
+        const st = await (await fetch("api/scrape-premios-status")).json();
+        const pct = st.total > 0 ? Math.round(st.progresso / st.total * 100) : 0;
+        const bar = document.getElementById("premios-progress");
+        const text = document.getElementById("premios-progress-text");
+        if (bar) bar.style.width = pct + "%";
+        if (text) text.textContent = st.msg;
+
+        if (!st.running) {
+          clearInterval(poll);
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-coins me-2"></i>Buscar prémios em falta';
+          if (bar) bar.style.width = "100%";
+          result.innerHTML += `<div class="alert alert-success mt-2" style="font-size:.88rem;">${st.msg}</div>`;
+          // Clear stats cache so next load refreshes
+          _statsCache = null;
+        }
+      } catch(e) { /* ignore poll errors */ }
+    }, 2000);
+  } catch(e) {
+    result.innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-coins me-2"></i>Buscar prémios em falta';
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// VERIFICAR APOSTA – Prize checker
+// ════════════════════════════════════════════════════════════════════
+let _verificarSorteiosLoaded = false;
+
+async function loadVerificarSorteios() {
+  if (_verificarSorteiosLoaded) return;
+  try {
+    const data = await (await fetch("api/sorteios")).json();
+    const sel = document.getElementById("verificar-sorteio");
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Seleccionar sorteio...</option>';
+    (data.sorteios || data || []).forEach(s => {
+      const nums = s.numeros.join(", ");
+      const stars = s.estrelas.join(", ");
+      sel.innerHTML += `<option value="${s.data}">${s.data} — ${nums} + ${stars}</option>`;
+    });
+    _verificarSorteiosLoaded = true;
+  } catch(e) { console.error("loadVerificarSorteios:", e); }
+
+  // Setup live info
+  const numsInput = document.getElementById("verificar-numeros");
+  const starsInput = document.getElementById("verificar-estrelas");
+  if (numsInput) numsInput.addEventListener("input", updateVerificarInfo);
+  if (starsInput) starsInput.addEventListener("input", updateVerificarInfo);
+}
+
+function updateVerificarInfo() {
+  const info = document.getElementById("verificar-info");
+  if (!info) return;
+  const nums = parseNumberList(document.getElementById("verificar-numeros").value);
+  const stars = parseNumberList(document.getElementById("verificar-estrelas").value);
+  if (nums.length < 5 || stars.length < 2) { info.textContent = ""; return; }
+
+  const combosN = comb(nums.length, 5);
+  const combosS = comb(stars.length, 2);
+  const total = combosN * combosS;
+  const custo = (total * 2.50).toFixed(2);
+  info.innerHTML = `<i class="fa-solid fa-calculator me-1"></i>${nums.length} números × ${stars.length} estrelas = <strong>${total.toLocaleString("pt-PT")} combinações</strong> (custo: <strong>€${custo}</strong>)`;
+}
+
+function parseNumberList(s) {
+  return (s || "").split(/[,;\s]+/).map(x => parseInt(x.trim(), 10)).filter(x => !isNaN(x) && x > 0);
+}
+
+function comb(n, k) {
+  if (k > n) return 0;
+  let r = 1;
+  for (let i = 0; i < k; i++) r = r * (n - i) / (i + 1);
+  return Math.round(r);
+}
+
+async function verificarAposta() {
+  const dataSorteio = document.getElementById("verificar-sorteio").value;
+  const numeros = parseNumberList(document.getElementById("verificar-numeros").value);
+  const estrelas = parseNumberList(document.getElementById("verificar-estrelas").value);
+
+  if (!dataSorteio) { toast("Selecciona um sorteio", "error"); return; }
+  if (numeros.length < 5) { toast("Mínimo 5 números", "error"); return; }
+  if (estrelas.length < 2) { toast("Mínimo 2 estrelas", "error"); return; }
+
+  const btn = document.getElementById("btn-verificar");
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner-border spinner-border-sm me-2"></div>A verificar...';
+
+  try {
+    const resp = await fetch("api/verificar-aposta", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ numeros, estrelas, data_sorteio: dataSorteio })
+    });
+    const data = await resp.json();
+    if (data.erro) {
+      toast(data.erro, "error");
+      return;
+    }
+    renderVerificarResultado(data, dataSorteio);
+  } catch(e) {
+    toast("Erro ao verificar: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-magnifying-glass me-2"></i>Verificar Aposta';
+  }
+}
+
+function renderVerificarResultado(data, dataSorteio) {
+  document.getElementById("verificar-placeholder").style.display = "none";
+  const box = document.getElementById("verificar-resultado");
+  box.style.display = "block";
+  const c = document.getElementById("verificar-resultado-content");
+
+  const isLucro = data.lucro_prejuizo >= 0;
+  const lucroColor = isLucro ? "#51cf66" : "#ff6b6b";
+  const lucroIcon = isLucro ? "fa-arrow-trend-up" : "fa-arrow-trend-down";
+
+  // Draw balls
+  const sorteioNums = data.sorteio_numeros.map(n => {
+    const matched = data.numeros_jogados.includes(n);
+    return `<span class="ball${matched ? '' : ''}" style="display:inline-block;width:36px;height:36px;line-height:36px;text-align:center;border-radius:50%;font-weight:700;font-size:.9rem;margin:2px;background:${matched ? '#ffd700' : '#2a2a4a'};color:${matched ? '#000' : '#666'};">${n}</span>`;
+  }).join("");
+  const sorteioStars = data.sorteio_estrelas.map(s => {
+    const matched = data.estrelas_jogadas.includes(s);
+    return `<span style="display:inline-block;width:36px;height:36px;line-height:36px;text-align:center;border-radius:50%;font-weight:700;font-size:.9rem;margin:2px;background:${matched ? '#ffd700' : '#1a1a2e'};color:${matched ? '#000' : '#666'};border:2px solid ${matched ? '#ffd700' : '#333'};">★${s}</span>`;
+  }).join("");
+
+  let tierRows = "";
+  if (data.detalhe && data.detalhe.length > 0) {
+    tierRows = data.detalhe.map(d => `
+      <tr>
+        <td style="font-weight:600;">${d.nome}</td>
+        <td class="text-center">${d.match}</td>
+        <td class="text-center">${d.quantidade.toLocaleString("pt-PT")}</td>
+        <td class="text-end">€${d.premio_unitario.toFixed(2)}</td>
+        <td class="text-end" style="color:#51cf66;font-weight:600;">€${d.subtotal.toFixed(2)}</td>
+      </tr>
+    `).join("");
+  } else {
+    tierRows = `<tr><td colspan="5" class="text-center" style="color:#666;padding:20px;">Nenhum prémio nesta aposta</td></tr>`;
+  }
+
+  c.innerHTML = `
+    <div class="mb-3">
+      <div style="font-size:.82rem;color:#9ca3af;margin-bottom:6px;">Sorteio de ${dataSorteio}</div>
+      <div class="mb-2">${sorteioNums} ${sorteioStars}</div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-md-3">
+        <div style="background:#1a1a2e;border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:.72rem;color:#9ca3af;">Combinações</div>
+          <div style="font-size:1.3rem;font-weight:700;color:#74c0fc;">${data.total_combinacoes.toLocaleString("pt-PT")}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div style="background:#1a1a2e;border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:.72rem;color:#9ca3af;">Custo Total</div>
+          <div style="font-size:1.3rem;font-weight:700;color:#ff6b6b;">€${data.custo_total.toFixed(2)}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div style="background:#1a1a2e;border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:.72rem;color:#9ca3af;">Ganhos</div>
+          <div style="font-size:1.3rem;font-weight:700;color:#51cf66;">€${data.ganhos_totais.toFixed(2)}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div style="background:#1a1a2e;border-radius:8px;padding:12px;text-align:center;">
+          <div style="font-size:.72rem;color:#9ca3af;">Lucro/Prejuízo</div>
+          <div style="font-size:1.3rem;font-weight:700;color:${lucroColor};"><i class="fa-solid ${lucroIcon} me-1"></i>€${data.lucro_prejuizo.toFixed(2)}</div>
+        </div>
+      </div>
+    </div>
+
+    <table class="table table-sm" style="font-size:.88rem;">
+      <thead><tr>
+        <th>Tier</th><th class="text-center">Acertos</th><th class="text-center">Qtd</th>
+        <th class="text-end">Prémio/un.</th><th class="text-end">Subtotal</th>
+      </tr></thead>
+      <tbody>${tierRows}</tbody>
+    </table>
+  `;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// PRIZE STATISTICS (injected into Estatísticas tab)
+// ════════════════════════════════════════════════════════════════════
+async function renderPrizeStats() {
+  try {
+    const data = await (await fetch("api/estatisticas-premios")).json();
+    if (!data || data.total_sorteios_com_premios === 0) {
+      return `
+      <div class="card-dark">
+        <h5><i class="fa-solid fa-coins me-2" style="color:#ffd700;"></i>Prémios €</h5>
+        <p style="color:#9ca3af;font-size:.88rem;">
+          Ainda não há dados de prémios. Vai ao tab <strong>Actualizar BD</strong> e clica em
+          <strong>"Buscar prémios em falta"</strong> para importar dados de prémios de euro-millions.com.
+        </p>
+      </div>`;
+    }
+
+    let jackpotHtml = "";
+    if (data.maior_jackpot) {
+      jackpotHtml = `
+        <div class="row g-3 mb-3">
+          <div class="col-sm-4">
+            <div style="background:#1a1a2e;border-radius:8px;padding:14px;text-align:center;">
+              <div style="font-size:.72rem;color:#9ca3af;">Maior Jackpot</div>
+              <div style="font-size:1.4rem;font-weight:700;color:#ffd700;">€${(data.maior_jackpot.valor/1e6).toFixed(1)}M</div>
+              <div style="font-size:.72rem;color:#9ca3af;">${data.maior_jackpot.data}</div>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div style="background:#1a1a2e;border-radius:8px;padding:14px;text-align:center;">
+              <div style="font-size:.72rem;color:#9ca3af;">Jackpot Médio</div>
+              <div style="font-size:1.4rem;font-weight:700;color:#74c0fc;">€${(data.media_jackpot/1e6).toFixed(1)}M</div>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div style="background:#1a1a2e;border-radius:8px;padding:14px;text-align:center;">
+              <div style="font-size:.72rem;color:#9ca3af;">Sorteios c/ prémios</div>
+              <div style="font-size:1.4rem;font-weight:700;color:#51cf66;">${data.total_sorteios_com_premios}</div>
+              ${data.total_sem_premios > 0 ? `<div style="font-size:.72rem;color:#ff6b6b;">${data.total_sem_premios} em falta</div>` : ''}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    // Tier averages table
+    let tierRows = "";
+    const tiers = data.medias_por_tier || {};
+    for (let t = 1; t <= 13; t++) {
+      const tier = tiers[t];
+      if (!tier || tier.total_sorteios === 0) continue;
+      tierRows += `<tr>
+        <td style="font-weight:600;">${tier.nome}</td>
+        <td class="text-end">€${tier.media.toLocaleString("pt-PT",{minimumFractionDigits:2})}</td>
+        <td class="text-end">€${tier.min.toLocaleString("pt-PT",{minimumFractionDigits:2})}</td>
+        <td class="text-end">€${tier.max.toLocaleString("pt-PT",{minimumFractionDigits:2})}</td>
+        <td class="text-center" style="color:#9ca3af;">${tier.total_sorteios}</td>
+      </tr>`;
+    }
+
+    // Jackpot evolution sparkline
+    let sparkHtml = "";
+    if (data.evolucao_jackpots && data.evolucao_jackpots.length > 1) {
+      const vals = data.evolucao_jackpots.map(e => e.jackpot);
+      const max = Math.max(...vals);
+      const min = Math.min(...vals);
+      const range = max - min || 1;
+      const w = 100 / vals.length;
+      const bars = vals.map((v, i) => {
+        const h = Math.max(3, Math.round(((v - min) / range) * 40));
+        const color = v === max ? "#ffd700" : "#3a3a6a";
+        return `<div style="flex:1;display:flex;align-items:flex-end;justify-content:center;height:50px;" title="${data.evolucao_jackpots[i].data}: €${(v/1e6).toFixed(1)}M">
+          <div style="width:80%;height:${h}px;background:${color};border-radius:2px;"></div>
+        </div>`;
+      }).join("");
+      sparkHtml = `
+        <div class="mt-3">
+          <div style="font-size:.78rem;color:#9ca3af;margin-bottom:4px;">Evolução Jackpots (últimos ${vals.length})</div>
+          <div style="display:flex;gap:1px;">${bars}</div>
+        </div>`;
+    }
+
+    return `
+    <div class="card-dark">
+      <h5><i class="fa-solid fa-coins me-2" style="color:#ffd700;"></i>Estatísticas de Prémios</h5>
+      ${jackpotHtml}
+      ${tierRows ? `
+      <table class="table table-sm" style="font-size:.85rem;">
+        <thead><tr>
+          <th>Tier</th><th class="text-end">Média</th><th class="text-end">Mín.</th>
+          <th class="text-end">Máx.</th><th class="text-center">Sorteios</th>
+        </tr></thead>
+        <tbody>${tierRows}</tbody>
+      </table>` : ''}
+      ${sparkHtml}
+    </div>`;
+  } catch(e) {
+    console.error("renderPrizeStats:", e);
+    return "";
+  }
 }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

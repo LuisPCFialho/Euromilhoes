@@ -77,6 +77,28 @@ def corrigir_data_sorteio(data_str: str) -> str:
     return d.isoformat()
 
 
+# ─── EuroMillions Prize Tiers ────────────────────────────────────────────────
+# (matched_numbers, matched_stars) → tier info
+# Tiers 1-7 are pari-mutuel (variable); tiers 8-13 have typical fixed values.
+PRIZE_TIERS = {
+    (5, 2): {"tier": 1,  "name": "5+2 Jackpot",  "default_eur": None},
+    (5, 1): {"tier": 2,  "name": "5+1",           "default_eur": None},
+    (5, 0): {"tier": 3,  "name": "5+0",           "default_eur": None},
+    (4, 2): {"tier": 4,  "name": "4+2",           "default_eur": None},
+    (4, 1): {"tier": 5,  "name": "4+1",           "default_eur": None},
+    (3, 2): {"tier": 6,  "name": "3+2",           "default_eur": None},
+    (4, 0): {"tier": 7,  "name": "4+0",           "default_eur": None},
+    (2, 2): {"tier": 8,  "name": "2+2",           "default_eur": 17.08},
+    (3, 1): {"tier": 9,  "name": "3+1",           "default_eur": 12.73},
+    (3, 0): {"tier": 10, "name": "3+0",           "default_eur": 10.58},
+    (1, 2): {"tier": 11, "name": "1+2",           "default_eur": 9.52},
+    (2, 1): {"tier": 12, "name": "2+1",           "default_eur": 7.19},
+    (2, 0): {"tier": 13, "name": "2+0",           "default_eur": 4.28},
+}
+
+CUSTO_POR_APOSTA = 2.50  # € per single combination
+
+
 # ─── Global constants ─────────────────────────────────────────────────────────
 VERSION = "9.0"
 _IS_VERCEL = bool(os.environ.get("VERCEL"))
@@ -239,6 +261,24 @@ class DatabaseManager:
                 );
                 CREATE INDEX IF NOT EXISTS idx_sorteios_data ON sorteios(data);
                 CREATE INDEX IF NOT EXISTS idx_sorteios_soma ON sorteios(soma);
+
+                CREATE TABLE IF NOT EXISTS premios (
+                    data        TEXT PRIMARY KEY,
+                    jackpot     REAL,
+                    t1_prize REAL, t1_winners INTEGER,
+                    t2_prize REAL, t2_winners INTEGER,
+                    t3_prize REAL, t3_winners INTEGER,
+                    t4_prize REAL, t4_winners INTEGER,
+                    t5_prize REAL, t5_winners INTEGER,
+                    t6_prize REAL, t6_winners INTEGER,
+                    t7_prize REAL, t7_winners INTEGER,
+                    t8_prize REAL, t8_winners INTEGER,
+                    t9_prize REAL, t9_winners INTEGER,
+                    t10_prize REAL, t10_winners INTEGER,
+                    t11_prize REAL, t11_winners INTEGER,
+                    t12_prize REAL, t12_winners INTEGER,
+                    t13_prize REAL, t13_winners INTEGER
+                );
             """)
 
     def eliminar_sorteio(self, data: str) -> bool:
@@ -320,6 +360,307 @@ class DatabaseManager:
     def set_metadata(self, chave: str, valor: str):
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("INSERT OR REPLACE INTO metadata (chave,valor) VALUES (?,?)", (chave, valor))
+
+    # ── Prize data methods ──────────────────────────────────────────────────
+    def inserir_premios(self, data: str, prize_data: dict) -> bool:
+        cols = ["data", "jackpot"]
+        vals = [data, prize_data.get("jackpot")]
+        for t in range(1, 14):
+            cols += [f"t{t}_prize", f"t{t}_winners"]
+            vals += [prize_data.get(f"t{t}_prize"), prize_data.get(f"t{t}_winners")]
+        placeholders = ",".join(["?"] * len(vals))
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    f"INSERT OR REPLACE INTO premios ({','.join(cols)}) VALUES ({placeholders})",
+                    vals
+                )
+            return True
+        except Exception:
+            return False
+
+    def obter_premios(self, data: str) -> dict | None:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("SELECT * FROM premios WHERE data = ?", (data,)).fetchone()
+        if not row:
+            return None
+        return dict(row)
+
+    def todos_premios(self) -> list[dict]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("SELECT * FROM premios ORDER BY data DESC").fetchall()
+        return [dict(r) for r in rows]
+
+    def tem_premios(self, data: str) -> bool:
+        with sqlite3.connect(self.db_path) as conn:
+            return conn.execute(
+                "SELECT 1 FROM premios WHERE data = ?", (data,)
+            ).fetchone() is not None
+
+    def datas_sem_premios(self) -> list[str]:
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT s.data FROM sorteios s LEFT JOIN premios p ON s.data = p.data "
+                "WHERE p.data IS NULL ORDER BY s.data DESC"
+            ).fetchall()
+        return [r[0] for r in rows]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PRIZE CHECKER
+# ═════════════════════════════════════════════════════════════════════════════
+class PrizeChecker:
+    """Verifies single or multiple-combination bets against a draw result."""
+
+    MAX_NUMEROS = 15
+    MAX_ESTRELAS = 12
+
+    @staticmethod
+    def verificar_aposta(
+        numeros_jogados: list[int],
+        estrelas_jogadas: list[int],
+        sorteio_numeros: list[int],
+        sorteio_estrelas: list[int],
+        premios: dict | None = None,
+    ) -> dict:
+        from itertools import combinations
+
+        n_nums = len(numeros_jogados)
+        n_stars = len(estrelas_jogadas)
+
+        if n_nums < 5 or n_nums > PrizeChecker.MAX_NUMEROS:
+            return {"erro": f"Números devem ser entre 5 e {PrizeChecker.MAX_NUMEROS}"}
+        if n_stars < 2 or n_stars > PrizeChecker.MAX_ESTRELAS:
+            return {"erro": f"Estrelas devem ser entre 2 e {PrizeChecker.MAX_ESTRELAS}"}
+        if not all(1 <= n <= 50 for n in numeros_jogados):
+            return {"erro": "Números devem estar entre 1 e 50"}
+        if not all(1 <= e <= 12 for e in estrelas_jogadas):
+            return {"erro": "Estrelas devem estar entre 1 e 12"}
+        if len(set(numeros_jogados)) != n_nums:
+            return {"erro": "Números duplicados não são permitidos"}
+        if len(set(estrelas_jogadas)) != n_stars:
+            return {"erro": "Estrelas duplicadas não são permitidas"}
+
+        sorteio_nums_set = set(sorteio_numeros)
+        sorteio_stars_set = set(sorteio_estrelas)
+
+        combos_nums = list(combinations(numeros_jogados, 5))
+        combos_stars = list(combinations(estrelas_jogadas, 2))
+        total_combinacoes = len(combos_nums) * len(combos_stars)
+        custo_total = total_combinacoes * CUSTO_POR_APOSTA
+
+        # Count wins by tier
+        resultados_tier = {}
+        for tier_key, tier_info in PRIZE_TIERS.items():
+            resultados_tier[tier_info["tier"]] = {
+                "nome": tier_info["name"],
+                "match": f"{tier_key[0]}+{tier_key[1]}",
+                "quantidade": 0,
+                "premio_unitario": 0.0,
+                "subtotal": 0.0,
+            }
+
+        for combo_n in combos_nums:
+            acertos_n = len(set(combo_n) & sorteio_nums_set)
+            for combo_s in combos_stars:
+                acertos_s = len(set(combo_s) & sorteio_stars_set)
+                tier_info = PRIZE_TIERS.get((acertos_n, acertos_s))
+                if tier_info:
+                    t = tier_info["tier"]
+                    resultados_tier[t]["quantidade"] += 1
+
+        # Assign prize values from DB or defaults
+        ganhos_totais = 0.0
+        detalhe = []
+        for t in range(1, 14):
+            rt = resultados_tier[t]
+            if rt["quantidade"] == 0:
+                continue
+            # Get prize value: from DB data first, then default
+            premio = 0.0
+            if premios and premios.get(f"t{t}_prize") is not None:
+                premio = float(premios[f"t{t}_prize"])
+            else:
+                # Find default from PRIZE_TIERS
+                for key, info in PRIZE_TIERS.items():
+                    if info["tier"] == t and info["default_eur"] is not None:
+                        premio = info["default_eur"]
+                        break
+
+            rt["premio_unitario"] = premio
+            rt["subtotal"] = premio * rt["quantidade"]
+            ganhos_totais += rt["subtotal"]
+            detalhe.append(rt)
+
+        return {
+            "total_combinacoes": total_combinacoes,
+            "custo_total": round(custo_total, 2),
+            "ganhos_totais": round(ganhos_totais, 2),
+            "lucro_prejuizo": round(ganhos_totais - custo_total, 2),
+            "detalhe": detalhe,
+            "numeros_jogados": sorted(numeros_jogados),
+            "estrelas_jogadas": sorted(estrelas_jogadas),
+            "sorteio_numeros": sorted(sorteio_numeros),
+            "sorteio_estrelas": sorted(sorteio_estrelas),
+        }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PRIZE SCRAPER
+# ═════════════════════════════════════════════════════════════════════════════
+class PremiosScraper:
+    """Scrapes prize breakdown data from euro-millions.com"""
+
+    HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/122.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "en-GB,en;q=0.5",
+    }
+    TIMEOUT = 15
+
+    # Map tier names from the website to our tier numbers
+    TIER_MAP = {
+        "5 + 2": 1, "5 + 1": 2, "5": 3, "5 + 0": 3,
+        "4 + 2": 4, "4 + 1": 5, "3 + 2": 6, "4": 7, "4 + 0": 7,
+        "2 + 2": 8, "3 + 1": 9, "3": 10, "3 + 0": 10,
+        "1 + 2": 11, "2 + 1": 12, "2": 13, "2 + 0": 13,
+    }
+
+    def scrape_premios(self, data_iso: str) -> dict | None:
+        """Scrape prize breakdown for a single draw date (YYYY-MM-DD format)."""
+        try:
+            d = datetime.date.fromisoformat(data_iso)
+            url = f"https://www.euro-millions.com/results/{d.strftime('%d-%m-%Y')}"
+            resp = requests.get(url, headers=self.HEADERS, timeout=self.TIMEOUT)
+            if resp.status_code != 200:
+                return None
+            return self._parse_prizes(resp.text)
+        except Exception:
+            return None
+
+    def _parse_prizes(self, html: str) -> dict | None:
+        """Parse prize breakdown table from HTML."""
+        import re
+        soup = BeautifulSoup(html, "html.parser")
+        result = {}
+
+        # Find the prize breakdown table
+        table = None
+        for t in soup.find_all("table"):
+            text = t.get_text().lower()
+            if "match" in text and ("prize" in text or "winners" in text):
+                table = t
+                break
+
+        if not table:
+            return None
+
+        rows = table.find_all("tr")
+        for row in rows:
+            cells = row.find_all(["td", "th"])
+            if len(cells) < 3:
+                continue
+
+            match_text = cells[0].get_text(strip=True)
+            # Normalize: "Match 5 + 2" → "5 + 2"
+            match_text = re.sub(r"(?i)match\s*", "", match_text).strip()
+
+            tier = self.TIER_MAP.get(match_text)
+            if tier is None:
+                continue
+
+            # Parse prize value (€ amount)
+            prize_text = cells[1].get_text(strip=True) if len(cells) > 1 else ""
+            prize_val = self._parse_amount(prize_text)
+
+            # Parse winners count
+            winners_text = cells[-1].get_text(strip=True) if len(cells) > 2 else ""
+            # Some pages swap columns: check which has the number
+            if prize_val == 0 and len(cells) > 2:
+                # Try swapped: winners in col 1, prize in col 2
+                alt_prize = self._parse_amount(cells[2].get_text(strip=True))
+                alt_winners = self._parse_int(cells[1].get_text(strip=True))
+                if alt_prize > 0:
+                    prize_val = alt_prize
+                    winners_text = cells[1].get_text(strip=True)
+
+            winners = self._parse_int(winners_text)
+
+            result[f"t{tier}_prize"] = prize_val
+            result[f"t{tier}_winners"] = winners
+
+            # Jackpot is tier 1 prize
+            if tier == 1:
+                result["jackpot"] = prize_val
+
+        return result if result else None
+
+    @staticmethod
+    def _parse_amount(text: str) -> float:
+        """Parse '€1,234,567.89' or '1.234.567,89 €' into float."""
+        import re
+        text = text.replace("€", "").replace("£", "").replace("$", "").strip()
+        if not text or text.lower() in ("rollover", "rolldown", "-", "n/a"):
+            return 0.0
+        # Detect European format: 1.234.567,89
+        if "," in text and "." in text:
+            if text.rindex(",") > text.rindex("."):
+                # European: dots are thousands, comma is decimal
+                text = text.replace(".", "").replace(",", ".")
+            else:
+                # US/UK: commas are thousands, dot is decimal
+                text = text.replace(",", "")
+        elif "," in text and "." not in text:
+            # Could be decimal comma (e.g. "17,08") or thousands (e.g. "1,234")
+            parts = text.split(",")
+            if len(parts) == 2 and len(parts[1]) == 2:
+                text = text.replace(",", ".")
+            else:
+                text = text.replace(",", "")
+        try:
+            return float(re.sub(r"[^\d.]", "", text))
+        except ValueError:
+            return 0.0
+
+    @staticmethod
+    def _parse_int(text: str) -> int:
+        """Parse '1,234' or '1.234' into int."""
+        import re
+        text = re.sub(r"[^\d]", "", text)
+        try:
+            return int(text)
+        except ValueError:
+            return 0
+
+    def scrape_premios_bulk(self, datas: list[str], db: "DatabaseManager"):
+        """Generator: scrape prizes for multiple dates, yielding progress events."""
+        total = len(datas)
+        yield {"tipo": "inicio", "total": total}
+
+        sucesso = 0
+        falha = 0
+        for i, data in enumerate(datas):
+            yield {"tipo": "progresso", "step": i + 1, "total": total, "data": data}
+            try:
+                prize_data = self.scrape_premios(data)
+                if prize_data:
+                    db.inserir_premios(data, prize_data)
+                    sucesso += 1
+                    yield {"tipo": "ok", "data": data, "step": i + 1}
+                else:
+                    falha += 1
+                    yield {"tipo": "sem_dados", "data": data, "step": i + 1}
+            except Exception as e:
+                falha += 1
+                yield {"tipo": "erro", "data": data, "msg": str(e)[:120], "step": i + 1}
+            time.sleep(1.5)  # Rate limit
+
+        yield {"tipo": "concluido", "sucesso": sucesso, "falha": falha, "total": total}
 
 
 # ═════════════════════════════════════════════════════════════════════════════

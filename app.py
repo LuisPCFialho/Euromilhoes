@@ -23,6 +23,7 @@ from euromilhoes import (
     ExcelImporter, EXCEL_SOURCE_PATH,
     TODOS_PADROES_BIBPAIAP, classificar_padrao_bibpaiap, classificar_padrao_cores,
     corrigir_data_sorteio,
+    PrizeChecker, PremiosScraper, PRIZE_TIERS, CUSTO_POR_APOSTA,
 )
 
 _IS_VERCEL = bool(os.environ.get("VERCEL"))
@@ -745,6 +746,160 @@ def api_decadas_timeline():
             "pcts": [round(d / total * 100, 1) if total else 0 for d in timeline[year]],
         })
     return jsonify(result)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – PRIZE CHECKER (verify multiple-combination bets)
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/verificar-aposta", methods=["POST"])
+def api_verificar_aposta():
+    data = request.get_json(force=True)
+    numeros = data.get("numeros", [])
+    estrelas = data.get("estrelas", [])
+    data_sorteio = data.get("data_sorteio")
+
+    if not data_sorteio:
+        return jsonify({"erro": "Data do sorteio é obrigatória"}), 400
+
+    import sqlite3
+    # Get the draw
+    with sqlite3.connect(db.db_path) as conn:
+        row = conn.execute(
+            "SELECT n1,n2,n3,n4,n5,e1,e2 FROM sorteios WHERE data = ?",
+            (data_sorteio,)
+        ).fetchone()
+    if not row:
+        return jsonify({"erro": f"Sorteio de {data_sorteio} não encontrado"}), 404
+
+    sorteio_nums = [row[0], row[1], row[2], row[3], row[4]]
+    sorteio_stars = [row[5], row[6]]
+
+    # Get prize data if available
+    premios = db.obter_premios(data_sorteio)
+
+    resultado = PrizeChecker.verificar_aposta(
+        numeros, estrelas, sorteio_nums, sorteio_stars, premios
+    )
+    if "erro" in resultado:
+        return jsonify(resultado), 400
+    return jsonify(resultado)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – PRIZES (get/scrape prize data for a draw)
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/premios/<data>")
+def api_premios(data):
+    premios = db.obter_premios(data)
+    if not premios:
+        # Try scraping on-demand
+        scraper = PremiosScraper()
+        prize_data = scraper.scrape_premios(data)
+        if prize_data:
+            db.inserir_premios(data, prize_data)
+            premios = db.obter_premios(data)
+    if not premios:
+        return jsonify({"erro": "Prémios não disponíveis para esta data", "data": data}), 404
+    return jsonify(premios)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – PRIZE STATISTICS (aggregate prize stats)
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/estatisticas-premios")
+def api_estatisticas_premios():
+    todos = db.todos_premios()
+    if not todos:
+        return jsonify({
+            "total_sorteios_com_premios": 0,
+            "maior_jackpot": None,
+            "media_jackpot": 0,
+            "evolucao_jackpots": [],
+            "medias_por_tier": {},
+        })
+
+    jackpots = [(p["data"], p["jackpot"]) for p in todos if p.get("jackpot") and p["jackpot"] > 0]
+    maior = max(jackpots, key=lambda x: x[1]) if jackpots else (None, 0)
+
+    medias_tier = {}
+    for t in range(1, 14):
+        vals = [p[f"t{t}_prize"] for p in todos if p.get(f"t{t}_prize") and p[f"t{t}_prize"] > 0]
+        tier_info = None
+        for key, info in PRIZE_TIERS.items():
+            if info["tier"] == t:
+                tier_info = info
+                break
+        medias_tier[t] = {
+            "nome": tier_info["name"] if tier_info else f"Tier {t}",
+            "media": round(sum(vals) / len(vals), 2) if vals else 0,
+            "min": round(min(vals), 2) if vals else 0,
+            "max": round(max(vals), 2) if vals else 0,
+            "total_sorteios": len(vals),
+        }
+
+    # Jackpot evolution (chronological)
+    evolucao = [{"data": d, "jackpot": j} for d, j in sorted(jackpots, key=lambda x: x[0])]
+
+    return jsonify({
+        "total_sorteios_com_premios": len(todos),
+        "maior_jackpot": {"data": maior[0], "valor": maior[1]} if maior[0] else None,
+        "media_jackpot": round(sum(j for _, j in jackpots) / len(jackpots), 2) if jackpots else 0,
+        "evolucao_jackpots": evolucao[-100:],  # Last 100
+        "medias_por_tier": medias_tier,
+        "total_sem_premios": len(db.datas_sem_premios()),
+    })
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – SCRAPE PRIZES (bulk import missing prize data)
+# ════════════════════════════════════════════════════════════════════════════
+_scrape_premios_status = {"running": False, "progresso": 0, "total": 0, "msg": ""}
+
+@app.route("/api/scrape-premios", methods=["POST"])
+def api_scrape_premios():
+    global _scrape_premios_status
+    if _scrape_premios_status["running"]:
+        return jsonify({"erro": "Scrape já em curso", "status": _scrape_premios_status}), 409
+
+    datas = db.datas_sem_premios()
+    if not datas:
+        return jsonify({"msg": "Todos os sorteios já têm dados de prémios", "total": 0})
+
+    # Limit to 50 at a time to avoid timeouts
+    datas = datas[:50]
+    _scrape_premios_status = {"running": True, "progresso": 0, "total": len(datas), "msg": "A iniciar..."}
+
+    def run_scrape():
+        global _scrape_premios_status
+        scraper = PremiosScraper()
+        sucesso = 0
+        falha = 0
+        for i, data in enumerate(datas):
+            _scrape_premios_status["progresso"] = i + 1
+            _scrape_premios_status["msg"] = f"A processar {data}..."
+            try:
+                prize_data = scraper.scrape_premios(data)
+                if prize_data:
+                    db.inserir_premios(data, prize_data)
+                    sucesso += 1
+                else:
+                    falha += 1
+            except Exception:
+                falha += 1
+            import time
+            time.sleep(1.5)
+        _scrape_premios_status = {
+            "running": False, "progresso": len(datas), "total": len(datas),
+            "msg": f"Concluído: {sucesso} OK, {falha} falharam",
+            "sucesso": sucesso, "falha": falha,
+        }
+
+    threading.Thread(target=run_scrape, daemon=True).start()
+    return jsonify({"msg": f"Scrape iniciado para {len(datas)} sorteios", "total": len(datas)})
+
+@app.route("/api/scrape-premios-status")
+def api_scrape_premios_status():
+    return jsonify(_scrape_premios_status)
 
 
 # ════════════════════════════════════════════════════════════════════════════
