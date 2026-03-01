@@ -903,6 +903,17 @@ def api_verificar_aposta():
     sorteio_stars = [row[5], row[6]]
     premios = db.obter_premios(data_sorteio)
 
+    # Auto-scrape prizes if not in DB
+    if premios is None:
+        try:
+            scraper = PremiosScraper()
+            prize_data = scraper.scrape_premios(data_sorteio)
+            if prize_data:
+                db.inserir_premios(data_sorteio, prize_data)
+                premios = db.obter_premios(data_sorteio)
+        except Exception:
+            pass  # Non-critical; will show "prize data unavailable"
+
     resultados = []
     total_combinacoes = 0
     custo_total = 0.0
@@ -921,12 +932,15 @@ def api_verificar_aposta():
         custo_total += r["custo_total"]
         ganhos_totais += r["ganhos_totais"]
 
+    premios_em_falta = any(r.get("premios_em_falta") for r in resultados)
+
     return jsonify({
         "total_apostas": len(resultados),
         "total_combinacoes": total_combinacoes,
         "custo_total": round(custo_total, 2),
         "ganhos_totais": round(ganhos_totais, 2),
         "lucro_prejuizo": round(ganhos_totais - custo_total, 2),
+        "premios_em_falta": premios_em_falta,
         "sorteio_numeros": sorteio_nums,
         "sorteio_estrelas": sorteio_stars,
         "apostas": resultados,

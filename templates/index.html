@@ -3274,8 +3274,8 @@ function renderVerificarResultado(data, dataSorteio) {
           <strong style="color:#e0e0e0;">Aposta ${idx + 1}</strong>${badge}
           <span style="color:#9ca3af;font-size:.78rem;margin-left:8px;">${aposta.total_combinacoes.toLocaleString("pt-PT")} comb. · €${aposta.custo_total.toFixed(2)}</span>
         </div>
-        <div style="color:${aColor};font-weight:700;font-size:.95rem;">
-          ${aposta.ganhos_totais > 0 ? '€' + aposta.ganhos_totais.toFixed(2) : 'Sem prémio'}
+        <div style="color:${aposta.premios_em_falta ? '#fbbf24' : aColor};font-weight:700;font-size:.95rem;">
+          ${aposta.detalhe && aposta.detalhe.length > 0 ? (aposta.premios_em_falta ? 'Acertou! (valor N/D)' : '€' + aposta.ganhos_totais.toFixed(2)) : 'Sem prémio'}
         </div>
       </div>
       <div class="mb-2">${betNums} ${betStars}</div>

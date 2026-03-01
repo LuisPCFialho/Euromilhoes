@@ -546,22 +546,36 @@ class PrizeChecker:
         # Assign prize values from DB or defaults
         ganhos_totais = 0.0
         detalhe = []
+        premios_em_falta = False
         for t in range(1, 14):
             rt = resultados_tier[t]
             if rt["quantidade"] == 0:
                 continue
             # Get prize value: from DB data first, then default
             premio = 0.0
+            premio_disponivel = True
             if premios and premios.get(f"t{t}_prize") is not None:
-                premio = float(premios[f"t{t}_prize"])
+                val = premios[f"t{t}_prize"]
+                # Treat 0.0 for tiers 1-7 as missing (pari-mutuel prizes can't be 0)
+                if t <= 7 and (val == 0 or val == 0.0):
+                    premio_disponivel = False
+                    premios_em_falta = True
+                else:
+                    premio = float(val)
             else:
                 # Find default from PRIZE_TIERS
+                found_default = False
                 for key, info in PRIZE_TIERS.items():
                     if info["tier"] == t and info["default_eur"] is not None:
                         premio = info["default_eur"]
+                        found_default = True
                         break
+                if not found_default:
+                    premio_disponivel = False
+                    premios_em_falta = True
 
             rt["premio_unitario"] = premio
+            rt["premio_disponivel"] = premio_disponivel
             rt["subtotal"] = premio * rt["quantidade"]
             ganhos_totais += rt["subtotal"]
             detalhe.append(rt)
@@ -572,6 +586,7 @@ class PrizeChecker:
             "ganhos_totais": round(ganhos_totais, 2),
             "lucro_prejuizo": round(ganhos_totais - custo_total, 2),
             "detalhe": detalhe,
+            "premios_em_falta": premios_em_falta,
             "numeros_jogados": sorted(numeros_jogados),
             "estrelas_jogadas": sorted(estrelas_jogadas),
             "sorteio_numeros": sorted(sorteio_numeros),
