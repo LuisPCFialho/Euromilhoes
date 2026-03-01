@@ -626,27 +626,30 @@ class HistoricoScraper:
 
     def scrape_desde(self, desde_data: str, db: "DatabaseManager") -> dict:
         """Scrape draws newer than desde_data (ISO format) and insert into DB.
-        Only fetches the years needed (1-2 years max), so it's fast enough for Vercel.
+        First tries the /results page (recent draws), then falls back to per-year scraping.
         Skips draws whose numbers+stars match any existing draw (anti-duplicate).
         """
-        desde = datetime.date.fromisoformat(desde_data)
-        ano_atual = datetime.date.today().year
-        anos = list(range(desde.year, ano_atual + 1))
-
         # Build set of existing number combos to reject duplicates with different dates
         combinacoes_existentes = set()
         for s in db.todos_sorteios():
             chave = (tuple(sorted(s["numeros"])), tuple(sorted(s["estrelas"])))
             combinacoes_existentes.add(chave)
 
-        todos = []
-        for ano in anos:
-            try:
-                resultados = self._scrape_ano(ano)
-                todos.extend(resultados)
-            except Exception:
-                continue
-            time.sleep(0.5)
+        # Try the recent results page first (covers ~2 months)
+        todos = self._euro_millions_com_recent()
+
+        # Fallback: per-year scraping if recent page returned nothing
+        if not todos:
+            desde = datetime.date.fromisoformat(desde_data)
+            ano_atual = datetime.date.today().year
+            anos = list(range(desde.year, ano_atual + 1))
+            for ano in anos:
+                try:
+                    resultados = self._scrape_ano(ano)
+                    todos.extend(resultados)
+                except Exception:
+                    continue
+                time.sleep(0.5)
 
         # Filter only draws after the last known date
         novos = [s for s in todos if s["data"] > desde_data]
@@ -683,6 +686,50 @@ class HistoricoScraper:
             except Exception:
                 continue
         return []
+
+    def _euro_millions_com_recent(self) -> list[dict]:
+        """Scrape the /results page which lists the most recent ~15 draws."""
+        url = "https://www.euro-millions.com/results"
+        try:
+            r = requests.get(url, headers=self.HEADERS, timeout=25)
+            if r.status_code != 200:
+                return []
+        except Exception:
+            return []
+
+        soup = BeautifulSoup(r.text, "html.parser")
+        results = []
+
+        # Find all <ul class="balls"> — each one is a draw
+        for ul in soup.find_all("ul", class_="balls"):
+            balls = ul.find_all("li", class_="resultBall")
+            main_nums = [int(b.get_text(strip=True)) for b in balls if "ball" in " ".join(b.get("class", [])) and "lucky-star" not in " ".join(b.get("class", []))]
+            star_nums = [int(b.get_text(strip=True)) for b in balls if "lucky-star" in " ".join(b.get("class", []))]
+
+            if len(main_nums) < 5 or len(star_nums) < 2:
+                continue
+
+            # Find date from a nearby link like /results/DD-MM-YYYY
+            date_str = None
+            for ancestor in [ul.parent, ul.parent.parent if ul.parent else None,
+                             ul.parent.parent.parent if ul.parent and ul.parent.parent else None]:
+                if not ancestor:
+                    continue
+                link = ancestor.find("a", href=_re.compile(r"/results/(\d{2})-(\d{2})-(\d{4})"))
+                if link:
+                    m = _re.search(r"(\d{2})-(\d{2})-(\d{4})", link["href"])
+                    if m:
+                        date_str = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+                        break
+
+            if date_str:
+                results.append({
+                    "data": date_str,
+                    "numeros": sorted(main_nums[:5]),
+                    "estrelas": sorted(star_nums[:2]),
+                })
+
+        return self._deduplicate(results)
 
     def _euro_millions_com(self, ano: int) -> list[dict]:
         url = f"https://www.euro-millions.com/results/{ano}"
