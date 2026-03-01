@@ -455,6 +455,7 @@ class PrizeChecker:
         resultados_tier = {}
         for tier_key, tier_info in PRIZE_TIERS.items():
             resultados_tier[tier_info["tier"]] = {
+                "tier": tier_info["tier"],
                 "nome": tier_info["name"],
                 "match": f"{tier_key[0]}+{tier_key[1]}",
                 "quantidade": 0,

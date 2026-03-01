@@ -754,15 +754,19 @@ def api_decadas_timeline():
 @app.route("/api/verificar-aposta", methods=["POST"])
 def api_verificar_aposta():
     data = request.get_json(force=True)
-    numeros = data.get("numeros", [])
-    estrelas = data.get("estrelas", [])
     data_sorteio = data.get("data_sorteio")
+    apostas = data.get("apostas", [])
+
+    # Legacy single-bet format
+    if not apostas and data.get("numeros"):
+        apostas = [{"numeros": data["numeros"], "estrelas": data["estrelas"]}]
 
     if not data_sorteio:
         return jsonify({"erro": "Data do sorteio é obrigatória"}), 400
+    if not apostas:
+        return jsonify({"erro": "Nenhuma aposta fornecida"}), 400
 
     import sqlite3
-    # Get the draw
     with sqlite3.connect(db.db_path) as conn:
         row = conn.execute(
             "SELECT n1,n2,n3,n4,n5,e1,e2 FROM sorteios WHERE data = ?",
@@ -773,16 +777,126 @@ def api_verificar_aposta():
 
     sorteio_nums = [row[0], row[1], row[2], row[3], row[4]]
     sorteio_stars = [row[5], row[6]]
-
-    # Get prize data if available
     premios = db.obter_premios(data_sorteio)
 
-    resultado = PrizeChecker.verificar_aposta(
-        numeros, estrelas, sorteio_nums, sorteio_stars, premios
-    )
-    if "erro" in resultado:
-        return jsonify(resultado), 400
-    return jsonify(resultado)
+    resultados = []
+    total_combinacoes = 0
+    custo_total = 0.0
+    ganhos_totais = 0.0
+
+    for i, aposta in enumerate(apostas):
+        nums = aposta.get("numeros", [])
+        stars = aposta.get("estrelas", [])
+        r = PrizeChecker.verificar_aposta(nums, stars, sorteio_nums, sorteio_stars, premios)
+        if "erro" in r:
+            return jsonify({"erro": f"Aposta {i+1}: {r['erro']}"}), 400
+        r["aposta_nr"] = i + 1
+        r["is_multipla"] = len(nums) > 5 or len(stars) > 2
+        resultados.append(r)
+        total_combinacoes += r["total_combinacoes"]
+        custo_total += r["custo_total"]
+        ganhos_totais += r["ganhos_totais"]
+
+    return jsonify({
+        "total_apostas": len(resultados),
+        "total_combinacoes": total_combinacoes,
+        "custo_total": round(custo_total, 2),
+        "ganhos_totais": round(ganhos_totais, 2),
+        "lucro_prejuizo": round(ganhos_totais - custo_total, 2),
+        "sorteio_numeros": sorteio_nums,
+        "sorteio_estrelas": sorteio_stars,
+        "apostas": resultados,
+    })
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – IMPORT BETS FROM EXCEL
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/importar-apostas-excel", methods=["POST"])
+def api_importar_apostas_excel():
+    """Parse an uploaded Excel file and extract bets (numbers + stars)."""
+    if "file" not in request.files:
+        return jsonify({"erro": "Nenhum ficheiro enviado"}), 400
+
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"erro": "Nenhum ficheiro seleccionado"}), 400
+
+    import tempfile, re
+    suffix = Path(f.filename).suffix.lower()
+    if suffix not in (".xlsx", ".xls", ".csv"):
+        return jsonify({"erro": "Formato não suportado. Use .xlsx, .xls ou .csv"}), 400
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    f.save(tmp.name)
+    tmp.close()
+
+    apostas = []
+    try:
+        if suffix == ".csv":
+            import csv as csvmod
+            with open(tmp.name, "r", encoding="utf-8-sig") as csvf:
+                reader = csvmod.reader(csvf, delimiter=",")
+                for row in reader:
+                    bet = _parse_bet_row(row)
+                    if bet:
+                        apostas.append(bet)
+        else:
+            wb = openpyxl.load_workbook(tmp.name, read_only=True, data_only=True)
+            ws = wb.active
+            for row in ws.iter_rows(values_only=True):
+                bet = _parse_bet_row([str(c) if c is not None else "" for c in row])
+                if bet:
+                    apostas.append(bet)
+            wb.close()
+    except Exception as e:
+        return jsonify({"erro": f"Erro ao ler ficheiro: {str(e)[:200]}"}), 400
+    finally:
+        os.unlink(tmp.name)
+
+    if not apostas:
+        return jsonify({"erro": "Nenhuma aposta encontrada no ficheiro"}), 400
+
+    return jsonify({"apostas": apostas, "total": len(apostas)})
+
+
+def _parse_bet_row(cells: list) -> dict | None:
+    """Try to parse a row of cells into {numeros:[], estrelas:[]}.
+    Supports formats:
+      - Single cell: "3,14,22,36,48+2+9" or "3 14 22 36 48 + 2 9"
+      - Multiple cells: [3, 14, 22, 36, 48, "+", 2, 9] or [3,14,22,36,48,2,9]
+    """
+    import re
+    # Join all cells into one string
+    line = " ".join(str(c).strip() for c in cells if str(c).strip())
+    if not line:
+        return None
+
+    # Try to split on "+"
+    if "+" in line:
+        parts = line.split("+", 1)
+        nums_raw = parts[0]
+        stars_raw = parts[1] if len(parts) > 1 else ""
+        nums = [int(x) for x in re.findall(r"\d+", nums_raw)]
+        stars = [int(x) for x in re.findall(r"\d+", stars_raw)]
+    else:
+        # No + separator: try to guess (first 5+ are numbers, remaining are stars)
+        all_nums = [int(x) for x in re.findall(r"\d+", line)]
+        if len(all_nums) < 7:
+            return None
+        # Assume numbers are 1-50 range, stars are 1-12 range
+        # Heuristic: last 2 values <= 12 are stars
+        nums = all_nums[:-2]
+        stars = all_nums[-2:]
+
+    if len(nums) < 5 or len(stars) < 2:
+        return None
+    if not all(1 <= n <= 50 for n in nums):
+        return None
+    if not all(1 <= s <= 12 for s in stars):
+        return None
+
+    return {"numeros": nums, "estrelas": stars}
 
 
 # ════════════════════════════════════════════════════════════════════════════

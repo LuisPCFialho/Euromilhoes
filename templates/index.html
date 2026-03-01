@@ -465,7 +465,7 @@
       <i class="fa-solid fa-database"></i> Histórico BD
     </a>
     <a class="nav-link" href="#" onclick="showTab('verificar', this)">
-      <i class="fa-solid fa-receipt"></i> Verificar Aposta
+      <i class="fa-solid fa-coins"></i> Quanto Ganhei
     </a>
     <a class="nav-link" href="#" onclick="showTab('atualizar', this)">
       <i class="fa-solid fa-cloud-arrow-down"></i> Actualizar BD
@@ -484,7 +484,7 @@
   </div>
   <div style="padding:10px 16px 14px;border-top:1px solid #2a2a4a;text-align:center;font-size:.73rem;line-height:1.7;color:#6b7280;">
     <div style="color:#9ca3af;">Autor: Luís Fialho</div>
-    <div>Versão 31 · 01.Mar.2026</div>
+    <div>Versão 32 · 01.Mar.2026</div>
   </div>
 </div>
 
@@ -721,17 +721,17 @@
 
 
   <!-- ════════════ TAB: ACTUALIZAR ════════════ -->
-  <!-- ════════════ TAB: VERIFICAR APOSTA ════════════ -->
+  <!-- ════════════ TAB: QUANTO GANHEI ════════════ -->
   <div id="tab-verificar" class="tab-pane">
     <div class="section-header">
-      <i class="fa-solid fa-receipt"></i>
-      <h3>Verificar Aposta</h3>
+      <i class="fa-solid fa-coins"></i>
+      <h3>Quanto Ganhei</h3>
     </div>
 
     <div class="row g-3">
       <div class="col-lg-5">
         <div class="card-dark">
-          <h5><i class="fa-solid fa-gamepad me-2" style="color:#74c0fc;"></i>A tua Aposta</h5>
+          <h5><i class="fa-solid fa-gamepad me-2" style="color:#74c0fc;"></i>As tuas Apostas</h5>
 
           <div class="mb-3">
             <label class="form-label" style="color:#9ca3af;font-size:.85rem;">Sorteio</label>
@@ -742,27 +742,39 @@
 
           <div class="mb-3">
             <label class="form-label" style="color:#9ca3af;font-size:.85rem;">
-              Números jogados <small>(5 a 15, separados por vírgula)</small>
+              Apostas <small>(uma por linha)</small>
             </label>
-            <input type="text" class="form-control" id="verificar-numeros"
-                   placeholder="ex: 3, 8, 14, 22, 35, 41, 48"
-                   style="background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;">
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label" style="color:#9ca3af;font-size:.85rem;">
-              Estrelas jogadas <small>(2 a 12, separadas por vírgula)</small>
-            </label>
-            <input type="text" class="form-control" id="verificar-estrelas"
-                   placeholder="ex: 2, 5, 7, 9"
-                   style="background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;">
+            <textarea class="form-control" id="verificar-apostas" rows="6"
+                   placeholder="3,14,22,36,48+2+9&#10;5,11,23,37,44+1+8&#10;1,7,15,28,33,40,49+3+5+10"
+                   style="background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;font-family:monospace;font-size:.88rem;"></textarea>
+            <div style="font-size:.78rem;color:#666;margin-top:6px;">
+              <strong>Formato:</strong> números separados por vírgula <code style="color:#74c0fc;">+</code> estrelas separadas por <code style="color:#74c0fc;">+</code><br>
+              Exemplo simples: <code style="color:#aaa;">3,14,22,36,48+2+9</code><br>
+              Aposta múltipla: <code style="color:#aaa;">1,7,15,28,33,40,49+3+5+10</code>
+              <span style="color:#ffd700;">(7 nºs + 3 estrelas = múltipla)</span><br>
+              Tudo antes do primeiro <code style="color:#74c0fc;">+</code> = números &middot; tudo depois = estrelas<br>
+              Se tiveres mais de 5 números ou mais de 2 estrelas, o programa detecta automaticamente que é uma aposta múltipla e calcula todas as combinações.
+            </div>
           </div>
 
           <div id="verificar-info" class="mb-3" style="color:#74c0fc;font-size:.88rem;min-height:24px;"></div>
 
-          <button class="btn btn-em w-100" id="btn-verificar" onclick="verificarAposta()">
-            <i class="fa-solid fa-magnifying-glass me-2"></i>Verificar Aposta
+          <button class="btn btn-em w-100 mb-2" id="btn-verificar" onclick="verificarAposta()">
+            <i class="fa-solid fa-magnifying-glass me-2"></i>Quanto Ganhei?
           </button>
+
+          <div style="border-top:1px solid #2a2a4a;margin-top:10px;padding-top:10px;">
+            <label class="form-label" style="color:#9ca3af;font-size:.82rem;">
+              <i class="fa-solid fa-file-excel me-1" style="color:#51cf66;"></i>Importar apostas de ficheiro Excel / CSV
+            </label>
+            <input type="file" class="form-control form-control-sm" id="importar-apostas-file"
+                   accept=".xlsx,.xls,.csv"
+                   onchange="importarApostasExcel()"
+                   style="background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;font-size:.82rem;">
+            <div style="font-size:.72rem;color:#666;margin-top:4px;">
+              O ficheiro deve ter uma aposta por linha, no formato <code style="color:#aaa;">nºs+estrelas</code> (numa só coluna) ou números em colunas separadas.
+            </div>
+          </div>
         </div>
       </div>
 
@@ -773,9 +785,10 @@
         </div>
         <div class="card-dark" id="verificar-placeholder">
           <div class="text-center py-4" style="color:#6c757d;">
-            <i class="fa-solid fa-receipt fa-3x mb-3" style="opacity:.3;"></i>
-            <p>Insere os teus números e estrelas para verificar se ganhaste prémio num sorteio específico.</p>
-            <p style="font-size:.85rem;">Suporta <strong>apostas múltiplas</strong> — podes colocar mais de 5 números e/ou mais de 2 estrelas para verificar todas as combinações automaticamente.</p>
+            <i class="fa-solid fa-coins fa-3x mb-3" style="opacity:.3;"></i>
+            <p>Insere as tuas apostas para saber exactamente quanto ganhaste num sorteio.</p>
+            <p style="font-size:.85rem;">Cada linha é uma aposta. Usa o formato <strong>números+estrelas</strong>.<br>
+            Se colocares mais de 5 números ou mais de 2 estrelas, o programa detecta automaticamente que é uma <strong>aposta múltipla</strong> e calcula todas as combinações.</p>
           </div>
         </div>
       </div>
@@ -2932,7 +2945,7 @@ async function scrapePremios() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// VERIFICAR APOSTA – Prize checker
+// QUANTO GANHEI – Prize checker
 // ════════════════════════════════════════════════════════════════════
 let _verificarSorteiosLoaded = false;
 
@@ -2951,29 +2964,51 @@ async function loadVerificarSorteios() {
     _verificarSorteiosLoaded = true;
   } catch(e) { console.error("loadVerificarSorteios:", e); }
 
-  // Setup live info
-  const numsInput = document.getElementById("verificar-numeros");
-  const starsInput = document.getElementById("verificar-estrelas");
-  if (numsInput) numsInput.addEventListener("input", updateVerificarInfo);
-  if (starsInput) starsInput.addEventListener("input", updateVerificarInfo);
+  // Setup live info on textarea
+  const ta = document.getElementById("verificar-apostas");
+  if (ta) ta.addEventListener("input", updateVerificarInfo);
+}
+
+function parseBetLine(line) {
+  // Format: "3,14,22,36,48+2+9"  — everything before first + = numbers, after = stars
+  line = line.trim();
+  if (!line) return null;
+  const plusIdx = line.indexOf("+");
+  if (plusIdx === -1) return null; // must have at least one +
+  const numsPart = line.substring(0, plusIdx);
+  const starsPart = line.substring(plusIdx + 1);
+  const nums = numsPart.split(/[,;\s]+/).map(x => parseInt(x.trim(), 10)).filter(x => !isNaN(x) && x >= 1 && x <= 50);
+  // Stars are separated by + signs
+  const stars = starsPart.split("+").map(x => parseInt(x.trim(), 10)).filter(x => !isNaN(x) && x >= 1 && x <= 12);
+  if (nums.length < 5 || stars.length < 2) return null;
+  return { numeros: nums, estrelas: stars };
+}
+
+function parseAllBets() {
+  const text = (document.getElementById("verificar-apostas")?.value || "").trim();
+  if (!text) return [];
+  return text.split("\n").map(parseBetLine).filter(b => b !== null);
 }
 
 function updateVerificarInfo() {
   const info = document.getElementById("verificar-info");
   if (!info) return;
-  const nums = parseNumberList(document.getElementById("verificar-numeros").value);
-  const stars = parseNumberList(document.getElementById("verificar-estrelas").value);
-  if (nums.length < 5 || stars.length < 2) { info.textContent = ""; return; }
+  const bets = parseAllBets();
+  if (bets.length === 0) { info.textContent = ""; return; }
 
-  const combosN = comb(nums.length, 5);
-  const combosS = comb(stars.length, 2);
-  const total = combosN * combosS;
-  const custo = (total * 2.50).toFixed(2);
-  info.innerHTML = `<i class="fa-solid fa-calculator me-1"></i>${nums.length} números × ${stars.length} estrelas = <strong>${total.toLocaleString("pt-PT")} combinações</strong> (custo: <strong>€${custo}</strong>)`;
-}
-
-function parseNumberList(s) {
-  return (s || "").split(/[,;\s]+/).map(x => parseInt(x.trim(), 10)).filter(x => !isNaN(x) && x > 0);
+  let totalCombos = 0;
+  let multiplas = 0;
+  for (const b of bets) {
+    const cn = comb(b.numeros.length, 5);
+    const cs = comb(b.estrelas.length, 2);
+    totalCombos += cn * cs;
+    if (b.numeros.length > 5 || b.estrelas.length > 2) multiplas++;
+  }
+  const custo = (totalCombos * 2.50).toFixed(2);
+  let label = `<i class="fa-solid fa-calculator me-1"></i>${bets.length} aposta${bets.length > 1 ? 's' : ''}`;
+  if (multiplas > 0) label += ` (${multiplas} múltipla${multiplas > 1 ? 's' : ''})`;
+  label += ` = <strong>${totalCombos.toLocaleString("pt-PT")} combinações</strong> (custo: <strong>€${custo}</strong>)`;
+  info.innerHTML = label;
 }
 
 function comb(n, k) {
@@ -2983,14 +3018,38 @@ function comb(n, k) {
   return Math.round(r);
 }
 
+async function importarApostasExcel() {
+  const fileInput = document.getElementById("importar-apostas-file");
+  if (!fileInput.files.length) return;
+
+  const fd = new FormData();
+  fd.append("file", fileInput.files[0]);
+
+  try {
+    const resp = await fetch("api/importar-apostas-excel", { method: "POST", body: fd });
+    const data = await resp.json();
+    if (data.erro) {
+      toast(data.erro, "error");
+      return;
+    }
+    // Populate textarea with imported bets
+    const ta = document.getElementById("verificar-apostas");
+    const lines = data.apostas.map(a => a.numeros.join(",") + "+" + a.estrelas.join("+"));
+    ta.value = (ta.value ? ta.value.trim() + "\n" : "") + lines.join("\n");
+    updateVerificarInfo();
+    toast(`${data.total} aposta${data.total > 1 ? 's' : ''} importada${data.total > 1 ? 's' : ''} do ficheiro`, "success");
+  } catch(e) {
+    toast("Erro ao importar: " + e.message, "error");
+  }
+  fileInput.value = "";
+}
+
 async function verificarAposta() {
   const dataSorteio = document.getElementById("verificar-sorteio").value;
-  const numeros = parseNumberList(document.getElementById("verificar-numeros").value);
-  const estrelas = parseNumberList(document.getElementById("verificar-estrelas").value);
+  const apostas = parseAllBets();
 
   if (!dataSorteio) { toast("Selecciona um sorteio", "error"); return; }
-  if (numeros.length < 5) { toast("Mínimo 5 números", "error"); return; }
-  if (estrelas.length < 2) { toast("Mínimo 2 estrelas", "error"); return; }
+  if (apostas.length === 0) { toast("Insere pelo menos uma aposta válida", "error"); return; }
 
   const btn = document.getElementById("btn-verificar");
   btn.disabled = true;
@@ -3000,7 +3059,7 @@ async function verificarAposta() {
     const resp = await fetch("api/verificar-aposta", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ numeros, estrelas, data_sorteio: dataSorteio })
+      body: JSON.stringify({ apostas, data_sorteio: dataSorteio })
     });
     const data = await resp.json();
     if (data.erro) {
@@ -3012,8 +3071,12 @@ async function verificarAposta() {
     toast("Erro ao verificar: " + e.message, "error");
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-magnifying-glass me-2"></i>Verificar Aposta';
+    btn.innerHTML = '<i class="fa-solid fa-magnifying-glass me-2"></i>Quanto Ganhei?';
   }
+}
+
+function tierOrdinal(t) {
+  return t + "º Prémio";
 }
 
 function renderVerificarResultado(data, dataSorteio) {
@@ -3026,42 +3089,34 @@ function renderVerificarResultado(data, dataSorteio) {
   const lucroColor = isLucro ? "#51cf66" : "#ff6b6b";
   const lucroIcon = isLucro ? "fa-arrow-trend-up" : "fa-arrow-trend-down";
 
-  // Draw balls
+  // Draw balls (from first aposta's sorteio data)
+  const allJogados = new Set();
+  const allStarsJogados = new Set();
+  data.apostas.forEach(a => {
+    (a.numeros_jogados || []).forEach(n => allJogados.add(n));
+    (a.estrelas_jogadas || []).forEach(s => allStarsJogados.add(s));
+  });
+
   const sorteioNums = data.sorteio_numeros.map(n => {
-    const matched = data.numeros_jogados.includes(n);
-    return `<span class="ball${matched ? '' : ''}" style="display:inline-block;width:36px;height:36px;line-height:36px;text-align:center;border-radius:50%;font-weight:700;font-size:.9rem;margin:2px;background:${matched ? '#ffd700' : '#2a2a4a'};color:${matched ? '#000' : '#666'};">${n}</span>`;
+    const matched = allJogados.has(n);
+    return `<span style="display:inline-block;width:36px;height:36px;line-height:36px;text-align:center;border-radius:50%;font-weight:700;font-size:.9rem;margin:2px;background:${matched ? '#ffd700' : '#2a2a4a'};color:${matched ? '#000' : '#666'};">${n}</span>`;
   }).join("");
   const sorteioStars = data.sorteio_estrelas.map(s => {
-    const matched = data.estrelas_jogadas.includes(s);
+    const matched = allStarsJogados.has(s);
     return `<span style="display:inline-block;width:36px;height:36px;line-height:36px;text-align:center;border-radius:50%;font-weight:700;font-size:.9rem;margin:2px;background:${matched ? '#ffd700' : '#1a1a2e'};color:${matched ? '#000' : '#666'};border:2px solid ${matched ? '#ffd700' : '#333'};">★${s}</span>`;
   }).join("");
 
-  let tierRows = "";
-  if (data.detalhe && data.detalhe.length > 0) {
-    tierRows = data.detalhe.map(d => `
-      <tr>
-        <td style="font-weight:600;">${d.nome}</td>
-        <td class="text-center">${d.match}</td>
-        <td class="text-center">${d.quantidade.toLocaleString("pt-PT")}</td>
-        <td class="text-end">€${d.premio_unitario.toFixed(2)}</td>
-        <td class="text-end" style="color:#51cf66;font-weight:600;">€${d.subtotal.toFixed(2)}</td>
-      </tr>
-    `).join("");
-  } else {
-    tierRows = `<tr><td colspan="5" class="text-center" style="color:#666;padding:20px;">Nenhum prémio nesta aposta</td></tr>`;
-  }
-
-  c.innerHTML = `
+  // Summary cards
+  let summaryHTML = `
     <div class="mb-3">
       <div style="font-size:.82rem;color:#9ca3af;margin-bottom:6px;">Sorteio de ${dataSorteio}</div>
       <div class="mb-2">${sorteioNums} ${sorteioStars}</div>
     </div>
-
     <div class="row g-3 mb-3">
       <div class="col-6 col-md-3">
         <div style="background:#1a1a2e;border-radius:8px;padding:12px;text-align:center;">
-          <div style="font-size:.72rem;color:#9ca3af;">Combinações</div>
-          <div style="font-size:1.3rem;font-weight:700;color:#74c0fc;">${data.total_combinacoes.toLocaleString("pt-PT")}</div>
+          <div style="font-size:.72rem;color:#9ca3af;">Apostas</div>
+          <div style="font-size:1.3rem;font-weight:700;color:#74c0fc;">${data.total_apostas}</div>
         </div>
       </div>
       <div class="col-6 col-md-3">
@@ -3082,16 +3137,68 @@ function renderVerificarResultado(data, dataSorteio) {
           <div style="font-size:1.3rem;font-weight:700;color:${lucroColor};"><i class="fa-solid ${lucroIcon} me-1"></i>€${data.lucro_prejuizo.toFixed(2)}</div>
         </div>
       </div>
-    </div>
+    </div>`;
 
-    <table class="table table-sm" style="font-size:.88rem;">
-      <thead><tr>
-        <th>Tier</th><th class="text-center">Acertos</th><th class="text-center">Qtd</th>
-        <th class="text-end">Prémio/un.</th><th class="text-end">Subtotal</th>
-      </tr></thead>
-      <tbody>${tierRows}</tbody>
-    </table>
-  `;
+  // Per-bet results
+  let betsHTML = "";
+  data.apostas.forEach((aposta, idx) => {
+    const aLucro = aposta.lucro_prejuizo >= 0;
+    const aColor = aLucro ? "#51cf66" : "#ff6b6b";
+    const isMultipla = aposta.is_multipla;
+    const badge = isMultipla
+      ? `<span style="background:#2a1a4a;color:#b694f7;border:1px solid #6f42c1;border-radius:4px;padding:1px 6px;font-size:.72rem;margin-left:6px;">Múltipla</span>`
+      : "";
+
+    // Show which numbers/stars were bet
+    const betNums = (aposta.numeros_jogados || []).map(n => {
+      const hit = data.sorteio_numeros.includes(n);
+      return `<span style="display:inline-block;width:28px;height:28px;line-height:28px;text-align:center;border-radius:50%;font-weight:700;font-size:.78rem;margin:1px;background:${hit ? '#ffd700' : '#2a2a4a'};color:${hit ? '#000' : '#888'};">${n}</span>`;
+    }).join("");
+    const betStars = (aposta.estrelas_jogadas || []).map(s => {
+      const hit = data.sorteio_estrelas.includes(s);
+      return `<span style="display:inline-block;width:28px;height:28px;line-height:28px;text-align:center;border-radius:50%;font-weight:700;font-size:.78rem;margin:1px;background:${hit ? '#ffd700' : '#1a1a2e'};color:${hit ? '#000' : '#888'};border:1px solid ${hit ? '#ffd700' : '#444'};">★${s}</span>`;
+    }).join("");
+
+    let tierRows = "";
+    if (aposta.detalhe && aposta.detalhe.length > 0) {
+      tierRows = aposta.detalhe.map(d => `
+        <tr>
+          <td><span style="background:#1a2a4a;color:#74c0fc;border-radius:4px;padding:1px 6px;font-size:.75rem;font-weight:600;">${tierOrdinal(d.tier)}</span></td>
+          <td style="font-weight:600;">${d.nome}</td>
+          <td class="text-center">${d.match}</td>
+          <td class="text-center">${d.quantidade.toLocaleString("pt-PT")}</td>
+          <td class="text-end">€${d.premio_unitario.toFixed(2)}</td>
+          <td class="text-end" style="color:#51cf66;font-weight:600;">€${d.subtotal.toFixed(2)}</td>
+        </tr>
+      `).join("");
+    } else {
+      tierRows = `<tr><td colspan="6" class="text-center" style="color:#666;padding:12px;">Sem prémio</td></tr>`;
+    }
+
+    betsHTML += `
+    <div style="border:1px solid #2a2a4a;border-radius:8px;padding:12px;margin-bottom:10px;${aposta.ganhos_totais > 0 ? 'border-color:#2a4a2a;' : ''}">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div>
+          <strong style="color:#e0e0e0;">Aposta ${idx + 1}</strong>${badge}
+          <span style="color:#9ca3af;font-size:.78rem;margin-left:8px;">${aposta.total_combinacoes.toLocaleString("pt-PT")} comb. · €${aposta.custo_total.toFixed(2)}</span>
+        </div>
+        <div style="color:${aColor};font-weight:700;font-size:.95rem;">
+          ${aposta.ganhos_totais > 0 ? '€' + aposta.ganhos_totais.toFixed(2) : 'Sem prémio'}
+        </div>
+      </div>
+      <div class="mb-2">${betNums} ${betStars}</div>
+      ${aposta.detalhe && aposta.detalhe.length > 0 ? `
+      <table class="table table-sm mb-0" style="font-size:.82rem;">
+        <thead><tr>
+          <th>Prémio</th><th>Tier</th><th class="text-center">Acertos</th><th class="text-center">Qtd</th>
+          <th class="text-end">€/un.</th><th class="text-end">Subtotal</th>
+        </tr></thead>
+        <tbody>${tierRows}</tbody>
+      </table>` : `<div style="color:#666;font-size:.85rem;">Sem prémio</div>`}
+    </div>`;
+  });
+
+  c.innerHTML = summaryHTML + betsHTML;
 }
 
 // ════════════════════════════════════════════════════════════════════
