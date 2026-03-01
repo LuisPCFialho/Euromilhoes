@@ -100,6 +100,10 @@ def api_gerar():
         "filtro_H":   bool(body.get("filtro_H", body.get("progressao", True))),
     }
 
+    # #33/#34 Exclusion/inclusion lists
+    excluir = set(int(n) for n in body.get("excluir", []) if 1 <= int(n) <= 50) if body.get("excluir") else set()
+    incluir = set(int(n) for n in body.get("incluir", []) if 1 <= int(n) <= 50) if body.get("incluir") else set()
+
     cores, _ = _get_cores()
     ultimo   = db.ultimo_sorteio()
     ultimo_nums = ultimo["numeros"] if ultimo else []
@@ -109,12 +113,23 @@ def api_gerar():
 
     chaves_geradas = []
     total_tentativas = 0
+    max_outer = quantidade * 200  # safety limit
+    outer_tries = 0
 
-    for _ in range(quantidade):
+    while len(chaves_geradas) < quantidade and outer_tries < max_outer:
+        outer_tries += 1
         chave = gen.gerar_chave()
-        if chave:
-            chaves_geradas.append(chave)
-            total_tentativas += chave["tentativas"]
+        if not chave:
+            break
+        total_tentativas += chave["tentativas"]
+        nums_set = set(chave["numeros"])
+        # Check exclusion: none of the excluded numbers should be present
+        if excluir and nums_set & excluir:
+            continue
+        # Check inclusion: all included numbers must be present
+        if incluir and not incluir.issubset(nums_set):
+            continue
+        chaves_geradas.append(chave)
 
     # Save to generation history
     hist_entry = {

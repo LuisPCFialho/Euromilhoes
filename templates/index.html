@@ -206,6 +206,89 @@
     }
     .btn-delete-draw:hover { opacity:1; }
 
+    /* ── Mobile responsive ── */
+    @media (max-width: 991px) {
+      #sidebar { width:100%; height:auto; position:relative; flex-direction:row; flex-wrap:wrap; }
+      #sidebar .brand { padding:10px 16px; border-bottom:none; }
+      #sidebar .brand img { width:120px; }
+      #sidebar nav { display:flex; flex-wrap:wrap; padding:4px 8px; flex:1; }
+      #sidebar nav .nav-link { padding:6px 10px; font-size:.82rem; margin:2px; }
+      #sidebar .status-bar { border-top:none; padding:8px 16px; white-space:nowrap; }
+      #main { margin-left:0; padding:16px; }
+      .section-header h3 { font-size:1.1rem; }
+      .ball { width:36px; height:36px; font-size:.88rem; }
+      #mobile-toggle { display:none; }
+    }
+    @media (max-width: 575px) {
+      #sidebar nav .nav-link span { display:none; }
+      #sidebar nav .nav-link { padding:8px; justify-content:center; min-width:40px; }
+      .card-dark { padding:14px; }
+    }
+
+    /* ── Scroll to top ── */
+    #scroll-top {
+      position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+      width:42px; height:42px; border-radius:50%;
+      background:var(--em-gold); color:#fff; border:none;
+      font-size:1.1rem; cursor:pointer; z-index:200;
+      display:none; align-items:center; justify-content:center;
+      box-shadow:0 4px 16px rgba(0,0,0,.5); transition:opacity .2s;
+    }
+    #scroll-top:hover { background:#c73950; }
+
+    /* ── Skeleton loader ── */
+    .skeleton { background:linear-gradient(90deg,#1a2540 25%,#243050 50%,#1a2540 75%);
+      background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:6px; }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+    .skeleton-line { height:14px; margin:8px 0; }
+    .skeleton-ball { width:42px; height:42px; border-radius:50%; display:inline-block; margin:3px; }
+
+    /* ── Theme toggle ── */
+    body.light-mode { --em-dark:#f0f2f5; --em-mid:#ffffff; --em-accent:#e8ecf0;
+      --bs-body-bg:#f0f2f5; --bs-body-color:#333; background:#f0f2f5; color:#333; }
+    body.light-mode .card-dark { background:#fff; border-color:#ddd; }
+    body.light-mode #sidebar { background:#fff; border-color:#ddd; }
+    body.light-mode #sidebar nav .nav-link { color:#666; }
+    body.light-mode #sidebar nav .nav-link:hover { background:#f0f2f5; color:#333; }
+    body.light-mode #sidebar nav .nav-link.active { background:#e8ecf0; color:#333; }
+    body.light-mode table.table { color:#333; }
+    body.light-mode table.table th { color:#666; border-color:#ddd; }
+    body.light-mode table.table td { border-color:#eee; }
+    body.light-mode .hist-year-header { background:#e8ecf0; color:#333; }
+    body.light-mode .hist-year-header:hover { background:#dde2e8; }
+    body.light-mode select.form-select, body.light-mode input.form-control { background:#fff; color:#333; border-color:#ccc; }
+    body.light-mode .filtros-ativos-bar { background:#f0f2f5; border-color:#ddd; }
+    body.light-mode .badge-padrao { background:#e8ecf0; color:#0f3460; }
+
+    /* ── Copy button ── */
+    .btn-copy { background:transparent; border:1px solid #444; color:#aaa; font-size:.78rem;
+      padding:3px 10px; border-radius:6px; cursor:pointer; transition:.15s; }
+    .btn-copy:hover { border-color:#74c0fc; color:#74c0fc; }
+
+    /* ── Favourite star ── */
+    .btn-fav { background:none; border:none; color:#555; font-size:1rem; cursor:pointer; transition:.15s; }
+    .btn-fav:hover, .btn-fav.active { color:#ffd700; }
+
+    /* ── Search box ── */
+    .search-box { background:#1a2540; border:1px solid #2a3a60; border-radius:8px;
+      padding:6px 12px; color:#e0e0e0; font-size:.85rem; width:100%; max-width:300px; }
+    .search-box:focus { outline:none; border-color:var(--em-azul); }
+    body.light-mode .search-box { background:#fff; border-color:#ccc; color:#333; }
+
+    /* ── Heatmap grid ── */
+    .heatmap-grid { display:grid; grid-template-columns:repeat(10,1fr); gap:3px; }
+    .heatmap-cell { aspect-ratio:1; border-radius:6px; display:flex; align-items:center;
+      justify-content:center; font-weight:700; font-size:.82rem; transition:.15s; cursor:default; }
+    .heatmap-cell:hover { transform:scale(1.15); z-index:1; }
+
+    /* ── Countdown badge ── */
+    .countdown-badge { background:#1a3050; border:1px solid var(--em-azul); border-radius:10px;
+      padding:6px 14px; display:inline-flex; align-items:center; gap:8px; font-size:.85rem; }
+
+    /* ── Focus indicators (accessibility) ── */
+    a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible,
+    .form-check-input:focus-visible { outline:2px solid var(--em-azul); outline-offset:2px; }
+
     /* ── Stats ── */
     .freq-rank-hot  { color:var(--em-verd); font-weight:700; }
     .freq-rank-cold { color:var(--em-azul); font-weight:700; }
@@ -235,6 +318,11 @@
 
 <!-- ── Toast ── -->
 <div id="toast-box"></div>
+
+<!-- ── Scroll to top ── -->
+<button id="scroll-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Voltar ao topo">
+  <i class="fa-solid fa-chevron-up"></i>
+</button>
 
 <!-- ── Sidebar ── -->
 <div id="sidebar">
@@ -270,11 +358,17 @@
   <div class="status-bar" id="status-bar">
     <i class="fa-solid fa-circle-dot me-1" style="color:#51cf66;"></i>
     <span id="sb-total">–</span> sorteios<br/>
-    Último: <span id="sb-ultimo">–</span>
+    Último: <span id="sb-ultimo">–</span><br/>
+    <span id="sb-proximo" style="font-size:.72rem;"></span>
+    <div style="margin-top:8px;">
+      <button class="btn-ghost btn-sm" onclick="toggleTheme()" style="font-size:.72rem;padding:2px 8px;border-radius:6px;" aria-label="Alternar tema claro/escuro">
+        <i class="fa-solid fa-circle-half-stroke me-1"></i><span id="theme-label">Claro</span>
+      </button>
+    </div>
   </div>
   <div style="padding:10px 16px 14px;border-top:1px solid #2a2a4a;text-align:center;font-size:.73rem;line-height:1.7;color:#6b7280;">
     <div style="color:#9ca3af;">Autor: Luís Fialho</div>
-    <div>Versão 27 · 01.Mar.2026</div>
+    <div>Versão 29 · 01.Mar.2026</div>
   </div>
 </div>
 
@@ -304,9 +398,37 @@
           </div>
           <div id="filtros-config-list"></div>
 
-          <button class="btn btn-em w-100 mt-3" onclick="gerarChaves()">
+          <!-- Filter presets (#31) -->
+          <div class="mb-2 mt-2">
+            <label class="form-label small" style="color:#9ca3af;">Preset de filtros</label>
+            <div class="d-flex gap-2">
+              <button class="btn btn-ghost btn-sm flex-fill" onclick="applyPreset('all')" title="Todos os filtros activos">Todos</button>
+              <button class="btn btn-ghost btn-sm flex-fill" onclick="applyPreset('conservative')" title="Filtros mais seguros">Conservador</button>
+              <button class="btn btn-ghost btn-sm flex-fill" onclick="applyPreset('aggressive')" title="Filtros mínimos">Agressivo</button>
+            </div>
+          </div>
+
+          <!-- Exclusion/inclusion filters (#33, #34) -->
+          <div class="mb-2">
+            <label class="form-label small" style="color:#9ca3af;">Excluir números (opcional)</label>
+            <input type="text" id="excluir-nums" class="form-control form-control-sm" placeholder="ex: 7,13,42"/>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small" style="color:#9ca3af;">Incluir obrigatório (opcional)</label>
+            <input type="text" id="incluir-nums" class="form-control form-control-sm" placeholder="ex: 5,28"/>
+          </div>
+
+          <button class="btn btn-em w-100 mt-2" onclick="gerarChaves()" id="btn-gerar">
             <i class="fa-solid fa-play me-2"></i>Gerar Chaves
           </button>
+          <div class="d-flex gap-2 mt-2">
+            <button class="btn btn-ghost btn-sm flex-fill" onclick="luckyPick()" title="1 chave aleatória sem filtros" aria-label="Lucky Pick">
+              <i class="fa-solid fa-clover me-1" style="color:#51cf66;"></i>Lucky Pick
+            </button>
+            <button class="btn btn-ghost btn-sm flex-fill" onclick="gerarChaves()" id="btn-regen" style="display:none;" title="Repetir última geração" aria-label="Gerar novamente">
+              <i class="fa-solid fa-rotate me-1"></i>Gerar Novamente
+            </button>
+          </div>
         </div>
 
         <!-- Colour classification -->
@@ -321,9 +443,18 @@
         <div class="card-dark" id="results-panel" style="display:none;">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <h5 class="mb-0"><i class="fa-solid fa-list me-2"></i>Chaves Geradas</h5>
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 flex-wrap">
               <span id="gen-stats" style="color:#9ca3af;font-size:.82rem;" class="align-self-center"></span>
-              <button class="btn btn-ghost btn-sm" onclick="exportarExcel()">
+              <button class="btn btn-ghost btn-sm" onclick="copiarChaves()" title="Copiar para clipboard" aria-label="Copiar chaves">
+                <i class="fa-solid fa-copy me-1"></i>Copiar
+              </button>
+              <button class="btn btn-ghost btn-sm" onclick="compararComSorteio()" title="Comparar com último sorteio" aria-label="Comparar com sorteio">
+                <i class="fa-solid fa-check-double me-1" style="color:#ffd700;"></i>Comparar
+              </button>
+              <button class="btn btn-ghost btn-sm" onclick="guardarFavorito()" title="Guardar como favorito" aria-label="Guardar favorito">
+                <i class="fa-solid fa-star me-1" style="color:#ffd700;"></i>Favorito
+              </button>
+              <button class="btn btn-ghost btn-sm" onclick="exportarExcel()" aria-label="Exportar Excel">
                 <i class="fa-solid fa-file-excel me-1" style="color:#51cf66;"></i>Excel
               </button>
             </div>
@@ -453,6 +584,13 @@
       </div>
     </div>
 
+    <!-- Search + expand/collapse (#12, #20) -->
+    <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+      <input type="text" id="hist-search" class="search-box" placeholder="Pesquisar por data, número..." oninput="filtrarHistorico()" aria-label="Pesquisar histórico"/>
+      <button class="btn btn-ghost btn-sm" onclick="toggleAllYears(true)"><i class="fa-solid fa-expand me-1"></i>Expandir Todos</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleAllYears(false)"><i class="fa-solid fa-compress me-1"></i>Colapsar Todos</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportarCSV()" title="Exportar como CSV" aria-label="Exportar CSV"><i class="fa-solid fa-file-csv me-1" style="color:#51cf66;"></i>CSV</button>
+    </div>
     <div id="historico-content"></div>
   </div>
 
@@ -543,15 +681,206 @@ let lastChaves  = [];
 let lastCores   = {};
 let lastFiltros = [];
 let lastConfig  = {};
+let _deletedUndo = null; // for undo delete (#5)
 
 // ════════════════════════════════════════════════════════════════════
 // Boot
 // ════════════════════════════════════════════════════════════════════
 document.addEventListener("DOMContentLoaded", () => {
   renderFilterConfig();
+  loadSavedFilters();  // #2 restore localStorage
   loadStatus();
+  loadProximoSorteio(); // #30 countdown
+  autoCheckMissing();   // #39 auto-update
+  initTheme();          // #44 theme
   document.getElementById("m-data").value = new Date().toISOString().split("T")[0];
 });
+
+// #10 Unsaved changes warning
+window.addEventListener("beforeunload", e => {
+  if (lastChaves.length > 0) { e.preventDefault(); }
+});
+
+// #8 Scroll to top button
+window.addEventListener("scroll", () => {
+  const btn = document.getElementById("scroll-top");
+  btn.style.display = window.scrollY > 300 ? "flex" : "none";
+});
+
+// #4 Keyboard shortcuts
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey && e.key === "g") { e.preventDefault(); gerarChaves(); }
+  if (e.ctrlKey && e.key === "e") { e.preventDefault(); exportarExcel(); }
+  if (e.ctrlKey && e.key === "l") { e.preventDefault(); luckyPick(); }
+});
+
+// ════════════════════════════════════════════════════════════════════
+// #44 Theme toggle
+// ════════════════════════════════════════════════════════════════════
+function initTheme() {
+  if (localStorage.getItem("theme") === "light") {
+    document.body.classList.add("light-mode");
+    const l = document.getElementById("theme-label"); if (l) l.textContent = "Escuro";
+  }
+}
+function toggleTheme() {
+  document.body.classList.toggle("light-mode");
+  const isLight = document.body.classList.contains("light-mode");
+  localStorage.setItem("theme", isLight ? "light" : "dark");
+  const l = document.getElementById("theme-label"); if (l) l.textContent = isLight ? "Escuro" : "Claro";
+}
+
+// ════════════════════════════════════════════════════════════════════
+// #2 Save/restore filter preferences to localStorage
+// ════════════════════════════════════════════════════════════════════
+function saveFilters() {
+  const state = {};
+  FILTER_META.forEach(f => {
+    const el = document.getElementById(`filtro-${f.id}`);
+    if (el) state[f.id] = el.checked;
+  });
+  state.soma_range = document.getElementById("soma_range")?.value || "padrao";
+  state.qtd = document.getElementById("qtd")?.value || "10";
+  localStorage.setItem("euromilhoes_filters", JSON.stringify(state));
+}
+function loadSavedFilters() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("euromilhoes_filters"));
+    if (!saved) return;
+    FILTER_META.forEach(f => {
+      const el = document.getElementById(`filtro-${f.id}`);
+      if (el && saved[f.id] !== undefined) el.checked = saved[f.id];
+    });
+    if (saved.soma_range) document.getElementById("soma_range").value = saved.soma_range;
+    if (saved.qtd) document.getElementById("qtd").value = saved.qtd;
+    onFiltroAToggle();
+  } catch(e) {}
+}
+
+// ════════════════════════════════════════════════════════════════════
+// #30 Countdown to next draw
+// ════════════════════════════════════════════════════════════════════
+async function loadProximoSorteio() {
+  try {
+    const r = await fetch("api/proximo-sorteio");
+    const d = await r.json();
+    const el = document.getElementById("sb-proximo");
+    if (el && d.data) {
+      const prox = new Date(d.data + "T21:00:00");
+      const now = new Date();
+      const diff = prox - now;
+      if (diff > 0) {
+        const dias = Math.floor(diff / 86400000);
+        const horas = Math.floor((diff % 86400000) / 3600000);
+        el.innerHTML = `<span style="color:#74c0fc;">Próximo: ${d.dia_semana.slice(0,3)} ${d.data.slice(5)}</span><br/>`
+          + (dias > 0 ? `${dias}d ${horas}h` : `${horas}h`);
+      }
+    }
+  } catch(e) {}
+}
+
+// ════════════════════════════════════════════════════════════════════
+// #1 Copy to clipboard
+// ════════════════════════════════════════════════════════════════════
+function copiarChaves() {
+  if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
+  const text = lastChaves.map((ch, i) =>
+    `${i+1}. ${ch.numeros.join(" ")} | ★${ch.estrelas.join(" ★")} | Soma:${ch.soma}`
+  ).join("\n");
+  navigator.clipboard.writeText(text).then(() => toast("Copiado!")).catch(() => toast("Erro ao copiar", "error"));
+}
+
+// ════════════════════════════════════════════════════════════════════
+// #23 Compare keys vs last draw
+// ════════════════════════════════════════════════════════════════════
+async function compararComSorteio() {
+  if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
+  loading(true);
+  try {
+    const r = await fetch("api/check-keys", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({chaves:lastChaves})
+    });
+    const d = await r.json();
+    if (d.erro) { toast(d.erro, "warning"); return; }
+    let html = `<div class="card-dark"><h5><i class="fa-solid fa-check-double me-2"></i>Comparação vs ${d.ultimo.data}</h5>`;
+    html += `<div class="mb-2" style="font-size:.85rem;color:#9ca3af;">Sorteio: <strong style="color:#d0d0d0;">${d.ultimo.numeros.join(" · ")}</strong> ★<span style="color:#ffd700;">${d.ultimo.estrelas.join(" ★")}</span></div>`;
+    html += `<table class="table table-sm"><thead><tr><th>#</th><th>Números</th><th>★</th><th>Acertos</th></tr></thead><tbody>`;
+    d.resultados.forEach((res, i) => {
+      const numsH = res.numeros.map(n => res.nums_acertados.includes(n)
+        ? `<span style="color:#51cf66;font-weight:700;">${n}</span>`
+        : `<span style="color:#666;">${n}</span>`).join(" · ");
+      const starsH = res.estrelas.map(s => res.stars_acertados.includes(s)
+        ? `<span style="color:#ffd700;font-weight:700;">★${s}</span>`
+        : `<span style="color:#555;">★${s}</span>`).join(" ");
+      const total = res.total_nums + res.total_stars;
+      const color = total >= 3 ? "#51cf66" : total >= 1 ? "#ffd700" : "#666";
+      html += `<tr><td style="color:#9ca3af;">${i+1}</td><td>${numsH}</td><td>${starsH}</td><td style="color:${color};font-weight:700;">${res.total_nums}+${res.total_stars}</td></tr>`;
+    });
+    html += `</tbody></table></div>`;
+    document.getElementById("results-panel").insertAdjacentHTML("afterend", `<div id="compare-panel">${html}</div>`);
+    toast("Comparação concluída!");
+  } catch(e) { toast("Erro ao comparar", "error"); }
+  finally { loading(false); }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// #38 Save/manage favourites
+// ════════════════════════════════════════════════════════════════════
+async function guardarFavorito() {
+  if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
+  const nome = prompt("Nome do favorito (opcional):") || "";
+  try {
+    const r = await fetch("api/favoritos", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({chaves:lastChaves, nome})
+    });
+    const d = await r.json();
+    if (d.ok) toast("Favorito guardado!");
+  } catch(e) { toast("Erro ao guardar", "error"); }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// #35 Lucky Pick – 1 key, no filters
+// ════════════════════════════════════════════════════════════════════
+async function luckyPick() {
+  loading(true);
+  try {
+    const resp = await fetch("api/gerar", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        quantidade:1, soma_range:"padrao",
+        filtro_A:false, filtro_B:false, filtro_C:false, filtro_D:false,
+        filtro_E:false, filtro_F:false, filtro_G:false, filtro_H:false,
+      })
+    });
+    const d = await resp.json();
+    lastChaves = d.chaves; lastCores = d.cores; lastFiltros = d.filtros; lastConfig = d.config;
+    renderChaves(d); renderCores(d.cores);
+    document.getElementById("filtros-panel").style.display = "none";
+    document.getElementById("filtros-usados-bar").style.display = "none";
+    toast("Lucky Pick!");
+  } catch(e) { toast("Erro", "error"); }
+  finally { loading(false); }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// #31 Filter presets
+// ════════════════════════════════════════════════════════════════════
+function applyPreset(type) {
+  const all = type === "all";
+  const cons = type === "conservative";
+  FILTER_META.forEach(f => {
+    const el = document.getElementById(`filtro-${f.id}`);
+    if (!el) return;
+    if (all) el.checked = true;
+    else if (cons) el.checked = "ABDFG".includes(f.id);
+    else el.checked = "AG".includes(f.id); // aggressive
+  });
+  onFiltroAToggle();
+  saveFilters();
+  toast(`Preset "${type === "all" ? "Todos" : type === "conservative" ? "Conservador" : "Agressivo"}" aplicado`);
+}
 
 // ════════════════════════════════════════════════════════════════════
 // Generate filter config UI
@@ -598,9 +927,9 @@ function onFiltroAToggle() {
 // ════════════════════════════════════════════════════════════════════
 function showTab(name, el) {
   document.querySelectorAll(".tab-pane").forEach(t => t.classList.remove("active"));
-  document.querySelectorAll("#sidebar .nav-link").forEach(l => l.classList.remove("active"));
+  document.querySelectorAll("#sidebar .nav-link").forEach(l => { l.classList.remove("active"); l.setAttribute("aria-selected","false"); });
   document.getElementById("tab-" + name).classList.add("active");
-  if (el) el.closest(".nav-link").classList.add("active");
+  if (el) { const link = el.closest(".nav-link"); if (link) { link.classList.add("active"); link.setAttribute("aria-selected","true"); } }
 
   if (name === "sorteio")       loadUltimoSorteio();
   if (name === "estatisticas")  loadEstatisticas();
@@ -669,6 +998,18 @@ async function gerarChaves() {
     filterCfg[`filtro_${f.id}`] = el ? el.checked : true;
   });
 
+  // #33/#34 Exclusion/inclusion
+  const exclRaw = document.getElementById("excluir-nums")?.value || "";
+  const inclRaw = document.getElementById("incluir-nums")?.value || "";
+  const excluir = exclRaw.split(",").map(s=>parseInt(s.trim())).filter(n=>n>=1&&n<=50);
+  const incluir = inclRaw.split(",").map(s=>parseInt(s.trim())).filter(n=>n>=1&&n<=50);
+
+  // #2 Save filter preferences
+  saveFilters();
+
+  // Remove previous compare panel
+  const cp = document.getElementById("compare-panel"); if (cp) cp.remove();
+
   loading(true);
   try {
     const resp = await fetch("api/gerar", {
@@ -677,6 +1018,7 @@ async function gerarChaves() {
       body: JSON.stringify({
         quantidade: qtd,
         soma_range: document.getElementById("soma_range").value,
+        excluir, incluir,
         ...filterCfg,
       })
     });
@@ -692,6 +1034,8 @@ async function gerarChaves() {
     renderCores(d.cores);
     renderFiltros(d.filtros, d.total_tentativas);
     renderFiltrosUsados(d.filtros, d.config);
+    // #7 Show re-generate button
+    document.getElementById("btn-regen").style.display = "";
     toast(`${d.total_geradas} chaves geradas!`);
   } catch(e) {
     toast("Erro de ligação", "error");
@@ -716,8 +1060,16 @@ function renderChaves(d) {
         <td>${padrao}</td>
       </tr>`);
   });
-  document.getElementById("gen-stats").textContent =
-    `${d.total_geradas}/${d.total_pedidas} geradas · ${d.total_tentativas.toLocaleString()} testadas`;
+  // #15 counter + #37 attempts indicator + #26 par/ímpar
+  const avgAttempts = d.total_geradas > 0 ? Math.round(d.total_tentativas / d.total_geradas) : 0;
+  const allNums = d.chaves.flatMap(c => c.numeros);
+  const pares = allNums.filter(n => n % 2 === 0).length;
+  const impares = allNums.length - pares;
+  document.getElementById("gen-stats").innerHTML =
+    `<span title="Chaves geradas">${d.total_geradas}/${d.total_pedidas}</span> · ` +
+    `<span title="Combinações testadas">${d.total_tentativas.toLocaleString()} testadas</span> · ` +
+    `<span title="Média de tentativas por chave">~${avgAttempts}/chave</span> · ` +
+    `<span title="Par/Ímpar">P${pares}:I${impares}</span>`;
   document.getElementById("results-panel").style.display = "";
 }
 
@@ -964,6 +1316,39 @@ async function loadEstatisticas() {
   // Sum stats
   const soma = d.somas || {};
 
+  // #21 Build heatmap data
+  const freqMap = {};
+  numEntries.forEach(([n, cnt]) => { freqMap[n] = cnt; });
+  const maxFreq = numEntries[0]?.[1] || 1;
+  const minFreq = numEntries[numEntries.length - 1]?.[1] || 0;
+  let heatmapHTML = `<div class="card-dark"><h5><i class="fa-solid fa-fire me-2"></i>Heatmap 1–50</h5>
+    <div style="font-size:.73rem;color:#666;margin-bottom:8px;">Intensidade por frequência de saída</div>
+    <div class="heatmap-grid">`;
+  for (let n = 1; n <= 50; n++) {
+    const cnt = freqMap[n] || 0;
+    const intensity = maxFreq > minFreq ? (cnt - minFreq) / (maxFreq - minFreq) : 0.5;
+    const r = Math.round(40 + 200 * intensity);
+    const g = Math.round(60 + 100 * (1 - Math.abs(intensity - 0.5) * 2));
+    const b = Math.round(220 * (1 - intensity) + 30);
+    heatmapHTML += `<div class="heatmap-cell" style="background:rgb(${r},${g},${b});color:#fff;" title="${n}: ${cnt}× (${(cnt/total*100).toFixed(1)}%)">${n}</div>`;
+  }
+  heatmapHTML += `</div></div>`;
+
+  // #27 Dezenas stats
+  const dezenas = [0,0,0,0,0]; // 1-10, 11-20, 21-30, 31-40, 41-50
+  numEntries.forEach(([n, cnt]) => { dezenas[Math.floor((n-1)/10)] += cnt; });
+  const dezTotal = dezenas.reduce((a,b) => a+b, 0);
+  const dezLabels = ["1–10","11–20","21–30","31–40","41–50"];
+  const dezHTML = dezLabels.map((label, i) => {
+    const pct = dezTotal > 0 ? (dezenas[i]/dezTotal*100).toFixed(1) : 0;
+    const barW = dezTotal > 0 ? Math.round(dezenas[i]/Math.max(...dezenas)*100) : 0;
+    return `<div class="d-flex align-items-center gap-2 mb-1">
+      <span style="min-width:50px;color:#9ca3af;font-size:.82rem;">${label}</span>
+      <div class="flex-fill"><div class="freq-bar"><div class="freq-bar-fill" style="width:${barW}%;"></div></div></div>
+      <span style="min-width:50px;color:#d0d0d0;font-size:.82rem;">${pct}%</span>
+    </div>`;
+  }).join("");
+
   el.innerHTML = `
     <div class="row g-3">
       <!-- Numbers frequency -->
@@ -991,6 +1376,12 @@ async function loadEstatisticas() {
           </table>
         </div>
 
+        <!-- #27 Dezenas distribution -->
+        <div class="card-dark">
+          <h5><i class="fa-solid fa-layer-group me-2"></i>Distribuição por Dezenas</h5>
+          ${dezHTML}
+        </div>
+
         <!-- Sums -->
         <div class="card-dark">
           <h5>Somas Históricas</h5>
@@ -1004,7 +1395,7 @@ async function loadEstatisticas() {
           </table>
         </div>
       </div>
-    </div>` + renderQuentesFrios(d) + renderGaps(d) + renderTendenciaSomas(d);
+    </div>` + `<div class="row g-3 mt-1"><div class="col-12">${heatmapHTML}</div></div>` + renderQuentesFrios(d) + renderGaps(d) + renderTendenciaSomas(d);
 }
 
 function renderQuentesFrios(d) {
@@ -1340,16 +1731,154 @@ function toggleAno(ano) {
   icon.textContent = body.classList.contains("open") ? "▼" : "►";
 }
 
+// #5 Delete with undo
 async function eliminarSorteio(data) {
   if (!confirm(`Apagar o sorteio de ${data}?`)) return;
   try {
     const r = await fetch(`api/sorteio/${data}`, {method:"DELETE"});
     const d = await r.json();
-    toast(d.mensagem, d.ok ? "success" : "warning");
-    if (d.ok) { loadHistorico(); loadStatus(); }
+    if (d.ok) {
+      // Show undo toast
+      const tid = "undo-" + Date.now();
+      const box = document.getElementById("toast-box");
+      box.insertAdjacentHTML("beforeend", `
+        <div id="${tid}" style="background:#3a2800;color:#ffd700;border:1px solid #ffd70030;
+             border-radius:10px;padding:12px 18px;margin-top:8px;min-width:240px;
+             box-shadow:0 4px 20px rgba(0,0,0,.5);font-size:.9rem;">
+          Sorteio ${data} apagado
+          <button onclick="undoDelete('${data}','${tid}')" style="margin-left:10px;background:#ffd700;color:#000;border:none;border-radius:6px;padding:2px 10px;font-weight:600;cursor:pointer;font-size:.82rem;">Desfazer</button>
+        </div>`);
+      setTimeout(() => { const el = document.getElementById(tid); if(el) el.remove(); }, 6000);
+      loadHistorico(); loadStatus();
+    } else {
+      toast(d.mensagem, "warning");
+    }
   } catch(e) {
     toast("Erro ao apagar sorteio.", "danger");
   }
+}
+
+async function undoDelete(data, toastId) {
+  const el = document.getElementById(toastId); if (el) el.remove();
+  // Re-fetch the draw from scraper
+  try {
+    const r = await fetch("api/actualizar-recentes", {method:"POST"});
+    const d = await r.json();
+    if (d.inseridos > 0) { toast("Sorteio restaurado!", "success"); }
+    else { toast("Usa inserção manual para restaurar.", "warning"); }
+    loadHistorico(); loadStatus();
+  } catch(e) { toast("Erro ao restaurar", "error"); }
+}
+
+// #12 Search in history
+function filtrarHistorico() {
+  const q = (document.getElementById("hist-search")?.value || "").toLowerCase();
+  document.querySelectorAll("#historico-content .hist-year-body").forEach(body => {
+    let anyVisible = false;
+    body.querySelectorAll("tr").forEach(tr => {
+      const text = tr.textContent.toLowerCase();
+      const match = !q || text.includes(q);
+      tr.style.display = match ? "" : "none";
+      if (match) anyVisible = true;
+    });
+    if (q && anyVisible) body.classList.add("open");
+  });
+}
+
+// #20 Expand/collapse all years
+function toggleAllYears(open) {
+  document.querySelectorAll(".hist-year-body").forEach(b => {
+    b.classList.toggle("open", open);
+  });
+  document.querySelectorAll(".toggle-icon").forEach(i => {
+    i.textContent = open ? "▼" : "►";
+  });
+}
+
+// #16 Export CSV
+function exportarCSV() {
+  if (!lastChaves.length) {
+    // Export history instead
+    const rows = document.querySelectorAll("#historico-content table tbody tr");
+    if (!rows.length) { toast("Sem dados para exportar", "warning"); return; }
+    let csv = "Data,N1,N2,N3,N4,N5,E1,E2,Soma\n";
+    rows.forEach(tr => {
+      const cells = tr.querySelectorAll("td");
+      if (cells.length >= 4) {
+        const data = cells[0]?.textContent?.trim() || "";
+        const nums = cells[1]?.textContent?.trim()?.replace(/ · /g, ",") || "";
+        const stars = cells[2]?.textContent?.trim()?.replace(/★/g, "").trim().replace(/ /g, ",") || "";
+        const soma = cells[3]?.textContent?.trim() || "";
+        csv += `${data},${nums},${stars},${soma}\n`;
+      }
+    });
+    downloadText(csv, "historico_euromilhoes.csv");
+    toast("CSV exportado!");
+    return;
+  }
+  let csv = "#,N1,N2,N3,N4,N5,E1,E2,Soma,Padrao\n";
+  lastChaves.forEach((ch, i) => {
+    csv += `${i+1},${ch.numeros.join(",")},${ch.estrelas.join(",")},${ch.soma},"${ch.padrao.join("-")}"\n`;
+  });
+  downloadText(csv, "chaves_euromilhoes.csv");
+  toast("CSV exportado!");
+}
+function downloadText(text, filename) {
+  const blob = new Blob([text], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// #11 Sortable table headers
+function makeSortable(table) {
+  if (table.dataset.sortable) return;
+  table.dataset.sortable = "1";
+  table.querySelectorAll("thead th").forEach((th, colIdx) => {
+    th.style.cursor = "pointer";
+    th.setAttribute("aria-label", "Ordenar por " + (th.textContent || "coluna"));
+    th.addEventListener("click", () => {
+      const tbody = table.querySelector("tbody");
+      if (!tbody) return;
+      const rows = Array.from(tbody.querySelectorAll("tr"));
+      const asc = th.dataset.sort !== "asc";
+      // Reset all
+      table.querySelectorAll("thead th").forEach(h => delete h.dataset.sort);
+      th.dataset.sort = asc ? "asc" : "desc";
+      rows.sort((a, b) => {
+        const aText = a.cells[colIdx]?.textContent?.trim() || "";
+        const bText = b.cells[colIdx]?.textContent?.trim() || "";
+        const aNum = parseFloat(aText.replace(/[^\d.-]/g, ""));
+        const bNum = parseFloat(bText.replace(/[^\d.-]/g, ""));
+        if (!isNaN(aNum) && !isNaN(bNum)) return asc ? aNum - bNum : bNum - aNum;
+        return asc ? aText.localeCompare(bText) : bText.localeCompare(aText);
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    });
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// #39 Auto-check for missing draws on load
+// ════════════════════════════════════════════════════════════════════
+async function autoCheckMissing() {
+  try {
+    const r = await fetch("api/status");
+    const d = await r.json();
+    if (!d.ultimo_sorteio) return;
+    const lastDate = new Date(d.ultimo_sorteio.data);
+    const now = new Date();
+    const daysDiff = Math.floor((now - lastDate) / 86400000);
+    if (daysDiff >= 3) {
+      // Silently try to fetch missing draws
+      fetch("api/actualizar-recentes", {method:"POST"}).then(r=>r.json()).then(d => {
+        if (d.inseridos > 0) {
+          toast(`${d.inseridos} sorteio(s) em falta inserido(s) automaticamente`, "success");
+          loadStatus();
+        }
+      }).catch(()=>{});
+    }
+  } catch(e) {}
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -1766,9 +2295,88 @@ document.addEventListener("DOMContentLoaded", rescanTables);
 let _rescanTimer = null;
 new MutationObserver(() => {
   clearTimeout(_rescanTimer);
-  _rescanTimer = setTimeout(rescanTables, 80);
+  _rescanTimer = setTimeout(() => {
+    rescanTables();
+    // #11 Make all tables sortable
+    document.querySelectorAll("table:not([data-sortable])").forEach(makeSortable);
+  }, 80);
 }).observe(document.getElementById("main") || document.body,
            { childList: true, subtree: true });
+
+// ════════════════════════════════════════════════════════════════════
+// #14 Highlight repeated numbers on hover
+// ════════════════════════════════════════════════════════════════════
+document.addEventListener("mouseover", e => {
+  const ball = e.target.closest(".ball, .num-badge, .heatmap-cell");
+  if (!ball) return;
+  const num = parseInt(ball.textContent);
+  if (isNaN(num)) return;
+  document.querySelectorAll(".ball, .num-badge, .heatmap-cell").forEach(el => {
+    if (parseInt(el.textContent) === num) el.style.boxShadow = "0 0 8px rgba(116,192,252,.7)";
+  });
+});
+document.addEventListener("mouseout", e => {
+  const ball = e.target.closest(".ball, .num-badge, .heatmap-cell");
+  if (ball) document.querySelectorAll(".ball, .num-badge, .heatmap-cell").forEach(el => el.style.boxShadow = "");
+});
+
+// ════════════════════════════════════════════════════════════════════
+// #19 Save column widths to localStorage
+// ════════════════════════════════════════════════════════════════════
+document.addEventListener("mouseup", () => {
+  try {
+    const widths = {};
+    document.querySelectorAll("#chaves-table th").forEach((th, i) => {
+      if (th.style.width) widths[i] = th.style.width;
+    });
+    if (Object.keys(widths).length) localStorage.setItem("col_widths", JSON.stringify(widths));
+  } catch(e) {}
+});
+function restoreColWidths() {
+  try {
+    const widths = JSON.parse(localStorage.getItem("col_widths"));
+    if (!widths) return;
+    document.querySelectorAll("#chaves-table th").forEach((th, i) => {
+      if (widths[i]) { th.style.width = widths[i]; th.style.minWidth = widths[i]; }
+    });
+  } catch(e) {}
+}
+document.addEventListener("DOMContentLoaded", restoreColWidths);
+
+// ════════════════════════════════════════════════════════════════════
+// #32 Filter impact preview
+// ════════════════════════════════════════════════════════════════════
+function updateFilterPreview() {
+  const active = FILTER_META.filter(f => {
+    const el = document.getElementById(`filtro-${f.id}`);
+    return el && el.checked;
+  }).length;
+  const el = document.getElementById("btn-gerar");
+  if (el) el.innerHTML = `<i class="fa-solid fa-play me-2"></i>Gerar Chaves (${active}/8 filtros)`;
+}
+// Attach to all filter checkboxes after they render
+const _origRenderFilterConfig = renderFilterConfig;
+renderFilterConfig = function() {
+  _origRenderFilterConfig();
+  FILTER_META.forEach(f => {
+    const el = document.getElementById(`filtro-${f.id}`);
+    if (el) el.addEventListener("change", updateFilterPreview);
+  });
+  updateFilterPreview();
+};
+
+// ════════════════════════════════════════════════════════════════════
+// #48 ARIA labels on nav links
+// ════════════════════════════════════════════════════════════════════
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll("#sidebar .nav-link").forEach(link => {
+    link.setAttribute("role", "tab");
+    link.setAttribute("aria-selected", link.classList.contains("active"));
+  });
+  // Make sidebar nav accessible
+  const nav = document.querySelector("#sidebar nav");
+  if (nav) { nav.setAttribute("role", "tablist"); nav.setAttribute("aria-label", "Navegação principal"); }
+});
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
