@@ -9,6 +9,8 @@ Then open: http://localhost:5051
 import os
 import json
 import datetime
+import logging
+import time as _time
 import threading
 from itertools import combinations
 from collections import Counter as _Counter
@@ -28,7 +30,30 @@ from euromilhoes import (
 
 _IS_VERCEL = bool(os.environ.get("VERCEL"))
 
+# ── Logging ─────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("euromilhoes")
+
+# NOTE: When bumping VERSION in euromilhoes.py, update the CHANGELOG as well.
+
 app = Flask(__name__)
+
+
+# ── Error handlers ──────────────────────────────────────────────────────────
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({"erro": "Recurso não encontrado", "status": 404}), 404
+
+
+@app.errorhandler(500)
+def internal_error(e):
+    logger.error("Internal server error: %s", e)
+    return jsonify({"erro": "Erro interno do servidor", "status": 500}), 500
+
 
 # ── Shared singletons ────────────────────────────────────────────────────────
 db      = DatabaseManager()
@@ -37,14 +62,71 @@ exporter = ExcelExporter()
 _scrape_lock = threading.Lock()
 
 
+# ── Helpers ──────────────────────────────────────────────────────────────────
+def _validate_numbers(nums, expected_count, min_val, max_val):
+    """Validate a list of numbers: correct count, unique, within range.
+    Returns (sorted_list, error_string|None)."""
+    if not isinstance(nums, (list, tuple)):
+        return None, f"Esperada uma lista, recebido {type(nums).__name__}"
+    try:
+        nums = [int(n) for n in nums]
+    except (ValueError, TypeError):
+        return None, "Todos os valores devem ser números inteiros"
+    if len(nums) != expected_count:
+        return None, f"Esperados {expected_count} valores, recebidos {len(nums)}"
+    if len(set(nums)) != expected_count:
+        return None, "Valores duplicados não são permitidos"
+    if not all(min_val <= n <= max_val for n in nums):
+        return None, f"Todos os valores devem estar entre {min_val} e {max_val}"
+    return sorted(nums), None
+
+
+def _get_metadata_list(key):
+    """Safely parse a JSON list from metadata. Returns [] on any error."""
+    raw = db.get_metadata(key)
+    if not raw:
+        return []
+    try:
+        result = json.loads(raw)
+        return result if isinstance(result, list) else []
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Metadata '%s' contains invalid JSON, returning empty list", key)
+        return []
+
+
+# ── Caches ───────────────────────────────────────────────────────────────────
+_stats_cache = {"data": None, "ts": 0}
+_STATS_TTL = 300  # 5 minutes
+
+_cores_cache = {"data": None, "ts": 0}
+_CORES_TTL = 10   # 10 seconds
+
+
+def _invalidate_caches():
+    """Clear all caches. Call after insert / delete / import operations."""
+    _stats_cache["data"] = None
+    _stats_cache["ts"] = 0
+    _cores_cache["data"] = None
+    _cores_cache["ts"] = 0
+    _filter_cache["key"] = None
+    _filter_cache["data"] = None
+    logger.debug("All caches invalidated")
+
+
 def _cores_serializable(cores: dict) -> dict:
     """Convert sets to sorted lists for JSON serialisation."""
     return {k: sorted(list(v)) for k, v in cores.items()}
 
 
 def _get_cores():
+    now = _time.monotonic()
+    if _cores_cache["data"] is not None and (now - _cores_cache["ts"]) < _CORES_TTL:
+        return _cores_cache["data"]
     ultimos_9 = db.ultimos_n_sorteios(9)
-    return stats.classificar_cores(ultimos_9), ultimos_9
+    result = stats.classificar_cores(ultimos_9), ultimos_9
+    _cores_cache["data"] = result
+    _cores_cache["ts"] = now
+    return result
 
 
 def _sync_historico_json():
@@ -132,6 +214,8 @@ def api_gerar():
             continue
         chaves_geradas.append(chave)
 
+    logger.info("Chaves geradas: %d/%d (tentativas: %d)", len(chaves_geradas), quantidade, total_tentativas)
+
     # Save to generation history
     hist_entry = {
         "id": str(int(datetime.datetime.now().timestamp() * 1000)),
@@ -140,13 +224,13 @@ def api_gerar():
         "config": cfg,
     }
     try:
-        hist = json.loads(db.get_metadata("historico_geracoes") or "[]")
+        hist = _get_metadata_list("historico_geracoes")
         hist.insert(0, hist_entry)
         if len(hist) > 20:
             hist = hist[:20]
         db.set_metadata("historico_geracoes", json.dumps(hist, ensure_ascii=False))
     except Exception:
-        pass
+        logger.exception("Falha ao guardar histórico de gerações")
 
     return jsonify({
         "chaves": chaves_geradas,
@@ -245,21 +329,34 @@ def api_sorteios_agrupados():
 def api_inserir_sorteio():
     body = request.get_json(silent=True) or {}
     try:
-        data   = body["data"]
-        nums   = sorted([int(n) for n in body["numeros"]])
-        stars  = sorted([int(s) for s in body["estrelas"]])
+        data = body["data"]
+    except KeyError:
+        return jsonify({"erro": "Campo 'data' é obrigatório"}), 400
+
+    try:
         datetime.date.fromisoformat(data)
-        assert len(nums) == 5 and len(set(nums)) == 5
-        assert all(1 <= n <= 50 for n in nums)
-        assert len(stars) == 2 and len(set(stars)) == 2
-        assert all(1 <= s <= 12 for s in stars)
-    except (KeyError, ValueError, AssertionError) as e:
-        return jsonify({"erro": f"Dados inválidos: {e}"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"erro": f"Data inválida: {data!r}"}), 400
+
+    if "numeros" not in body:
+        return jsonify({"erro": "Campo 'numeros' é obrigatório"}), 400
+    if "estrelas" not in body:
+        return jsonify({"erro": "Campo 'estrelas' é obrigatório"}), 400
+
+    nums, err = _validate_numbers(body["numeros"], 5, 1, 50)
+    if err:
+        return jsonify({"erro": f"Números inválidos: {err}"}), 400
+
+    stars, err = _validate_numbers(body["estrelas"], 2, 1, 12)
+    if err:
+        return jsonify({"erro": f"Estrelas inválidas: {err}"}), 400
 
     data = corrigir_data_sorteio(data)
     ok = db.inserir_sorteio(data, nums, stars, fonte="web-manual")
     if ok:
         _sync_historico_json()
+        _invalidate_caches()
+        logger.info("Sorteio inserido manualmente: %s nums=%s stars=%s", data, nums, stars)
     return jsonify({"ok": ok, "mensagem": "Guardado." if ok else "Já existia na BD."})
 
 
@@ -268,9 +365,16 @@ def api_inserir_sorteio():
 # ════════════════════════════════════════════════════════════════════════════
 @app.route("/api/sorteio/<data>", methods=["DELETE"])
 def api_eliminar_sorteio(data):
+    try:
+        datetime.date.fromisoformat(data)
+    except (ValueError, TypeError):
+        return jsonify({"erro": f"Data inválida: {data!r}"}), 400
+
     ok = db.eliminar_sorteio(data)
     if ok:
         _sync_historico_json()
+        _invalidate_caches()
+        logger.info("Sorteio eliminado: %s", data)
     return jsonify({"ok": ok, "mensagem": "Eliminado." if ok else "Sorteio não encontrado."})
 
 
@@ -288,12 +392,16 @@ def api_actualizar_recentes():
             return jsonify({"erro": "BD vazia. Importa primeiro o histórico."}), 400
 
         desde_data = ultimo["data"]
+        logger.info("Scraping sorteios recentes desde %s", desde_data)
         scraper = HistoricoScraper()
         resultado = scraper.scrape_desde(desde_data, db)
 
         if resultado["inseridos"] > 0:
             _sync_historico_json()
+            _invalidate_caches()
 
+        logger.info("Scraping concluído: %d encontrados, %d inseridos",
+                     resultado["encontrados"], resultado["inseridos"])
         return jsonify({
             "ok": True,
             "desde": desde_data,
@@ -302,7 +410,8 @@ def api_actualizar_recentes():
             "sorteios": resultado["sorteios"],
         })
     except Exception as e:
-        return jsonify({"erro": f"Erro no scraping: {e}"}), 502
+        logger.exception("Erro no scraping de sorteios recentes")
+        return jsonify({"erro": f"Erro no scraping de sorteios recentes: {type(e).__name__}: {e}"}), 502
     finally:
         _scrape_lock.release()
 
@@ -312,6 +421,10 @@ def api_actualizar_recentes():
 # ════════════════════════════════════════════════════════════════════════════
 @app.route("/api/estatisticas")
 def api_estatisticas():
+    now = _time.monotonic()
+    if _stats_cache["data"] is not None and (now - _stats_cache["ts"]) < _STATS_TTL:
+        return jsonify(_stats_cache["data"])
+
     freq_nums   = stats.frequencia_numeros()
     freq_stars  = stats.frequencia_estrelas()
     somas       = stats.estatisticas_somas()
@@ -326,7 +439,7 @@ def api_estatisticas():
     # Serialise pattern keys (tuples → strings)
     padroes_serial = {str(list(k)): v for k, v in padroes.items()}
 
-    return jsonify({
+    result = {
         "total_sorteios": total,
         "frequencia_numeros":  freq_nums,
         "frequencia_estrelas": freq_stars,
@@ -337,7 +450,10 @@ def api_estatisticas():
         "quentes_frios":       quentes_frios,
         "gaps":                gaps,
         "tendencia_somas":     tendencia,
-    })
+    }
+    _stats_cache["data"] = result
+    _stats_cache["ts"] = now
+    return jsonify(result)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -571,13 +687,18 @@ def api_importar_ficheiro():
                 inseridos += 1
             else:
                 ja_existiam += 1
+        if inseridos > 0:
+            _invalidate_caches()
+        logger.info("Importação ficheiro JSON: %d inseridos, %d já existiam (de %d)",
+                     inseridos, ja_existiam, len(sorteios))
         return jsonify({
             "total_ficheiro": len(sorteios),
             "inseridos":      inseridos,
             "ja_existiam":    ja_existiam,
         })
     except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+        logger.exception("Erro na importação de ficheiro JSON")
+        return jsonify({"erro": f"Erro na importação de ficheiro: {type(e).__name__}: {e}"}), 500
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -592,6 +713,10 @@ def api_importar_excel():
     try:
         importer = ExcelImporter()
         result   = importer.importar(db)
+        if result["inseridos"] > 0:
+            _invalidate_caches()
+        logger.info("Importação Excel: %d inseridos, %d já existiam, %d erros (de %d lidos)",
+                     result["inseridos"], result["ja_existiam"], result["erros"], result["total_lido"])
         return jsonify({
             "ok":           True,
             "inseridos":    result["inseridos"],
@@ -601,9 +726,10 @@ def api_importar_excel():
             "total_bd":     db.total_sorteios(),
         })
     except FileNotFoundError as e:
-        return jsonify({"erro": str(e)}), 404
+        return jsonify({"erro": f"Ficheiro Excel não encontrado: {e}"}), 404
     except Exception as e:
-        return jsonify({"erro": str(e)}), 500
+        logger.exception("Erro na importação de ficheiro Excel")
+        return jsonify({"erro": f"Erro na importação Excel: {type(e).__name__}: {e}"}), 500
 
 
 @app.route("/api/excel-status")
@@ -641,13 +767,12 @@ def api_proximo_sorteio():
 # ════════════════════════════════════════════════════════════════════════════
 @app.route("/api/favoritos", methods=["GET"])
 def api_get_favoritos():
-    favs = db.get_metadata("favoritos")
-    return jsonify(json.loads(favs) if favs else [])
+    return jsonify(_get_metadata_list("favoritos"))
 
 @app.route("/api/favoritos", methods=["POST"])
 def api_save_favorito():
     body = request.get_json(silent=True) or {}
-    favs = json.loads(db.get_metadata("favoritos") or "[]")
+    favs = _get_metadata_list("favoritos")
     fav = {
         "id": str(int(datetime.datetime.now().timestamp() * 1000)),
         "chaves": body.get("chaves", []),
@@ -662,7 +787,7 @@ def api_save_favorito():
 
 @app.route("/api/favoritos/<fav_id>", methods=["DELETE"])
 def api_delete_favorito(fav_id):
-    favs = json.loads(db.get_metadata("favoritos") or "[]")
+    favs = _get_metadata_list("favoritos")
     favs = [f for f in favs if f["id"] != fav_id]
     db.set_metadata("favoritos", json.dumps(favs, ensure_ascii=False))
     return jsonify({"ok": True})
@@ -673,8 +798,7 @@ def api_delete_favorito(fav_id):
 # ════════════════════════════════════════════════════════════════════════════
 @app.route("/api/historico-geracoes", methods=["GET"])
 def api_get_historico_geracoes():
-    hist = db.get_metadata("historico_geracoes")
-    return jsonify(json.loads(hist) if hist else [])
+    return jsonify(_get_metadata_list("historico_geracoes"))
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -753,7 +877,7 @@ def api_decadas_timeline():
 # ════════════════════════════════════════════════════════════════════════════
 @app.route("/api/verificar-aposta", methods=["POST"])
 def api_verificar_aposta():
-    data = request.get_json(force=True)
+    data = request.get_json(silent=True) or {}
     data_sorteio = data.get("data_sorteio")
     apostas = data.get("apostas", [])
 
@@ -904,6 +1028,11 @@ def _parse_bet_row(cells: list) -> dict | None:
 # ════════════════════════════════════════════════════════════════════════════
 @app.route("/api/premios/<data>")
 def api_premios(data):
+    try:
+        datetime.date.fromisoformat(data)
+    except (ValueError, TypeError):
+        return jsonify({"erro": f"Data inválida: {data!r}"}), 400
+
     premios = db.obter_premios(data)
     if not premios:
         # Try scraping on-demand
@@ -988,6 +1117,7 @@ def api_scrape_premios():
         scraper = PremiosScraper()
         sucesso = 0
         falha = 0
+        logger.info("Scrape de prémios iniciado para %d sorteios", len(datas))
         for i, data in enumerate(datas):
             _scrape_premios_status["progresso"] = i + 1
             _scrape_premios_status["msg"] = f"A processar {data}..."
@@ -998,15 +1128,16 @@ def api_scrape_premios():
                     sucesso += 1
                 else:
                     falha += 1
-            except Exception:
+            except Exception as e:
+                logger.warning("Falha ao obter prémios para %s: %s: %s", data, type(e).__name__, e)
                 falha += 1
-            import time
-            time.sleep(1.5)
+            _time.sleep(1.5)
         _scrape_premios_status = {
             "running": False, "progresso": len(datas), "total": len(datas),
             "msg": f"Concluído: {sucesso} OK, {falha} falharam",
             "sucesso": sucesso, "falha": falha,
         }
+        logger.info("Scrape de prémios concluído: %d OK, %d falharam", sucesso, falha)
 
     threading.Thread(target=run_scrape, daemon=True).start()
     return jsonify({"msg": f"Scrape iniciado para {len(datas)} sorteios", "total": len(datas)})

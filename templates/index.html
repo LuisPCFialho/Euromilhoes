@@ -3,6 +3,14 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Gerador profissional de chaves EuroMilhões com filtros inteligentes, análise de padrões BI-BP-AI-AP e estatísticas históricas desde 2004."/>
+  <meta name="keywords" content="euromilhões, gerador, chaves, lotaria, filtros, padrões, estatísticas"/>
+  <meta name="theme-color" content="#1a1a2e"/>
+  <meta name="robots" content="index, follow"/>
+  <meta property="og:title" content="EuroMilhões – Gerador Profissional"/>
+  <meta property="og:description" content="Gera chaves EuroMilhões com 8 filtros inteligentes e metodologia Lotterycodex BI-BP-AI-AP."/>
+  <meta property="og:type" content="website"/>
+  <link rel="canonical" href="https://luisfialho.pt/euromilhoes"/>
   <title>EuroMilhões – Gerador Profissional v{{ version }}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
@@ -207,22 +215,31 @@
     .btn-delete-draw:hover { opacity:1; }
 
     /* ── Mobile responsive ── */
+    /* Hamburger menu for mobile */
+    #mobile-toggle { display:none; position:fixed; top:8px; left:8px; z-index:200;
+      background:var(--em-mid); border:1px solid #2a2a4a; border-radius:8px;
+      padding:8px 12px; color:#aaa; font-size:1.2rem; cursor:pointer; }
     @media (max-width: 991px) {
-      #sidebar { width:100%; height:auto; position:relative; flex-direction:row; flex-wrap:wrap; }
+      #mobile-toggle { display:block; }
+      #sidebar { display:none; position:fixed; width:100%; height:auto; z-index:150;
+        flex-direction:row; flex-wrap:wrap; }
+      #sidebar.open { display:flex; }
       #sidebar .brand { padding:10px 16px; border-bottom:none; }
       #sidebar .brand img { width:120px; }
       #sidebar nav { display:flex; flex-wrap:wrap; padding:4px 8px; flex:1; }
       #sidebar nav .nav-link { padding:6px 10px; font-size:.82rem; margin:2px; }
       #sidebar .status-bar { border-top:none; padding:8px 16px; white-space:nowrap; }
-      #main { margin-left:0; padding:16px; }
+      #main { margin-left:0; padding:16px; padding-top:50px; }
       .section-header h3 { font-size:1.1rem; }
       .ball { width:36px; height:36px; font-size:.88rem; }
-      #mobile-toggle { display:none; }
     }
     @media (max-width: 575px) {
       #sidebar nav .nav-link span { display:none; }
       #sidebar nav .nav-link { padding:8px; justify-content:center; min-width:40px; }
-      .card-dark { padding:14px; }
+      .card-dark { padding:12px; }
+      .ball { width:32px; height:32px; font-size:.78rem; margin:2px; }
+      table.table { font-size:.78rem; }
+      table.table th, table.table td { padding:4px 6px; }
     }
 
     /* ── Scroll to top ── */
@@ -413,12 +430,30 @@
       padding:8px 12px; margin-bottom:12px; font-size:.8rem;
     }
     .filtros-ativos-bar .label { color:#9ca3af; margin-right:6px; }
+
+    /* ── Disabled buttons ── */
+    button:disabled, .btn:disabled { opacity:0.5; cursor:not-allowed; }
+
+    /* ── Prefers reduced motion ── */
+    @media (prefers-reduced-motion: reduce) {
+      .ball-anim, .chave-row, #toast-box > div, .form-check-input:checked { animation: none !important; }
+      .gen-progress-fill, .status-dot-pulse { animation: none !important; }
+      *, *::before, *::after { transition-duration: 0.01ms !important; }
+    }
+
+    /* ── Print stylesheet ── */
+    @media print {
+      #sidebar, #loading, #toast-box, #scroll-top, #btn-gerar-sticky, #mobile-toggle,
+      .btn, button { display:none !important; }
+      #main { margin-left:0; padding:10px; }
+      .card-dark { break-inside:avoid; border:1px solid #ccc; }
+    }
   </style>
 </head>
 <body>
 
 <!-- ── Loading overlay ── -->
-<div id="loading">
+<div id="loading" role="alertdialog" aria-label="A processar">
   <div class="spinner-border text-warning" style="width:3rem;height:3rem;"></div>
   <span style="color:#e0e0e0;font-size:1.1rem;" id="loading-msg">A processar...</span>
   <div class="gen-progress" style="width:200px;"><div class="gen-progress-fill" style="width:100%;"></div></div>
@@ -432,15 +467,36 @@
   <i class="fa-solid fa-chevron-up"></i>
 </button>
 
+<!-- ── Keyboard shortcuts modal ── -->
+<div id="shortcuts-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:600;align-items:center;justify-content:center;">
+  <div class="card-dark" style="max-width:400px;margin:auto;margin-top:15vh;">
+    <div class="d-flex justify-content-between mb-3">
+      <h5 class="mb-0"><i class="fa-solid fa-keyboard me-2"></i>Atalhos do Teclado</h5>
+      <button class="btn-ghost btn-sm" onclick="document.getElementById('shortcuts-modal').style.display='none'" aria-label="Fechar">&times;</button>
+    </div>
+    <div style="font-size:.88rem;color:#d0d0d0;">
+      <div class="d-flex justify-content-between mb-2"><span>Gerar Chaves</span><kbd style="background:#1a2540;padding:2px 8px;border-radius:4px;">Ctrl+G</kbd></div>
+      <div class="d-flex justify-content-between mb-2"><span>Lucky Pick</span><kbd style="background:#1a2540;padding:2px 8px;border-radius:4px;">Ctrl+L</kbd></div>
+      <div class="d-flex justify-content-between mb-2"><span>Exportar Excel</span><kbd style="background:#1a2540;padding:2px 8px;border-radius:4px;">Ctrl+E</kbd></div>
+      <div class="d-flex justify-content-between mb-2"><span>Ajuda / Atalhos</span><kbd style="background:#1a2540;padding:2px 8px;border-radius:4px;">?</kbd></div>
+    </div>
+  </div>
+</div>
+
 <!-- ── Sticky mobile generate button ── -->
 <button id="btn-gerar-sticky" onclick="gerarChaves()" aria-label="Gerar Chaves">
   <i class="fa-solid fa-play"></i>
 </button>
 
+<!-- ── Hamburger menu (mobile) ── -->
+<button id="mobile-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')" aria-label="Menu">
+  <i class="fa-solid fa-bars"></i>
+</button>
+
 <!-- ── Sidebar ── -->
 <div id="sidebar">
   <div class="brand">
-    <img src="static/logo.png" alt="Jackpot.pt">
+    <img src="static/logo.png" alt="EuroMilhões – Gerador de Chaves">
   </div>
   <nav>
     <a class="nav-link active" href="#" onclick="showTab('gerar', this)">
@@ -478,13 +534,13 @@
     <span id="sb-proximo" style="font-size:.72rem;"></span>
     <div style="margin-top:8px;">
       <button class="btn-ghost btn-sm" onclick="toggleTheme()" style="font-size:.72rem;padding:2px 8px;border-radius:6px;" aria-label="Alternar tema claro/escuro">
-        <i class="fa-solid fa-circle-half-stroke me-1"></i><span id="theme-label">Claro</span>
+        <i id="theme-icon" class="fa-solid fa-moon me-1"></i><span id="theme-label">Claro</span>
       </button>
     </div>
   </div>
   <div style="padding:10px 16px 14px;border-top:1px solid #2a2a4a;text-align:center;font-size:.73rem;line-height:1.7;color:#6b7280;">
     <div style="color:#9ca3af;">Autor: Luís Fialho</div>
-    <div>Versão 32 · 01.Mar.2026</div>
+    <div>Versão 33 · 01.Mar.2026</div>
   </div>
 </div>
 
@@ -492,7 +548,7 @@
 <div id="main">
 
   <!-- ════════════ TAB: GERAR ════════════ -->
-  <div id="tab-gerar" class="tab-pane active">
+  <div id="tab-gerar" class="tab-pane active" role="tabpanel">
     <div class="section-header">
       <i class="fa-solid fa-wand-magic-sparkles"></i>
       <h3>Gerar Chaves</h3>
@@ -504,7 +560,7 @@
         <div class="card-dark">
           <h5><i class="fa-solid fa-sliders me-2"></i>Configuração</h5>
           <div class="mb-3">
-            <label class="form-label small" style="color:#9ca3af;">Quantidade de chaves</label>
+            <label class="form-label small" style="color:#9ca3af;" for="qtd">Quantidade de chaves</label>
             <input type="number" id="qtd" class="form-control" value="10" min="1" max="100"/>
           </div>
 
@@ -610,7 +666,7 @@
 
 
   <!-- ════════════ TAB: ÚLTIMO SORTEIO ════════════ -->
-  <div id="tab-sorteio" class="tab-pane">
+  <div id="tab-sorteio" class="tab-pane" role="tabpanel">
     <div class="section-header">
       <i class="fa-solid fa-trophy"></i>
       <h3>Último Sorteio</h3>
@@ -625,7 +681,7 @@
 
 
   <!-- ════════════ TAB: ESTATÍSTICAS ════════════ -->
-  <div id="tab-estatisticas" class="tab-pane">
+  <div id="tab-estatisticas" class="tab-pane" role="tabpanel">
     <div class="section-header">
       <i class="fa-solid fa-chart-bar"></i>
       <h3>Estatísticas Históricas</h3>
@@ -640,7 +696,7 @@
 
 
   <!-- ════════════ TAB: ESTRATÉGIAS ════════════ -->
-  <div id="tab-estrategias" class="tab-pane">
+  <div id="tab-estrategias" class="tab-pane" role="tabpanel">
     <div class="section-header">
       <i class="fa-solid fa-chess"></i>
       <h3>Estratégias e Filtros Activos</h3>
@@ -655,7 +711,7 @@
 
 
   <!-- ════════════ TAB: PADRÕES BI-BP-AI-AP ════════════ -->
-  <div id="tab-padroes" class="tab-pane">
+  <div id="tab-padroes" class="tab-pane" role="tabpanel">
     <div class="section-header">
       <i class="fa-solid fa-table-cells"></i>
       <h3>Padrões BI-BP-AI-AP</h3>
@@ -667,7 +723,7 @@
 
 
   <!-- ════════════ TAB: HISTÓRICO PADRÕES ════════════ -->
-  <div id="tab-hist-padroes" class="tab-pane">
+  <div id="tab-hist-padroes" class="tab-pane" role="tabpanel">
     <div class="section-header">
       <i class="fa-solid fa-chart-column"></i>
       <h3>Histórico Padrões BI-BP-AI-AP</h3>
@@ -679,7 +735,7 @@
 
 
   <!-- ════════════ TAB: HISTÓRICO ════════════ -->
-  <div id="tab-historico" class="tab-pane">
+  <div id="tab-historico" class="tab-pane" role="tabpanel">
     <div class="section-header">
       <i class="fa-solid fa-database"></i>
       <h3>Histórico da Base de Dados</h3>
@@ -722,7 +778,7 @@
 
   <!-- ════════════ TAB: ACTUALIZAR ════════════ -->
   <!-- ════════════ TAB: QUANTO GANHEI ════════════ -->
-  <div id="tab-verificar" class="tab-pane">
+  <div id="tab-verificar" class="tab-pane" role="tabpanel">
     <div class="section-header">
       <i class="fa-solid fa-coins"></i>
       <h3>Quanto Ganhei</h3>
@@ -796,7 +852,7 @@
   </div>
 
 
-  <div id="tab-atualizar" class="tab-pane">
+  <div id="tab-atualizar" class="tab-pane" role="tabpanel">
     <div class="section-header">
       <i class="fa-solid fa-cloud-arrow-down"></i>
       <h3>Actualizar Base de Dados</h3>
@@ -924,6 +980,8 @@ document.addEventListener("keydown", e => {
   if (e.ctrlKey && e.key === "g") { e.preventDefault(); gerarChaves(); }
   if (e.ctrlKey && e.key === "e") { e.preventDefault(); exportarExcel(); }
   if (e.ctrlKey && e.key === "l") { e.preventDefault(); luckyPick(); }
+  if (e.key === "?" && !e.ctrlKey) { document.getElementById("shortcuts-modal").style.display = "flex"; }
+  if (e.key === "Escape") { document.getElementById("shortcuts-modal").style.display = "none"; }
 });
 
 // ════════════════════════════════════════════════════════════════════
@@ -933,6 +991,7 @@ function initTheme() {
   if (localStorage.getItem("theme") === "light") {
     document.body.classList.add("light-mode");
     const l = document.getElementById("theme-label"); if (l) l.textContent = "Escuro";
+    const ic = document.getElementById("theme-icon"); if (ic) { ic.classList.remove("fa-moon"); ic.classList.add("fa-sun"); }
   }
 }
 function toggleTheme() {
@@ -940,6 +999,7 @@ function toggleTheme() {
   const isLight = document.body.classList.contains("light-mode");
   localStorage.setItem("theme", isLight ? "light" : "dark");
   const l = document.getElementById("theme-label"); if (l) l.textContent = isLight ? "Escuro" : "Claro";
+  const ic = document.getElementById("theme-icon"); if (ic) { ic.classList.toggle("fa-moon", !isLight); ic.classList.toggle("fa-sun", isLight); }
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -1104,6 +1164,7 @@ function renderFilterConfig() {
       <div class="d-flex gap-2">
         <div class="form-check form-switch mb-0 flex-shrink-0" style="padding-left:2.5em;">
           <input class="form-check-input" type="checkbox" id="filtro-${f.id}" checked
+                 aria-label="Filtro ${f.id}: ${f.nome}"
                  ${f.id==='A' ? 'onchange="onFiltroAToggle()"' : ''}
                  style="cursor:pointer;"/>
         </div>
@@ -1142,6 +1203,7 @@ function showTab(name, el) {
   document.querySelectorAll("#sidebar .nav-link").forEach(l => { l.classList.remove("active"); l.setAttribute("aria-selected","false"); });
   document.getElementById("tab-" + name).classList.add("active");
   if (el) { const link = el.closest(".nav-link"); if (link) { link.classList.add("active"); link.setAttribute("aria-selected","true"); } }
+  if (window.innerWidth <= 991) document.getElementById('sidebar').classList.remove('open');
 
   if (name === "sorteio")       loadUltimoSorteio();
   if (name === "estatisticas")  loadEstatisticas();
@@ -1166,6 +1228,7 @@ function toast(msg, type = "success") {
   const bg   = type === "success" ? "#0d3320" : type === "warning" ? "#3a2800" : "#3a1010";
   const col  = type === "success" ? "#51cf66" : type === "warning" ? "#ffd700" : "#ff6b6b";
   const box  = document.getElementById("toast-box");
+  while (box.children.length >= 5) box.firstChild.remove();
   box.insertAdjacentHTML("beforeend", `
     <div id="${id}" style="background:${bg};color:${col};border:1px solid ${col}30;
          border-radius:10px;padding:12px 18px;margin-top:8px;min-width:240px;
@@ -1173,6 +1236,19 @@ function toast(msg, type = "success") {
       ${icon} ${msg}
     </div>`);
   setTimeout(() => { const el = document.getElementById(id); if(el) el.remove(); }, 3500);
+}
+
+async function apiCall(endpoint, options = {}) {
+  try {
+    const resp = await fetch(endpoint, options);
+    const data = await resp.json();
+    if (!resp.ok) { toast(data.erro || `Erro ${resp.status}`, "error"); return null; }
+    return data;
+  } catch(e) {
+    console.error(`API [${endpoint}]:`, e);
+    toast(options.errorMsg || "Erro de ligação ao servidor", "error");
+    return null;
+  }
 }
 
 function ballHTML(n, cores) {
@@ -1192,10 +1268,12 @@ function starHTML(s) {
 // Status bar
 // ════════════════════════════════════════════════════════════════════
 async function loadStatus() {
-  const r = await fetch("api/status");
-  const d = await r.json();
-  document.getElementById("sb-total").textContent  = d.total_sorteios;
-  document.getElementById("sb-ultimo").textContent = d.ultimo_sorteio?.data ?? "–";
+  try {
+    const r = await fetch("api/status");
+    const d = await r.json();
+    document.getElementById("sb-total").textContent  = d.total_sorteios;
+    document.getElementById("sb-ultimo").textContent = d.ultimo_sorteio?.data ?? "–";
+  } catch(e) { console.error("loadStatus:", e); }
 }
 
 // ════════════════════════════════════════════════════════════════════

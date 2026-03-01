@@ -98,6 +98,70 @@ PRIZE_TIERS = {
 
 CUSTO_POR_APOSTA = 2.50  # € per single combination
 
+# ─── Configurable constants (replace magic numbers) ──────────────────────────
+COLOR_WINDOW_DRAWS = 9         # Number of recent draws for the colour system (Filter F)
+MAX_HISTORICO_ENTRIES = 20     # Max entries kept in generation history
+MAX_FAVORITES = 50             # Max saved favourite keys
+MAX_SCRAPE_BATCH = 50          # Max dates per bulk prize-scrape run
+SCRAPE_DELAY = 1.5             # Seconds between HTTP requests (rate-limit)
+REQUEST_TIMEOUT = 20           # Default timeout (seconds) for all HTTP requests
+
+# ─── User-Agent rotation pool ────────────────────────────────────────────────
+_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+]
+
+
+def _random_user_agent() -> str:
+    """Return a randomly chosen User-Agent string."""
+    return random.choice(_USER_AGENTS)
+
+
+def _retry_request(url: str, headers: dict = None, timeout: int = None,
+                   max_retries: int = 3, **kwargs) -> "requests.Response":
+    """GET *url* with exponential-backoff retries.
+
+    Raises the last exception if all attempts fail.
+    """
+    timeout = timeout or REQUEST_TIMEOUT
+    if headers is None:
+        headers = {}
+    # Rotate User-Agent on each call
+    headers = {**headers, "User-Agent": _random_user_agent()}
+
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            return requests.get(url, headers=headers, timeout=timeout, **kwargs)
+        except requests.exceptions.Timeout as exc:
+            last_exc = exc
+        except requests.exceptions.ConnectionError as exc:
+            last_exc = exc
+        if attempt < max_retries - 1:
+            time.sleep(2 ** attempt)          # 1s, 2s between retries
+    raise last_exc  # type: ignore[misc]
+
+
+def validate_draw_numbers(nums, stars):
+    """Validate draw numbers and stars. Returns (ok, error_msg)."""
+    if not isinstance(nums, (list, tuple)) or len(nums) != 5:
+        return False, "Precisa de exactamente 5 números"
+    if not all(isinstance(n, int) and 1 <= n <= 50 for n in nums):
+        return False, "Números devem ser inteiros entre 1 e 50"
+    if len(set(nums)) != 5:
+        return False, "Números não podem repetir"
+    if not isinstance(stars, (list, tuple)) or len(stars) != 2:
+        return False, "Precisa de exactamente 2 estrelas"
+    if not all(isinstance(s, int) and 1 <= s <= 12 for s in stars):
+        return False, "Estrelas devem ser inteiros entre 1 e 12"
+    if len(set(stars)) != 2:
+        return False, "Estrelas não podem repetir"
+    return True, ""
+
 
 # ─── Global constants ─────────────────────────────────────────────────────────
 VERSION = "9.0"
@@ -238,12 +302,14 @@ class DatabaseManager:
 
     def _init_db(self):
         with sqlite3.connect(self.db_path) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS sorteios (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
                     data        TEXT NOT NULL UNIQUE,
-                    n1 INTEGER, n2 INTEGER, n3 INTEGER, n4 INTEGER, n5 INTEGER,
-                    e1 INTEGER, e2 INTEGER,
+                    n1 INTEGER NOT NULL, n2 INTEGER NOT NULL, n3 INTEGER NOT NULL,
+                    n4 INTEGER NOT NULL, n5 INTEGER NOT NULL,
+                    e1 INTEGER NOT NULL, e2 INTEGER NOT NULL,
                     soma        INTEGER,
                     fonte       TEXT DEFAULT 'manual'
                 );
@@ -261,9 +327,11 @@ class DatabaseManager:
                 );
                 CREATE INDEX IF NOT EXISTS idx_sorteios_data ON sorteios(data);
                 CREATE INDEX IF NOT EXISTS idx_sorteios_soma ON sorteios(soma);
+                CREATE INDEX IF NOT EXISTS idx_metadata_chave ON metadata(chave);
 
                 CREATE TABLE IF NOT EXISTS premios (
-                    data        TEXT PRIMARY KEY,
+                    data        TEXT PRIMARY KEY
+                                REFERENCES sorteios(data) ON DELETE CASCADE,
                     jackpot     REAL,
                     t1_prize REAL, t1_winners INTEGER,
                     t2_prize REAL, t2_winners INTEGER,
@@ -287,7 +355,8 @@ class DatabaseManager:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute("DELETE FROM sorteios WHERE data = ?", (data,))
                 return cursor.rowcount > 0
-        except Exception:
+        except sqlite3.Error as e:
+            print(f"[DB] eliminar_sorteio erro: {e}")
             return False
 
     def inserir_sorteio(self, data: str, numeros: list, estrelas: list, fonte: str = "manual") -> bool:
@@ -304,7 +373,8 @@ class DatabaseManager:
                      ests[0], ests[1], sum(nums), fonte)
                 )
                 return cursor.rowcount > 0
-        except Exception:
+        except sqlite3.Error as e:
+            print(f"[DB] inserir_sorteio erro: {e}")
             return False
 
     def ultimo_sorteio(self) -> dict | None:
@@ -317,7 +387,7 @@ class DatabaseManager:
                     "estrelas": [row[6],row[7]], "soma": row[8]}
         return None
 
-    def ultimos_n_sorteios(self, n: int = 9) -> list[dict]:
+    def ultimos_n_sorteios(self, n: int = COLOR_WINDOW_DRAWS) -> list[dict]:
         with sqlite3.connect(self.db_path) as conn:
             rows = conn.execute(
                 "SELECT data,n1,n2,n3,n4,n5,e1,e2 FROM sorteios ORDER BY data DESC LIMIT ?", (n,)
@@ -376,7 +446,8 @@ class DatabaseManager:
                     vals
                 )
             return True
-        except Exception:
+        except sqlite3.Error as e:
+            print(f"[DB] inserir_premios erro: {e}")
             return False
 
     def obter_premios(self, data: str) -> dict | None:
@@ -515,14 +586,8 @@ class PremiosScraper:
     """Scrapes prize breakdown data from euro-millions.com"""
 
     HEADERS = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/122.0.0.0 Safari/537.36"
-        ),
         "Accept-Language": "en-GB,en;q=0.5",
     }
-    TIMEOUT = 15
 
     # Map tier names from the website to our tier numbers
     TIER_MAP = {
@@ -537,10 +602,12 @@ class PremiosScraper:
         try:
             d = datetime.date.fromisoformat(data_iso)
             url = f"https://www.euro-millions.com/results/{d.strftime('%d-%m-%Y')}"
-            resp = requests.get(url, headers=self.HEADERS, timeout=self.TIMEOUT)
+            resp = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
             if resp.status_code != 200:
                 return None
             return self._parse_prizes(resp.text)
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+            return None
         except Exception:
             return None
 
@@ -659,7 +726,7 @@ class PremiosScraper:
             except Exception as e:
                 falha += 1
                 yield {"tipo": "erro", "data": data, "msg": str(e)[:120], "step": i + 1}
-            time.sleep(1.5)  # Rate limit
+            time.sleep(SCRAPE_DELAY)  # Rate limit
 
         yield {"tipo": "concluido", "sucesso": sucesso, "falha": falha, "total": total}
 
@@ -669,12 +736,8 @@ class PremiosScraper:
 # ═════════════════════════════════════════════════════════════════════════════
 class EuromilhoesScraper:
     HEADERS = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/120.0.0.0 Safari/537.36",
         "Accept-Language": "pt-PT,pt;q=0.9,en;q=0.8",
     }
-    TIMEOUT = 15
 
     def fetch_ultimo_sorteio(self) -> dict | None:
         """Try multiple sources to get the latest EuroMillions draw."""
@@ -688,6 +751,8 @@ class EuromilhoesScraper:
                 result = strategy()
                 if result:
                     return result
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+                continue
             except Exception:
                 continue
         return None
@@ -739,7 +804,7 @@ class EuromilhoesScraper:
 
     def _scrape_lotaria_net(self) -> dict | None:
         url = "https://www.lotaria.net/euromilhoes/resultados"
-        r = requests.get(url, headers=self.HEADERS, timeout=self.TIMEOUT)
+        r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
 
@@ -778,13 +843,13 @@ class EuromilhoesScraper:
         ]
         for url in urls:
             try:
-                r = requests.get(url, headers=self.HEADERS, timeout=self.TIMEOUT)
+                r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
                 if r.status_code == 200:
                     # Try JSON first
                     try:
                         data = r.json()
                         return self._parse_json_result(data)
-                    except Exception:
+                    except (ValueError, KeyError):
                         pass
                     # Try HTML
                     soup = BeautifulSoup(r.text, "html.parser")
@@ -798,6 +863,8 @@ class EuromilhoesScraper:
                     result = self._parse_raw_numbers(nums, date_str)
                     if result:
                         return result
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+                continue
             except Exception:
                 continue
         return None
@@ -805,7 +872,7 @@ class EuromilhoesScraper:
     def _scrape_euro_jackpot_results(self) -> dict | None:
         """Fallback: try eurojackpot-style API with EuroMillions data."""
         url = "https://www.euro-millions.com/results"
-        r = requests.get(url, headers=self.HEADERS, timeout=self.TIMEOUT)
+        r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
 
@@ -858,7 +925,7 @@ class EuromilhoesScraper:
                         date_str = data.get("date", data.get("data", self._fallback_draw_date()))
                         if len(nums) == 5 and len(stars) == 2:
                             return {"data": str(date_str), "numeros": nums, "estrelas": stars}
-        except Exception:
+        except (ValueError, KeyError, TypeError):
             pass
         return None
 
@@ -872,7 +939,7 @@ class EuromilhoesScraper:
         ]
         for url in urls_to_try:
             try:
-                r = requests.get(url, headers=self.HEADERS, timeout=self.TIMEOUT)
+                r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
                 if r.status_code != 200:
                     continue
                 soup = BeautifulSoup(r.text, "html.parser")
@@ -889,6 +956,8 @@ class EuromilhoesScraper:
                     parsed = self._parse_raw_numbers(nums_raw)
                     if parsed:
                         results.append(parsed)
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+                continue
             except Exception:
                 continue
         return results
@@ -916,11 +985,6 @@ class HistoricoScraper:
     DELAY      = 1.2    # seconds between HTTP requests (be polite)
 
     HEADERS = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/122.0.0.0 Safari/537.36"
-        ),
         "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-GB,en;q=0.5",
         "Accept-Encoding": "gzip, deflate, br",
@@ -993,6 +1057,8 @@ class HistoricoScraper:
                 try:
                     resultados = self._scrape_ano(ano)
                     todos.extend(resultados)
+                except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+                    continue
                 except Exception:
                     continue
                 time.sleep(0.5)
@@ -1029,6 +1095,8 @@ class HistoricoScraper:
                 resultados = fn(ano)
                 if resultados:
                     return resultados
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+                continue
             except Exception:
                 continue
         return []
@@ -1037,9 +1105,11 @@ class HistoricoScraper:
         """Scrape the /results page which lists the most recent ~15 draws."""
         url = "https://www.euro-millions.com/results"
         try:
-            r = requests.get(url, headers=self.HEADERS, timeout=25)
+            r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
             if r.status_code != 200:
                 return []
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+            return []
         except Exception:
             return []
 
@@ -1079,22 +1149,22 @@ class HistoricoScraper:
 
     def _euro_millions_com(self, ano: int) -> list[dict]:
         url = f"https://www.euro-millions.com/results/{ano}"
-        r   = requests.get(url, headers=self.HEADERS, timeout=25)
+        r   = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
         if r.status_code != 200:
             return []
         return self._parse_html(r.text, ano)
 
     def _euro_millions_com_pt(self, ano: int) -> list[dict]:
         url = f"https://www.euro-millions.com/pt/resultados/{ano}"
-        r   = requests.get(url, headers=self.HEADERS, timeout=25)
+        r   = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
         if r.status_code != 200:
             return []
         return self._parse_html(r.text, ano)
 
     def _lotaria_net_arquivo(self, ano: int) -> list[dict]:
         url = f"https://www.lotaria.net/euromilhoes/arquivo/{ano}"
-        r   = requests.get(url, headers={**self.HEADERS, "Accept-Language": "pt-PT,pt;q=0.9"},
-                           timeout=25)
+        r   = _retry_request(url, headers={**self.HEADERS, "Accept-Language": "pt-PT,pt;q=0.9"},
+                             timeout=REQUEST_TIMEOUT)
         if r.status_code != 200:
             return []
         return self._parse_html(r.text, ano)
@@ -1867,7 +1937,7 @@ class KeyGenerator:
                 loaded = json.loads(raw)
                 for k, v in loaded.items():
                     self.contagem_estrelas[int(k)] = v
-            except Exception:
+            except (json.JSONDecodeError, ValueError, KeyError):
                 pass
 
     def _save_star_counts(self):
@@ -2185,7 +2255,7 @@ class TerminalUI:
         self._header()
 
         # Prepare colours
-        ultimos_9 = self.db.ultimos_n_sorteios(9)
+        ultimos_9 = self.db.ultimos_n_sorteios(COLOR_WINDOW_DRAWS)
         if len(ultimos_9) < 9:
             console.print(f"[yellow]Aviso:[/] Apenas {len(ultimos_9)} sorteios na BD (recomendado: 9+).")
 
@@ -2270,7 +2340,7 @@ class TerminalUI:
         if not ultimo:
             console.print("[yellow]Nenhum sorteio na base de dados.[/]")
         else:
-            cores = self.stats.classificar_cores(self.db.ultimos_n_sorteios(9))
+            cores = self.stats.classificar_cores(self.db.ultimos_n_sorteios(COLOR_WINDOW_DRAWS))
             nums_str = "  ".join(self._cor_tag(n, cores) for n in ultimo["numeros"])
             stars_str = "  ".join(f"[bold yellow]{e}[/]" for e in ultimo["estrelas"])
             console.print(Panel(
