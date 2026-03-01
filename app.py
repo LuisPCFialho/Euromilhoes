@@ -1122,8 +1122,8 @@ def api_scrape_premios():
     if not datas:
         return jsonify({"msg": "Todos os sorteios já têm dados de prémios", "total": 0})
 
-    # Limit to 50 at a time to avoid timeouts
-    datas = datas[:50]
+    # Only fetch the most recent draw (already sorted DESC)
+    datas = datas[:1]
     _scrape_premios_status = {"running": True, "progresso": 0, "total": len(datas), "msg": "A iniciar..."}
 
     def run_scrape():
