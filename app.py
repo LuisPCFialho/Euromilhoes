@@ -116,6 +116,22 @@ def api_gerar():
             chaves_geradas.append(chave)
             total_tentativas += chave["tentativas"]
 
+    # Save to generation history
+    hist_entry = {
+        "id": str(int(datetime.datetime.now().timestamp() * 1000)),
+        "data": datetime.datetime.now().isoformat(),
+        "quantidade": len(chaves_geradas),
+        "config": cfg,
+    }
+    try:
+        hist = json.loads(db.get_metadata("historico_geracoes") or "[]")
+        hist.insert(0, hist_entry)
+        if len(hist) > 20:
+            hist = hist[:20]
+        db.set_metadata("historico_geracoes", json.dumps(hist, ensure_ascii=False))
+    except Exception:
+        pass
+
     return jsonify({
         "chaves": chaves_geradas,
         "cores": _cores_serializable(cores),
@@ -583,6 +599,92 @@ def api_excel_status():
         "ficheiro": EXCEL_SOURCE_PATH.name,
         "tamanho_kb": round(EXCEL_SOURCE_PATH.stat().st_size / 1024, 1) if exists else None,
     })
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – PRÓXIMO SORTEIO
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/proximo-sorteio")
+def api_proximo_sorteio():
+    hoje = datetime.date.today()
+    weekday = hoje.weekday()
+    # Next Tue (1) or Fri (4)
+    dias_ate = []
+    for target in [1, 4]:  # Tue, Fri
+        diff = (target - weekday) % 7
+        if diff == 0:
+            diff = 7  # if today is draw day, next one
+        dias_ate.append(diff)
+    prox = hoje + datetime.timedelta(days=min(dias_ate))
+    dia_semana = "Terça-feira" if prox.weekday() == 1 else "Sexta-feira"
+    return jsonify({"data": prox.isoformat(), "dia_semana": dia_semana})
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – FAVORITOS (save / load / delete)
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/favoritos", methods=["GET"])
+def api_get_favoritos():
+    favs = db.get_metadata("favoritos")
+    return jsonify(json.loads(favs) if favs else [])
+
+@app.route("/api/favoritos", methods=["POST"])
+def api_save_favorito():
+    body = request.get_json(silent=True) or {}
+    favs = json.loads(db.get_metadata("favoritos") or "[]")
+    fav = {
+        "id": str(int(datetime.datetime.now().timestamp() * 1000)),
+        "chaves": body.get("chaves", []),
+        "data": datetime.datetime.now().isoformat(),
+        "nome": body.get("nome", ""),
+    }
+    favs.insert(0, fav)
+    if len(favs) > 50:
+        favs = favs[:50]
+    db.set_metadata("favoritos", json.dumps(favs, ensure_ascii=False))
+    return jsonify({"ok": True, "id": fav["id"]})
+
+@app.route("/api/favoritos/<fav_id>", methods=["DELETE"])
+def api_delete_favorito(fav_id):
+    favs = json.loads(db.get_metadata("favoritos") or "[]")
+    favs = [f for f in favs if f["id"] != fav_id]
+    db.set_metadata("favoritos", json.dumps(favs, ensure_ascii=False))
+    return jsonify({"ok": True})
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – HISTÓRICO DE GERAÇÕES
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/historico-geracoes", methods=["GET"])
+def api_get_historico_geracoes():
+    hist = db.get_metadata("historico_geracoes")
+    return jsonify(json.loads(hist) if hist else [])
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – CHECK KEYS AGAINST LAST DRAW
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/check-keys", methods=["POST"])
+def api_check_keys():
+    body = request.get_json(silent=True) or {}
+    chaves = body.get("chaves", [])
+    ultimo = db.ultimo_sorteio()
+    if not ultimo:
+        return jsonify({"erro": "Sem sorteios na BD."}), 400
+
+    results = []
+    for ch in chaves:
+        nums_match = set(ch["numeros"]) & set(ultimo["numeros"])
+        stars_match = set(ch["estrelas"]) & set(ultimo["estrelas"])
+        results.append({
+            "numeros": ch["numeros"],
+            "estrelas": ch["estrelas"],
+            "nums_acertados": sorted(nums_match),
+            "stars_acertados": sorted(stars_match),
+            "total_nums": len(nums_match),
+            "total_stars": len(stars_match),
+        })
+    return jsonify({"ultimo": ultimo, "resultados": results})
 
 
 # ════════════════════════════════════════════════════════════════════════════
