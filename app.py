@@ -703,6 +703,51 @@ def api_check_keys():
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# API – JSON API (public read-only data export)
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/dados.json")
+def api_dados_json():
+    """Public JSON API: returns all draws + basic stats for external tools."""
+    todos = db.todos_sorteios()
+    freq = stats.frequencia_numeros()
+    freq_e = stats.frequencia_estrelas()
+    return jsonify({
+        "total": len(todos),
+        "ultimo": todos[0] if todos else None,
+        "sorteios": todos[:100],  # Last 100 draws
+        "frequencia_numeros": freq,
+        "frequencia_estrelas": freq_e,
+        "version": VERSION,
+    })
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# API – DECADE TIMELINE (distribution by decade over time)
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/decadas-timeline")
+def api_decadas_timeline():
+    """Returns decade distribution per year for timeline visualization."""
+    todos = db.todos_sorteios()
+    timeline = {}
+    for s in todos:
+        year = s["data"][:4]
+        if year not in timeline:
+            timeline[year] = [0, 0, 0, 0, 0]
+        for n in s["numeros"]:
+            timeline[year][(n - 1) // 10] += 1
+    result = []
+    for year in sorted(timeline.keys()):
+        total = sum(timeline[year])
+        result.append({
+            "ano": year,
+            "dezenas": timeline[year],
+            "total": total,
+            "pcts": [round(d / total * 100, 1) if total else 0 for d in timeline[year]],
+        })
+    return jsonify(result)
+
+
+# ════════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     import os
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")

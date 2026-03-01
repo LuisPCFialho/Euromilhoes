@@ -289,6 +289,113 @@
     a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible,
     .form-check-input:focus-visible { outline:2px solid var(--em-azul); outline-offset:2px; }
 
+    /* ── #1 Ball reveal animation ── */
+    @keyframes ballReveal {
+      0% { opacity:0; transform:scale(0.3) rotate(-20deg); }
+      60% { transform:scale(1.15) rotate(5deg); }
+      100% { opacity:1; transform:scale(1) rotate(0); }
+    }
+    .ball-anim { animation: ballReveal .35s ease-out both; }
+    .chave-row { animation: fadeSlideIn .3s ease-out both; }
+
+    /* ── #2 Fade/slide-in for rows and cards ── */
+    @keyframes fadeSlideIn {
+      from { opacity:0; transform:translateY(8px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    /* ── #3 Filter toggle pulse ── */
+    @keyframes togglePulse {
+      0% { box-shadow:0 0 0 0 rgba(233,69,96,.5); }
+      70% { box-shadow:0 0 0 6px rgba(233,69,96,0); }
+      100% { box-shadow:none; }
+    }
+    .form-check-input:checked { animation: togglePulse .4s ease-out; }
+
+    /* ── #4 Smooth theme transition ── */
+    body, .card-dark, #sidebar, table.table, table.table th, table.table td,
+    select.form-select, input.form-control, .search-box, .hist-year-header,
+    .filtros-ativos-bar, .badge-padrao {
+      transition: background-color .3s ease, color .3s ease, border-color .3s ease;
+    }
+
+    /* ── #5 Toast slide-in animation ── */
+    @keyframes toastSlideIn {
+      from { opacity:0; transform:translateX(40px); }
+      to   { opacity:1; transform:translateX(0); }
+    }
+    #toast-box > div { animation: toastSlideIn .3s ease-out; }
+
+    /* ── #6 Pattern rarity badge ── */
+    .rarity-badge {
+      display:inline-block; padding:2px 8px; border-radius:8px;
+      font-size:.68rem; font-weight:600; letter-spacing:.03em;
+    }
+    .rarity-common { background:#0d3320; color:#51cf66; }
+    .rarity-uncommon { background:#1a3050; color:#74c0fc; }
+    .rarity-rare { background:#3a2800; color:#ffd700; }
+    .rarity-epic { background:#3a1010; color:#ff6b6b; }
+
+    /* ── #7 Generation progress bar ── */
+    .gen-progress { height:3px; background:#1a2540; border-radius:2px; margin-top:6px; overflow:hidden; }
+    .gen-progress-fill { height:100%; background:linear-gradient(90deg, var(--em-gold), #ffd700); border-radius:2px;
+      animation: progressPulse 1.5s ease-in-out infinite; }
+    @keyframes progressPulse {
+      0%,100% { opacity:.7; }  50% { opacity:1; }
+    }
+
+    /* ── #8 Card hover effect ── */
+    .card-dark { transition: border-color .2s, box-shadow .2s; }
+    .card-dark:hover { border-color:#3a3a5a; box-shadow:0 2px 12px rgba(0,0,0,.2); }
+
+    /* ── #9 Status dot animation ── */
+    @keyframes statusPulse {
+      0%,100% { opacity:1; } 50% { opacity:.4; }
+    }
+    .status-dot-pulse { animation: statusPulse 2s ease-in-out infinite; }
+
+    /* ── #10 Sparkline mini-chart ── */
+    .sparkline { display:inline-flex; align-items:flex-end; gap:1px; height:20px; }
+    .sparkline-bar { width:3px; border-radius:1px; background:var(--em-azul); min-height:2px; transition:height .2s; }
+
+    /* ── #11 Number pair highlight ── */
+    .pair-hot { background:#1a3010; }
+    .pair-warm { background:#1a2540; }
+
+    /* ── #12 Trend arrow indicators ── */
+    .trend-up { color:#51cf66; } .trend-down { color:#ff6b6b; } .trend-flat { color:#9ca3af; }
+
+    /* ── Consecutive indicator badge ── */
+    .consec-badge { display:inline-block; padding:1px 6px; border-radius:4px;
+      font-size:.68rem; font-weight:600; background:#1a2540; color:#9ca3af; }
+
+    /* ── Last draw match highlight ── */
+    .match-highlight { box-shadow:0 0 0 2px #ffd700; }
+
+    /* ── Sticky generate button on mobile ── */
+    @media (max-width:991px) {
+      #btn-gerar-sticky { position:fixed; bottom:16px; right:16px; z-index:150;
+        width:56px; height:56px; border-radius:50%; background:var(--em-gold); color:#fff;
+        border:none; font-size:1.2rem; box-shadow:0 4px 16px rgba(0,0,0,.5);
+        display:flex; align-items:center; justify-content:center; }
+      #btn-gerar-sticky:active { transform:scale(.92); }
+    }
+    @media (min-width:992px) { #btn-gerar-sticky { display:none !important; } }
+
+    /* ── Swipe hint on mobile tabs ── */
+    @media (max-width:575px) {
+      #sidebar nav { overflow-x:auto; flex-wrap:nowrap; -webkit-overflow-scrolling:touch;
+        scrollbar-width:none; }
+      #sidebar nav::-webkit-scrollbar { display:none; }
+    }
+
+    /* ── Optimized filter UI on mobile ── */
+    @media (max-width:991px) {
+      .filtro-cfg-row { padding:5px 0; }
+      .filtro-cfg-row .d-flex { gap:6px; }
+      .ball { width:34px; height:34px; font-size:.82rem; }
+    }
+
     /* ── Stats ── */
     .freq-rank-hot  { color:var(--em-verd); font-weight:700; }
     .freq-rank-cold { color:var(--em-azul); font-weight:700; }
@@ -313,7 +420,8 @@
 <!-- ── Loading overlay ── -->
 <div id="loading">
   <div class="spinner-border text-warning" style="width:3rem;height:3rem;"></div>
-  <span style="color:#e0e0e0;font-size:1.1rem;">A processar...</span>
+  <span style="color:#e0e0e0;font-size:1.1rem;" id="loading-msg">A processar...</span>
+  <div class="gen-progress" style="width:200px;"><div class="gen-progress-fill" style="width:100%;"></div></div>
 </div>
 
 <!-- ── Toast ── -->
@@ -322,6 +430,11 @@
 <!-- ── Scroll to top ── -->
 <button id="scroll-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Voltar ao topo">
   <i class="fa-solid fa-chevron-up"></i>
+</button>
+
+<!-- ── Sticky mobile generate button ── -->
+<button id="btn-gerar-sticky" onclick="gerarChaves()" aria-label="Gerar Chaves">
+  <i class="fa-solid fa-play"></i>
 </button>
 
 <!-- ── Sidebar ── -->
@@ -356,7 +469,7 @@
     </a>
   </nav>
   <div class="status-bar" id="status-bar">
-    <i class="fa-solid fa-circle-dot me-1" style="color:#51cf66;"></i>
+    <i class="fa-solid fa-circle-dot me-1 status-dot-pulse" style="color:#51cf66;"></i>
     <span id="sb-total">–</span> sorteios<br/>
     Último: <span id="sb-ultimo">–</span><br/>
     <span id="sb-proximo" style="font-size:.72rem;"></span>
@@ -368,7 +481,7 @@
   </div>
   <div style="padding:10px 16px 14px;border-top:1px solid #2a2a4a;text-align:center;font-size:.73rem;line-height:1.7;color:#6b7280;">
     <div style="color:#9ca3af;">Autor: Luís Fialho</div>
-    <div>Versão 29 · 01.Mar.2026</div>
+    <div>Versão 30 · 01.Mar.2026</div>
   </div>
 </div>
 
@@ -406,6 +519,12 @@
               <button class="btn btn-ghost btn-sm flex-fill" onclick="applyPreset('conservative')" title="Filtros mais seguros">Conservador</button>
               <button class="btn btn-ghost btn-sm flex-fill" onclick="applyPreset('aggressive')" title="Filtros mínimos">Agressivo</button>
             </div>
+          </div>
+
+          <div class="mt-1">
+            <button class="btn btn-ghost btn-sm w-100" onclick="sugerirFiltros()" title="Sugestão baseada em estatísticas" style="font-size:.75rem;">
+              <i class="fa-solid fa-lightbulb me-1" style="color:#ffd700;"></i>Sugestão Inteligente
+            </button>
           </div>
 
           <!-- Exclusion/inclusion filters (#33, #34) -->
@@ -456,6 +575,9 @@
               </button>
               <button class="btn btn-ghost btn-sm" onclick="exportarExcel()" aria-label="Exportar Excel">
                 <i class="fa-solid fa-file-excel me-1" style="color:#51cf66;"></i>Excel
+              </button>
+              <button class="btn btn-ghost btn-sm" onclick="partilharChaves()" title="Partilhar chaves" aria-label="Partilhar">
+                <i class="fa-solid fa-share-nodes me-1" style="color:#74c0fc;"></i>Partilhar
               </button>
             </div>
           </div>
@@ -1044,20 +1166,43 @@ async function gerarChaves() {
   }
 }
 
+function rarityBadge(padrao) {
+  // Classify pattern rarity based on position in the 56-pattern table
+  // Best (1-4): common, Middle-High (5-16): uncommon, Middle-Low (17-28): rare, Worst (29-56): epic
+  const key = padrao.join(",");
+  const bestPats = ["1,1,1,2","2,1,1,1","1,2,1,1","1,1,2,1"];
+  const midHighPats = ["2,0,1,2","2,1,0,2","2,2,0,1","1,0,2,2","2,0,2,1","1,2,0,2","2,2,1,0","0,2,1,2","0,1,2,2","2,1,2,0","0,2,2,1","1,2,2,0"];
+  if (bestPats.includes(key)) return `<span class="rarity-badge rarity-common">Melhor</span>`;
+  if (midHighPats.includes(key)) return `<span class="rarity-badge rarity-uncommon">Médio+</span>`;
+  return `<span class="rarity-badge rarity-rare">Raro</span>`;
+}
+
 function renderChaves(d) {
   const tbody = document.getElementById("chaves-tbody");
   tbody.innerHTML = "";
   d.chaves.forEach((ch, i) => {
-    const nums   = ch.numeros.map(n => ballHTML(n, d.cores)).join("");
-    const stars  = ch.estrelas.map(s => starHTML(s)).join("");
+    const nums   = ch.numeros.map((n, j) => {
+      const cls = d.cores.vermelhos?.includes(n) ? "ball-verm"
+                : d.cores.verdes?.includes(n)    ? "ball-verd"
+                : d.cores.azuis?.includes(n)     ? "ball-azul"
+                : d.cores.castanhos?.includes(n) ? "ball-cast"
+                : "ball-neu";
+      return `<span class="ball ${cls} ball-anim" style="animation-delay:${(i*5+j)*0.04}s">${n}</span>`;
+    }).join("");
+    const stars  = ch.estrelas.map((s, j) => `<span class="ball ball-star ball-anim" style="animation-delay:${(i*5+5+j)*0.04}s">★${s}</span>`).join("");
     const padrao = `<span class="badge-padrao">${ch.padrao.join("-")}</span>`;
+    // Consecutive pairs indicator
+    const consec = [];
+    const sorted = [...ch.numeros].sort((a,b) => a-b);
+    for (let k=0;k<sorted.length-1;k++) if (sorted[k+1]-sorted[k]===1) consec.push(`${sorted[k]}-${sorted[k+1]}`);
+    const consecHTML = consec.length ? ` <span class="consec-badge" title="Pares consecutivos">${consec.join(",")}</span>` : "";
     tbody.insertAdjacentHTML("beforeend", `
-      <tr class="chave-row">
+      <tr class="chave-row" style="animation-delay:${i*0.05}s">
         <td style="color:#9ca3af;">${i+1}</td>
         <td colspan="5">${nums}</td>
         <td colspan="2">${stars}</td>
         <td><strong style="color:#d0d0d0;">${ch.soma}</strong></td>
-        <td>${padrao}</td>
+        <td>${padrao} ${rarityBadge(ch.padrao)}${consecHTML}</td>
       </tr>`);
   });
   // #15 counter + #37 attempts indicator + #26 par/ímpar
@@ -1261,8 +1406,20 @@ function renderCoresHTML(cores) {
 // ════════════════════════════════════════════════════════════════════
 // Statistics – sorted by frequency, no scrollable cards
 // ════════════════════════════════════════════════════════════════════
+let _statsCache = null;
+let _statsCacheTime = 0;
+const STATS_CACHE_TTL = 300000; // 5 minutes
+
 async function loadEstatisticas() {
-  const d  = await (await fetch("api/estatisticas")).json();
+  const now = Date.now();
+  let d;
+  if (_statsCache && (now - _statsCacheTime) < STATS_CACHE_TTL) {
+    d = _statsCache;
+  } else {
+    d = await (await fetch("api/estatisticas")).json();
+    _statsCache = d;
+    _statsCacheTime = now;
+  }
   const el = document.getElementById("stats-content");
   if (!d.total_sorteios) {
     el.innerHTML = `<div id="no-draws-msg">Sem dados históricos. Insere sorteios primeiro.</div>`;
@@ -1349,6 +1506,9 @@ async function loadEstatisticas() {
     </div>`;
   }).join("");
 
+  // Stats CSV export button
+  const statsCSVBtn = `<button class="btn btn-ghost btn-sm ms-2" onclick="exportarStatsCSV()" title="Exportar estatísticas CSV"><i class="fa-solid fa-file-csv me-1" style="color:#51cf66;"></i>CSV</button>`;
+
   el.innerHTML = `
     <div class="row g-3">
       <!-- Numbers frequency -->
@@ -1356,6 +1516,7 @@ async function loadEstatisticas() {
         <div class="card-dark">
           <h5>Frequência – Números (1–50)
             <small style="color:#9ca3af;font-weight:400;font-size:.75rem;"> ordenado do mais para o menos frequente</small>
+            ${statsCSVBtn}
           </h5>
           <div style="font-size:.73rem;color:#666;margin-bottom:8px;">🔥 = quente (últimos 10) · ❄️ = atrasado</div>
           <table class="table table-sm mb-0" style="table-layout:auto;">
@@ -1376,6 +1537,9 @@ async function loadEstatisticas() {
           </table>
         </div>
 
+        <!-- #13 Star trends -->
+        ${renderStarTrends(d)}
+
         <!-- #27 Dezenas distribution -->
         <div class="card-dark">
           <h5><i class="fa-solid fa-layer-group me-2"></i>Distribuição por Dezenas</h5>
@@ -1395,7 +1559,13 @@ async function loadEstatisticas() {
           </table>
         </div>
       </div>
-    </div>` + `<div class="row g-3 mt-1"><div class="col-12">${heatmapHTML}</div></div>` + renderQuentesFrios(d) + renderGaps(d) + renderTendenciaSomas(d);
+    </div>` + `<div class="row g-3 mt-1"><div class="col-12">${heatmapHTML}</div></div>`
+    + renderStreaks(d) + renderQuentesFrios(d) + renderGaps(d) + renderTendenciaSomas(d);
+
+  // Async: load decade timeline and append
+  renderDecadeTimeline().then(html => {
+    if (html) el.insertAdjacentHTML("beforeend", html);
+  });
 }
 
 function renderQuentesFrios(d) {
@@ -1770,8 +1940,13 @@ async function undoDelete(data, toastId) {
   } catch(e) { toast("Erro ao restaurar", "error"); }
 }
 
-// #12 Search in history
+// #12 Search in history (debounced)
+let _searchTimer = null;
 function filtrarHistorico() {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(_doFilterHistorico, 150);
+}
+function _doFilterHistorico() {
   const q = (document.getElementById("hist-search")?.value || "").toLowerCase();
   document.querySelectorAll("#historico-content .hist-year-body").forEach(body => {
     let anyVisible = false;
@@ -2377,6 +2552,245 @@ document.addEventListener("DOMContentLoaded", () => {
   const nav = document.querySelector("#sidebar nav");
   if (nav) { nav.setAttribute("role", "tablist"); nav.setAttribute("aria-label", "Navegação principal"); }
 });
+
+// ════════════════════════════════════════════════════════════════════
+// #43 Live countdown timer (updates every second)
+// ════════════════════════════════════════════════════════════════════
+let _countdownInterval = null;
+function startLiveCountdown() {
+  if (_countdownInterval) clearInterval(_countdownInterval);
+  _countdownInterval = setInterval(async () => {
+    try {
+      const el = document.getElementById("sb-proximo");
+      if (!el || !el._proxDate) return;
+      const prox = el._proxDate;
+      const now = new Date();
+      const diff = prox - now;
+      if (diff <= 0) {
+        el.innerHTML = `<span style="color:#51cf66;font-weight:600;">Sorteio HOJE!</span>`;
+        clearInterval(_countdownInterval);
+        return;
+      }
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      const dayPart = el._proxDaySemana;
+      const datePart = el._proxDataStr;
+      el.innerHTML = `<span style="color:#74c0fc;">Próximo: ${dayPart} ${datePart}</span><br/>`
+        + (d > 0 ? `${d}d ${h}h ${m}m ${s}s` : h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`);
+    } catch(e) {}
+  }, 1000);
+}
+
+// Override loadProximoSorteio to start live countdown
+const _origLoadProximoSorteio = loadProximoSorteio;
+loadProximoSorteio = async function() {
+  try {
+    const r = await fetch("api/proximo-sorteio");
+    const d = await r.json();
+    const el = document.getElementById("sb-proximo");
+    if (el && d.data) {
+      const prox = new Date(d.data + "T21:00:00");
+      el._proxDate = prox;
+      el._proxDaySemana = d.dia_semana.slice(0,3);
+      el._proxDataStr = d.data.slice(5);
+      startLiveCountdown();
+    }
+  } catch(e) {}
+};
+
+// ════════════════════════════════════════════════════════════════════
+// #36 Web Share API
+// ════════════════════════════════════════════════════════════════════
+function partilharChaves() {
+  if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
+  const text = lastChaves.map((ch, i) =>
+    `${i+1}. ${ch.numeros.join(" ")} | ★${ch.estrelas.join(" ★")} | Soma:${ch.soma}`
+  ).join("\n");
+  if (navigator.share) {
+    navigator.share({ title:"Chaves EuroMilhões", text }).catch(()=>{});
+  } else {
+    navigator.clipboard.writeText(text).then(() => toast("Copiado para clipboard!")).catch(()=>{});
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// #37 Stats CSV export
+// ════════════════════════════════════════════════════════════════════
+async function exportarStatsCSV() {
+  try {
+    const d = await (await fetch("api/estatisticas")).json();
+    let csv = "Número,Frequência,Percentagem\n";
+    const entries = Object.entries(d.frequencia_numeros).sort((a,b) => b[1]-a[1]);
+    entries.forEach(([n, cnt]) => {
+      csv += `${n},${cnt},${(cnt/d.total_sorteios*100).toFixed(1)}%\n`;
+    });
+    csv += "\nEstrela,Frequência,Percentagem\n";
+    Object.entries(d.frequencia_estrelas).sort((a,b) => b[1]-a[1]).forEach(([n, cnt]) => {
+      csv += `${n},${cnt},${(cnt/d.total_sorteios*100).toFixed(1)}%\n`;
+    });
+    downloadText(csv, "estatisticas_euromilhoes.csv");
+    toast("Estatísticas exportadas!");
+  } catch(e) { toast("Erro ao exportar", "error"); }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// #40 Bulk favorites export
+// ════════════════════════════════════════════════════════════════════
+async function exportarFavoritos() {
+  try {
+    const r = await fetch("api/favoritos");
+    const favs = await r.json();
+    if (!favs.length) { toast("Sem favoritos", "warning"); return; }
+    const data = JSON.stringify(favs, null, 2);
+    downloadText(data, "favoritos_euromilhoes.json");
+    toast("Favoritos exportados!");
+  } catch(e) { toast("Erro ao exportar", "error"); }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// #44 Smart filter suggestions based on stats
+// ════════════════════════════════════════════════════════════════════
+async function sugerirFiltros() {
+  try {
+    const d = await (await fetch("api/estatisticas")).json();
+    const gaps = d.gaps || [];
+    const dueCount = gaps.filter(g => g.ratio >= 1.5).length;
+    let msg = "";
+    if (dueCount > 15) {
+      msg = `${dueCount} números em atraso — considere desactivar o filtro Anti-Repetição (E) para mais variedade.`;
+    } else if (dueCount < 5) {
+      msg = "Poucos números em atraso — filtros actuais são adequados.";
+    } else {
+      msg = `${dueCount} números em atraso — configuração equilibrada.`;
+    }
+    toast(msg, "success");
+  } catch(e) {}
+}
+
+// ════════════════════════════════════════════════════════════════════
+// #45 Generation replay (repeat last config)
+// ════════════════════════════════════════════════════════════════════
+let _lastGenConfig = null;
+const _origGerarChaves = gerarChaves;
+gerarChaves = async function() {
+  // Save config before generating
+  _lastGenConfig = {
+    qtd: document.getElementById("qtd")?.value,
+    soma: document.getElementById("soma_range")?.value,
+    excluir: document.getElementById("excluir-nums")?.value,
+    incluir: document.getElementById("incluir-nums")?.value,
+    filters: {}
+  };
+  FILTER_META.forEach(f => {
+    const el = document.getElementById(`filtro-${f.id}`);
+    if (el) _lastGenConfig.filters[f.id] = el.checked;
+  });
+  return _origGerarChaves();
+};
+
+// ════════════════════════════════════════════════════════════════════
+// #46 Streak tracking (consecutive draws where a number appeared)
+// ════════════════════════════════════════════════════════════════════
+function renderStreaks(d) {
+  const qf = d.quentes_frios || [];
+  if (!qf.length) return "";
+  // Numbers with streaks (appeared in last N consecutive draws)
+  const streaks = qf.filter(x => x.draws_since === 0 && x.freq_recente >= 3)
+    .sort((a,b) => b.freq_recente - a.freq_recente)
+    .slice(0, 10);
+  if (!streaks.length) return "";
+  const badges = streaks.map(x =>
+    `<span class="num-badge hot" style="margin:2px;" title="${x.num}: ${x.freq_recente}× nos últimos 15">${x.num} <small style="font-size:.6rem;">${x.freq_recente}×</small></span>`
+  ).join("");
+  return `
+  <div class="row g-3 mt-1"><div class="col-12"><div class="card-dark">
+    <h5><i class="fa-solid fa-fire-flame-curved me-2"></i>Sequências Activas
+      <small style="color:#9ca3af;font-weight:400;font-size:.75rem;">números quentes nos últimos 15 sorteios</small>
+    </h5>
+    <div style="line-height:2.2;">${badges}</div>
+  </div></div></div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// #13 Star trends
+// ════════════════════════════════════════════════════════════════════
+function renderStarTrends(d) {
+  if (!d.frequencia_estrelas) return "";
+  const entries = Object.entries(d.frequencia_estrelas).map(([n,c]) => [parseInt(n),c]).sort((a,b) => a[0]-b[0]);
+  const total = d.total_sorteios;
+  const expected = total * 2 / 12; // each star expected = total * 2 stars / 12 options
+  const bars = entries.map(([n, cnt]) => {
+    const ratio = cnt / expected;
+    const color = ratio > 1.05 ? "#51cf66" : ratio < 0.95 ? "#ff6b6b" : "#74c0fc";
+    const h = Math.max(4, Math.round(ratio * 40));
+    return `<div style="text-align:center;flex:1;">
+      <div style="height:50px;display:flex;align-items:flex-end;justify-content:center;">
+        <div style="width:16px;height:${h}px;background:${color};border-radius:2px;" title="★${n}: ${cnt}× (${(cnt/total*100).toFixed(1)}%)"></div>
+      </div>
+      <div style="font-size:.68rem;color:#ffd700;margin-top:2px;">★${n}</div>
+    </div>`;
+  }).join("");
+  return `
+  <div class="card-dark">
+    <h5><i class="fa-solid fa-star me-2" style="color:#ffd700;"></i>Tendência Estrelas
+      <small style="color:#9ca3af;font-weight:400;font-size:.75rem;">vs distribuição esperada</small>
+    </h5>
+    <div style="font-size:.73rem;color:#666;margin-bottom:8px;">
+      <span style="color:#51cf66;">&#9632;</span> Acima do esperado &middot;
+      <span style="color:#ff6b6b;">&#9632;</span> Abaixo &middot;
+      <span style="color:#74c0fc;">&#9632;</span> Normal
+    </div>
+    <div style="display:flex;gap:2px;">${bars}</div>
+  </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// #47 Momentum indicators (trend arrows for each number)
+// ════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════
+// #12 Decade timeline visualization
+// ════════════════════════════════════════════════════════════════════
+async function renderDecadeTimeline() {
+  try {
+    const data = await (await fetch("api/decadas-timeline")).json();
+    if (!data.length) return "";
+    const colors = ["#ff6b6b","#51cf66","#74c0fc","#ffd700","#c9956a"];
+    const labels = ["1-10","11-20","21-30","31-40","41-50"];
+    // Take last 10 years max
+    const recent = data.slice(-10);
+    let rows = recent.map(y => {
+      const bars = y.pcts.map((pct, i) =>
+        `<div style="width:${pct}%;height:16px;background:${colors[i]};display:inline-block;" title="${labels[i]}: ${pct}%"></div>`
+      ).join("");
+      return `<div class="d-flex align-items-center gap-2 mb-1">
+        <span style="min-width:36px;color:#9ca3af;font-size:.78rem;">${y.ano}</span>
+        <div style="flex:1;display:flex;border-radius:4px;overflow:hidden;">${bars}</div>
+        <span style="color:#666;font-size:.72rem;min-width:36px;">${y.total}</span>
+      </div>`;
+    }).join("");
+    return `
+    <div class="card-dark">
+      <h5><i class="fa-solid fa-timeline me-2"></i>Distribuição por Dezenas ao Longo do Tempo</h5>
+      <div style="font-size:.73rem;color:#666;margin-bottom:8px;">
+        ${labels.map((l,i) => `<span style="color:${colors[i]};">&#9632;</span> ${l}`).join(" &middot; ")}
+      </div>
+      ${rows}
+    </div>`;
+  } catch(e) { return ""; }
+}
+
+function getMomentum(num, qf) {
+  const entry = qf.find(x => x.num === num);
+  if (!entry) return "";
+  const ratio = entry.avg_gap > 0 ? entry.draws_since / entry.avg_gap : 0;
+  if (entry.draws_since === 0) return `<span class="trend-up" title="Saiu agora">▲</span>`;
+  if (ratio >= 2) return `<span class="trend-down" title="Muito atrasado">▼▼</span>`;
+  if (ratio >= 1.5) return `<span class="trend-down" title="Em atraso">▼</span>`;
+  if (entry.freq_recente >= 3) return `<span class="trend-up" title="Tendência quente">▲</span>`;
+  return `<span class="trend-flat" title="Normal">─</span>`;
+}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>

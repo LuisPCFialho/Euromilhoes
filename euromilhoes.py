@@ -237,6 +237,8 @@ class DatabaseManager:
                     soma    INTEGER,
                     padrao  TEXT
                 );
+                CREATE INDEX IF NOT EXISTS idx_sorteios_data ON sorteios(data);
+                CREATE INDEX IF NOT EXISTS idx_sorteios_soma ON sorteios(soma);
             """)
 
     def eliminar_sorteio(self, data: str) -> bool:
