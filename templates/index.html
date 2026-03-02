@@ -312,8 +312,8 @@
       60% { transform:scale(1.15) rotate(5deg); }
       100% { opacity:1; transform:scale(1) rotate(0); }
     }
-    .ball-anim { animation: ballReveal .35s ease-out both; }
-    .chave-row { animation: fadeSlideIn .3s ease-out both; }
+    .ball-anim { animation: ballReveal .18s ease-out both; }
+    .chave-row { animation: fadeSlideIn .15s ease-out both; }
 
     /* ── #2 Fade/slide-in for rows and cards ── */
     @keyframes fadeSlideIn {
@@ -1440,9 +1440,9 @@ function renderChaves(d) {
                 : d.cores.castanhos?.includes(n) ? "ball-cast"
                 : "ball-neu";
       const prefStyle = prefNums.has(n) ? "box-shadow:0 0 0 2px #ffd700;" : "";
-      return `<span class="ball ${cls} ball-anim" style="animation-delay:${(i*5+j)*0.04}s;${prefStyle}">${n}</span>`;
+      return `<span class="ball ${cls} ball-anim" style="animation-delay:${(i*5+j)*0.015}s;${prefStyle}">${n}</span>`;
     }).join("");
-    const stars  = ch.estrelas.map((s, j) => `<span class="ball ball-star ball-anim" style="animation-delay:${(i*5+5+j)*0.04}s">★${s}</span>`).join("");
+    const stars  = ch.estrelas.map((s, j) => `<span class="ball ball-star ball-anim" style="animation-delay:${(i*5+5+j)*0.015}s">★${s}</span>`).join("");
     const padrao = `<span class="badge-padrao">${ch.padrao.join("-")}</span>`;
     // Consecutive pairs indicator
     const consec = [];
@@ -1450,7 +1450,7 @@ function renderChaves(d) {
     for (let k=0;k<sorted.length-1;k++) if (sorted[k+1]-sorted[k]===1) consec.push(`${sorted[k]}-${sorted[k+1]}`);
     const consecHTML = consec.length ? ` <span class="consec-badge" title="Pares consecutivos">${consec.join(",")}</span>` : "";
     tbody.insertAdjacentHTML("beforeend", `
-      <tr class="chave-row" style="animation-delay:${i*0.05}s">
+      <tr class="chave-row" style="animation-delay:${i*0.02}s">
         <td style="color:#9ca3af;">${i+1}</td>
         <td colspan="5">${nums}</td>
         <td colspan="2">${stars}</td>
