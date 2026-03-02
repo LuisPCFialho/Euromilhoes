@@ -596,6 +596,34 @@
             <input type="text" id="incluir-nums" class="form-control form-control-sm" placeholder="ex: 5,28"/>
           </div>
 
+          <div class="mb-2">
+            <div class="d-flex align-items-center gap-2">
+              <label class="form-label small mb-0" style="color:#9ca3af;">
+                <i class="fa-solid fa-star me-1" style="color:#ffd700;font-size:.7rem;"></i>Preferidos (opcional)
+              </label>
+              <button class="btn btn-sm py-0 px-1" onclick="document.getElementById('preferidos-section').style.display=document.getElementById('preferidos-section').style.display==='none'?'block':'none'" style="font-size:.65rem;color:#74c0fc;background:none;border:1px solid #2a2a4a;line-height:1;">+/-</button>
+            </div>
+            <div id="preferidos-section" style="display:none;margin-top:6px;">
+              <div style="color:#6b7280;font-size:.72rem;margin-bottom:6px;">Numero aparece em X a Y chaves (nao em todas)</div>
+              <div class="d-flex align-items-center gap-1 mb-1">
+                <input type="number" id="pref-num-1" class="form-control form-control-sm" min="1" max="50" placeholder="N" style="width:52px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
+                <span style="color:#6b7280;font-size:.75rem;">em</span>
+                <input type="number" id="pref-min-1" class="form-control form-control-sm" min="0" max="100" placeholder="min" style="width:50px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
+                <span style="color:#6b7280;font-size:.75rem;">a</span>
+                <input type="number" id="pref-max-1" class="form-control form-control-sm" min="0" max="100" placeholder="max" style="width:50px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
+                <span style="color:#6b7280;font-size:.72rem;">chaves</span>
+              </div>
+              <div class="d-flex align-items-center gap-1">
+                <input type="number" id="pref-num-2" class="form-control form-control-sm" min="1" max="50" placeholder="N" style="width:52px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
+                <span style="color:#6b7280;font-size:.75rem;">em</span>
+                <input type="number" id="pref-min-2" class="form-control form-control-sm" min="0" max="100" placeholder="min" style="width:50px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
+                <span style="color:#6b7280;font-size:.75rem;">a</span>
+                <input type="number" id="pref-max-2" class="form-control form-control-sm" min="0" max="100" placeholder="max" style="width:50px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
+                <span style="color:#6b7280;font-size:.72rem;">chaves</span>
+              </div>
+            </div>
+          </div>
+
           <button class="btn btn-em w-100 mt-2" onclick="gerarChaves()" id="btn-gerar">
             <i class="fa-solid fa-play me-2"></i>Gerar Chaves
           </button>
@@ -1024,6 +1052,11 @@ function saveFilters() {
   });
   state.soma_range = document.getElementById("soma_range")?.value || "padrao";
   state.qtd = document.getElementById("qtd")?.value || "10";
+  for (let i = 1; i <= 2; i++) {
+    state[`pref_num_${i}`] = document.getElementById(`pref-num-${i}`)?.value || "";
+    state[`pref_min_${i}`] = document.getElementById(`pref-min-${i}`)?.value || "";
+    state[`pref_max_${i}`] = document.getElementById(`pref-max-${i}`)?.value || "";
+  }
   localStorage.setItem("euromilhoes_filters", JSON.stringify(state));
 }
 function loadSavedFilters() {
@@ -1036,6 +1069,14 @@ function loadSavedFilters() {
     });
     if (saved.soma_range) document.getElementById("soma_range").value = saved.soma_range;
     if (saved.qtd) document.getElementById("qtd").value = saved.qtd;
+    for (let i = 1; i <= 2; i++) {
+      if (saved[`pref_num_${i}`]) document.getElementById(`pref-num-${i}`).value = saved[`pref_num_${i}`];
+      if (saved[`pref_min_${i}`]) document.getElementById(`pref-min-${i}`).value = saved[`pref_min_${i}`];
+      if (saved[`pref_max_${i}`]) document.getElementById(`pref-max-${i}`).value = saved[`pref_max_${i}`];
+    }
+    // Show preferidos section if any values were saved
+    const hasPrefs = saved.pref_num_1 || saved.pref_num_2;
+    if (hasPrefs) document.getElementById("preferidos-section").style.display = "block";
     onFiltroAToggle();
   } catch(e) {}
 }
@@ -1306,6 +1347,17 @@ async function gerarChaves() {
   const excluir = exclRaw.split(",").map(s=>parseInt(s.trim())).filter(n=>n>=1&&n<=50);
   const incluir = inclRaw.split(",").map(s=>parseInt(s.trim())).filter(n=>n>=1&&n<=50);
 
+  // Preferred numbers (frequency-controlled)
+  const preferidos = [];
+  for (let i = 1; i <= 2; i++) {
+    const num = parseInt(document.getElementById(`pref-num-${i}`)?.value);
+    const min = parseInt(document.getElementById(`pref-min-${i}`)?.value);
+    const max = parseInt(document.getElementById(`pref-max-${i}`)?.value);
+    if (num >= 1 && num <= 50 && min >= 0 && max >= min) {
+      preferidos.push({ numero: num, min, max: Math.min(max, qtd) });
+    }
+  }
+
   // #2 Save filter preferences
   saveFilters();
 
@@ -1320,7 +1372,7 @@ async function gerarChaves() {
       body: JSON.stringify({
         quantidade: qtd,
         soma_range: document.getElementById("soma_range").value,
-        excluir, incluir,
+        excluir, incluir, preferidos,
         ...filterCfg,
       })
     });
@@ -1360,6 +1412,7 @@ function rarityBadge(padrao) {
 function renderChaves(d) {
   const tbody = document.getElementById("chaves-tbody");
   tbody.innerHTML = "";
+  const prefNums = new Set((d.preferidos_resultado || []).map(p => p.numero));
   d.chaves.forEach((ch, i) => {
     const nums   = ch.numeros.map((n, j) => {
       const cls = d.cores.vermelhos?.includes(n) ? "ball-verm"
@@ -1367,7 +1420,8 @@ function renderChaves(d) {
                 : d.cores.azuis?.includes(n)     ? "ball-azul"
                 : d.cores.castanhos?.includes(n) ? "ball-cast"
                 : "ball-neu";
-      return `<span class="ball ${cls} ball-anim" style="animation-delay:${(i*5+j)*0.04}s">${n}</span>`;
+      const prefStyle = prefNums.has(n) ? "box-shadow:0 0 0 2px #ffd700;" : "";
+      return `<span class="ball ${cls} ball-anim" style="animation-delay:${(i*5+j)*0.04}s;${prefStyle}">${n}</span>`;
     }).join("");
     const stars  = ch.estrelas.map((s, j) => `<span class="ball ball-star ball-anim" style="animation-delay:${(i*5+5+j)*0.04}s">★${s}</span>`).join("");
     const padrao = `<span class="badge-padrao">${ch.padrao.join("-")}</span>`;
@@ -1390,11 +1444,21 @@ function renderChaves(d) {
   const allNums = d.chaves.flatMap(c => c.numeros);
   const pares = allNums.filter(n => n % 2 === 0).length;
   const impares = allNums.length - pares;
-  document.getElementById("gen-stats").innerHTML =
+  let statsHtml =
     `<span title="Chaves geradas">${d.total_geradas}/${d.total_pedidas}</span> · ` +
     `<span title="Combinações testadas">${d.total_tentativas.toLocaleString()} testadas</span> · ` +
     `<span title="Média de tentativas por chave">~${avgAttempts}/chave</span> · ` +
     `<span title="Par/Ímpar">P${pares}:I${impares}</span>`;
+  if (d.preferidos_resultado && d.preferidos_resultado.length) {
+    const prefHtml = d.preferidos_resultado.map(p => {
+      const ok = p.achieved >= p.min && p.achieved <= p.max;
+      const color = ok ? '#51cf66' : '#ffc107';
+      const icon = ok ? '&#10003;' : '&#9888;';
+      return `<span style="color:${color};" title="N${p.numero}: alvo ${p.min}-${p.max}, obtido ${p.achieved}">${icon} N${p.numero}: ${p.achieved}x</span>`;
+    }).join(' · ');
+    statsHtml += ` · ${prefHtml}`;
+  }
+  document.getElementById("gen-stats").innerHTML = statsHtml;
   document.getElementById("results-panel").style.display = "";
 }
 

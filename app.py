@@ -187,6 +187,19 @@ def api_gerar():
     excluir = set(int(n) for n in body.get("excluir", []) if 1 <= int(n) <= 50) if body.get("excluir") else set()
     incluir = set(int(n) for n in body.get("incluir", []) if 1 <= int(n) <= 50) if body.get("incluir") else set()
 
+    # Números Preferidos — frequency-controlled inclusion (max 2)
+    preferidos = []
+    for p in body.get("preferidos", [])[:2]:
+        try:
+            num = int(p.get("numero", 0))
+            pmin = int(p.get("min", 0))
+            pmax = int(p.get("max", quantidade))
+        except (ValueError, TypeError):
+            continue
+        if 1 <= num <= 50 and 0 <= pmin <= pmax <= quantidade:
+            if num not in excluir and num not in incluir:
+                preferidos.append({"numero": num, "min": pmin, "max": pmax})
+
     cores, _ = _get_cores()
     ultimo   = db.ultimo_sorteio()
     ultimo_nums = ultimo["numeros"] if ultimo else []
@@ -199,6 +212,20 @@ def api_gerar():
     max_outer = quantidade * 200  # safety limit
     outer_tries = 0
 
+    # ── Two-pass approach for preferred numbers ──
+    # Pass 1: Generate all keys normally (with excluir/incluir)
+    # Pass 2: Adjust to meet preferred number targets by re-generating keys
+    import random as _rnd
+
+    pref_state = []
+    for pf in preferidos:
+        target = _rnd.randint(pf["min"], pf["max"])
+        pref_state.append({
+            "numero": pf["numero"], "min": pf["min"], "max": pf["max"],
+            "target": target, "achieved": 0,
+        })
+
+    # Pass 1: generate all keys
     while len(chaves_geradas) < quantidade and outer_tries < max_outer:
         outer_tries += 1
         chave = gen.gerar_chave()
@@ -206,15 +233,86 @@ def api_gerar():
             break
         total_tentativas += chave["tentativas"]
         nums_set = set(chave["numeros"])
-        # Check exclusion: none of the excluded numbers should be present
         if excluir and nums_set & excluir:
             continue
-        # Check inclusion: all included numbers must be present
         if incluir and not incluir.issubset(nums_set):
             continue
         chaves_geradas.append(chave)
 
+    # Pass 2: adjust for preferred numbers
+    if pref_state and len(chaves_geradas) == quantidade:
+        MAX_REPLACE_TRIES = 100
+
+        for ps in pref_state:
+            num = ps["numero"]
+            # Count current appearances
+            has_num = [i for i, ch in enumerate(chaves_geradas) if num in ch["numeros"]]
+            without_num = [i for i, ch in enumerate(chaves_geradas) if num not in ch["numeros"]]
+            current = len(has_num)
+            ps["achieved"] = current
+
+            # Need more: replace keys WITHOUT the number → keys WITH it
+            if current < ps["min"]:
+                deficit = ps["target"] - current
+                _rnd.shuffle(without_num)
+                for idx in without_num[:deficit]:
+                    if ps["achieved"] >= ps["target"]:
+                        break
+                    for _ in range(MAX_REPLACE_TRIES):
+                        outer_tries += 1
+                        chave = gen.gerar_chave()
+                        if not chave:
+                            continue
+                        total_tentativas += chave["tentativas"]
+                        nums_set = set(chave["numeros"])
+                        if excluir and nums_set & excluir:
+                            continue
+                        if incluir and not incluir.issubset(nums_set):
+                            continue
+                        if num not in nums_set:
+                            continue
+                        chaves_geradas[idx] = chave
+                        ps["achieved"] += 1
+                        break
+
+            # Too many: replace keys WITH the number → keys WITHOUT it
+            elif current > ps["max"]:
+                excess = current - ps["max"]
+                _rnd.shuffle(has_num)
+                replaced = 0
+                for idx in has_num:
+                    if replaced >= excess:
+                        break
+                    for _ in range(MAX_REPLACE_TRIES):
+                        outer_tries += 1
+                        chave = gen.gerar_chave()
+                        if not chave:
+                            continue
+                        total_tentativas += chave["tentativas"]
+                        nums_set = set(chave["numeros"])
+                        if excluir and nums_set & excluir:
+                            continue
+                        if incluir and not incluir.issubset(nums_set):
+                            continue
+                        if num in nums_set:
+                            continue
+                        chaves_geradas[idx] = chave
+                        ps["achieved"] -= 1
+                        replaced += 1
+                        break
+
+        # Recount final achievements
+        for ps in pref_state:
+            ps["achieved"] = sum(1 for ch in chaves_geradas if ps["numero"] in ch["numeros"])
+
     logger.info("Chaves geradas: %d/%d (tentativas: %d)", len(chaves_geradas), quantidade, total_tentativas)
+
+    # Build preferidos result
+    preferidos_resultado = [
+        {"numero": ps["numero"], "min": ps["min"], "max": ps["max"],
+         "target": ps["target"], "achieved": ps["achieved"]}
+        for ps in pref_state
+    ]
 
     # Save to generation history
     hist_entry = {
@@ -240,6 +338,7 @@ def api_gerar():
         "total_tentativas": total_tentativas,
         "filtros": fe.resumo_filtros(),
         "config": cfg,
+        "preferidos_resultado": preferidos_resultado,
     })
 
 
