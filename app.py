@@ -12,6 +12,7 @@ import datetime
 import logging
 import time as _time
 import threading
+import subprocess
 from itertools import combinations
 from collections import Counter as _Counter
 from pathlib import Path
@@ -21,7 +22,7 @@ from flask import Flask, render_template, request, jsonify, send_file
 from euromilhoes import (
     DatabaseManager, StatisticsAnalyzer, FilterEngine,
     KeyGenerator, ExcelExporter, EuromilhoesScraper, HistoricoScraper,
-    VERSION, PADROES_EQUILIBRADOS, BI, BP, AI, AP, HISTORICO_PATH,
+    PADROES_EQUILIBRADOS, BI, BP, AI, AP, HISTORICO_PATH,
     ExcelImporter, EXCEL_SOURCE_PATH,
     TODOS_PADROES_BIBPAIAP, classificar_padrao_bibpaiap, classificar_padrao_cores,
     corrigir_data_sorteio,
@@ -38,7 +39,37 @@ logging.basicConfig(
 )
 logger = logging.getLogger("euromilhoes")
 
-# NOTE: When bumping VERSION in euromilhoes.py, update the CHANGELOG as well.
+
+# ── Version from git commit count ───────────────────────────────────────────
+def _get_git_version():
+    """Return (commit_count, date_str) from git, or from .version file on Vercel."""
+    version_file = Path(__file__).parent / ".version"
+    # Try git first (works locally)
+    try:
+        count = subprocess.check_output(
+            ["git", "rev-list", "--count", "HEAD"],
+            cwd=Path(__file__).parent, stderr=subprocess.DEVNULL
+        ).decode().strip()
+        date_raw = subprocess.check_output(
+            ["git", "log", "-1", "--format=%ci"],
+            cwd=Path(__file__).parent, stderr=subprocess.DEVNULL
+        ).decode().strip()  # e.g. "2026-03-02 14:30:00 +0000"
+        dt = datetime.datetime.strptime(date_raw[:10], "%Y-%m-%d")
+        meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+        date_str = f"{dt.day:02d}.{meses[dt.month-1]}.{dt.year}"
+        # Save to file for Vercel deploys
+        version_file.write_text(f"{count}\n{date_str}", encoding="utf-8")
+        return count, date_str
+    except Exception:
+        pass
+    # Fallback: read from .version file (Vercel)
+    try:
+        lines = version_file.read_text(encoding="utf-8").strip().split("\n")
+        return lines[0], lines[1]
+    except Exception:
+        return "0", "?"
+
+APP_VERSION, APP_VERSION_DATE = _get_git_version()
 
 app = Flask(__name__)
 
@@ -145,7 +176,7 @@ def _sync_historico_json():
 # ════════════════════════════════════════════════════════════════════════════
 @app.route("/")
 def index():
-    return render_template("index.html", version=VERSION)
+    return render_template("index.html", version=APP_VERSION, version_date=APP_VERSION_DATE)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -157,7 +188,7 @@ def api_status():
     return jsonify({
         "total_sorteios": db.total_sorteios(),
         "ultimo_sorteio": ultimo,
-        "version": VERSION,
+        "version": APP_VERSION,
     })
 
 
@@ -562,7 +593,7 @@ def api_estatisticas():
 def api_estrategias():
     cores, _ = _get_cores()
     return jsonify({
-        "version": VERSION,
+        "version": APP_VERSION,
         "quadrantes": {
             "BI": {"descricao": "Baixos Ímpares (1–25)", "numeros": sorted(BI)},
             "BP": {"descricao": "Baixos Pares (2–24)",   "numeros": sorted(BP)},
@@ -941,7 +972,7 @@ def api_dados_json():
         "sorteios": todos[:100],  # Last 100 draws
         "frequencia_numeros": freq,
         "frequencia_estrelas": freq_e,
-        "version": VERSION,
+        "version": APP_VERSION,
     })
 
 
@@ -1292,7 +1323,7 @@ def api_scrape_premios_status():
 if __name__ == "__main__":
     import os
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
-    print(f"\n  EuroMilhoes v{VERSION} - Servidor Web")
+    print(f"\n  EuroMilhoes v{APP_VERSION} - Servidor Web")
     print("  ---------------------------------------")
     print("  Acede em:  http://localhost:5051\n")
     app.run(host="0.0.0.0", port=5051, debug=False)
