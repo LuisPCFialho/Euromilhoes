@@ -586,25 +586,19 @@
             </button>
           </div>
 
-          <!-- Exclusion/inclusion filters (#33, #34) -->
-          <div class="mb-2">
-            <label class="form-label small" style="color:#9ca3af;">Excluir números (opcional)</label>
-            <input type="text" id="excluir-nums" class="form-control form-control-sm" placeholder="ex: 7,13,42"/>
-          </div>
-          <div class="mb-2">
-            <label class="form-label small" style="color:#9ca3af;">Incluir obrigatório (opcional)</label>
-            <input type="text" id="incluir-nums" class="form-control form-control-sm" placeholder="ex: 5,28"/>
-          </div>
-
+          <!-- Incluir/Excluir Números -->
           <div class="mb-2">
             <div class="d-flex align-items-center gap-2">
               <label class="form-label small mb-0" style="color:#9ca3af;">
-                <i class="fa-solid fa-star me-1" style="color:#ffd700;font-size:.7rem;"></i>Preferidos (opcional)
+                <i class="fa-solid fa-crosshairs me-1" style="color:#74c0fc;font-size:.7rem;"></i>Incluir Numeros (opcional)
               </label>
-              <button class="btn btn-sm py-0 px-1" onclick="document.getElementById('preferidos-section').style.display=document.getElementById('preferidos-section').style.display==='none'?'block':'none'" style="font-size:.65rem;color:#74c0fc;background:none;border:1px solid #2a2a4a;line-height:1;">+/-</button>
+              <button class="btn btn-sm py-0 px-1" onclick="toggleIncluirNums()" style="font-size:.65rem;color:#74c0fc;background:none;border:1px solid #2a2a4a;line-height:1;" title="Mostrar/esconder">+/-</button>
             </div>
-            <div id="preferidos-section" style="display:none;margin-top:6px;">
-              <div style="color:#6b7280;font-size:.72rem;margin-bottom:6px;">Numero aparece em X a Y chaves (nao em todas)</div>
+            <div id="incluir-section" style="display:none;margin-top:6px;">
+              <div style="color:#6b7280;font-size:.72rem;margin-bottom:6px;">
+                Numero aparece em <b style="color:#9ca3af;">min</b> a <b style="color:#9ca3af;">max</b> chaves.
+                Ex: 0-0 = excluir, vazio min/max = em todas.
+              </div>
               <div class="d-flex align-items-center gap-1 mb-1">
                 <input type="number" id="pref-num-1" class="form-control form-control-sm" min="1" max="50" placeholder="N" style="width:52px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
                 <span style="color:#6b7280;font-size:.75rem;">em</span>
@@ -613,12 +607,28 @@
                 <input type="number" id="pref-max-1" class="form-control form-control-sm" min="0" max="100" placeholder="max" style="width:50px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
                 <span style="color:#6b7280;font-size:.72rem;">chaves</span>
               </div>
-              <div class="d-flex align-items-center gap-1">
+              <div class="d-flex align-items-center gap-1 mb-1">
                 <input type="number" id="pref-num-2" class="form-control form-control-sm" min="1" max="50" placeholder="N" style="width:52px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
                 <span style="color:#6b7280;font-size:.75rem;">em</span>
                 <input type="number" id="pref-min-2" class="form-control form-control-sm" min="0" max="100" placeholder="min" style="width:50px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
                 <span style="color:#6b7280;font-size:.75rem;">a</span>
                 <input type="number" id="pref-max-2" class="form-control form-control-sm" min="0" max="100" placeholder="max" style="width:50px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
+                <span style="color:#6b7280;font-size:.72rem;">chaves</span>
+              </div>
+              <div class="d-flex align-items-center gap-1 mb-1">
+                <input type="number" id="pref-num-3" class="form-control form-control-sm" min="1" max="50" placeholder="N" style="width:52px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
+                <span style="color:#6b7280;font-size:.75rem;">em</span>
+                <input type="number" id="pref-min-3" class="form-control form-control-sm" min="0" max="100" placeholder="min" style="width:50px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
+                <span style="color:#6b7280;font-size:.75rem;">a</span>
+                <input type="number" id="pref-max-3" class="form-control form-control-sm" min="0" max="100" placeholder="max" style="width:50px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
+                <span style="color:#6b7280;font-size:.72rem;">chaves</span>
+              </div>
+              <div class="d-flex align-items-center gap-1">
+                <input type="number" id="pref-num-4" class="form-control form-control-sm" min="1" max="50" placeholder="N" style="width:52px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
+                <span style="color:#6b7280;font-size:.75rem;">em</span>
+                <input type="number" id="pref-min-4" class="form-control form-control-sm" min="0" max="100" placeholder="min" style="width:50px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
+                <span style="color:#6b7280;font-size:.75rem;">a</span>
+                <input type="number" id="pref-max-4" class="form-control form-control-sm" min="0" max="100" placeholder="max" style="width:50px;background:#0d1117;color:#e0e0e0;border:1px solid #2a2a4a;"/>
                 <span style="color:#6b7280;font-size:.72rem;">chaves</span>
               </div>
             </div>
@@ -1052,7 +1062,7 @@ function saveFilters() {
   });
   state.soma_range = document.getElementById("soma_range")?.value || "padrao";
   state.qtd = document.getElementById("qtd")?.value || "10";
-  for (let i = 1; i <= 2; i++) {
+  for (let i = 1; i <= 4; i++) {
     state[`pref_num_${i}`] = document.getElementById(`pref-num-${i}`)?.value || "";
     state[`pref_min_${i}`] = document.getElementById(`pref-min-${i}`)?.value || "";
     state[`pref_max_${i}`] = document.getElementById(`pref-max-${i}`)?.value || "";
@@ -1069,16 +1079,19 @@ function loadSavedFilters() {
     });
     if (saved.soma_range) document.getElementById("soma_range").value = saved.soma_range;
     if (saved.qtd) document.getElementById("qtd").value = saved.qtd;
-    for (let i = 1; i <= 2; i++) {
-      if (saved[`pref_num_${i}`]) document.getElementById(`pref-num-${i}`).value = saved[`pref_num_${i}`];
+    let hasPrefs = false;
+    for (let i = 1; i <= 4; i++) {
+      if (saved[`pref_num_${i}`]) { document.getElementById(`pref-num-${i}`).value = saved[`pref_num_${i}`]; hasPrefs = true; }
       if (saved[`pref_min_${i}`]) document.getElementById(`pref-min-${i}`).value = saved[`pref_min_${i}`];
       if (saved[`pref_max_${i}`]) document.getElementById(`pref-max-${i}`).value = saved[`pref_max_${i}`];
     }
-    // Show preferidos section if any values were saved
-    const hasPrefs = saved.pref_num_1 || saved.pref_num_2;
-    if (hasPrefs) document.getElementById("preferidos-section").style.display = "block";
+    if (hasPrefs) document.getElementById("incluir-section").style.display = "block";
     onFiltroAToggle();
   } catch(e) {}
+}
+function toggleIncluirNums() {
+  const el = document.getElementById("incluir-section");
+  el.style.display = el.style.display === "none" ? "block" : "none";
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -1341,20 +1354,32 @@ async function gerarChaves() {
     filterCfg[`filtro_${f.id}`] = el ? el.checked : true;
   });
 
-  // #33/#34 Exclusion/inclusion
-  const exclRaw = document.getElementById("excluir-nums")?.value || "";
-  const inclRaw = document.getElementById("incluir-nums")?.value || "";
-  const excluir = exclRaw.split(",").map(s=>parseInt(s.trim())).filter(n=>n>=1&&n<=50);
-  const incluir = inclRaw.split(",").map(s=>parseInt(s.trim())).filter(n=>n>=1&&n<=50);
-
-  // Preferred numbers (frequency-controlled)
+  // Unified include/exclude with frequency control (4 slots)
   const preferidos = [];
-  for (let i = 1; i <= 2; i++) {
+  const excluir = [];
+  const incluir = [];
+  for (let i = 1; i <= 4; i++) {
     const num = parseInt(document.getElementById(`pref-num-${i}`)?.value);
-    const min = parseInt(document.getElementById(`pref-min-${i}`)?.value);
-    const max = parseInt(document.getElementById(`pref-max-${i}`)?.value);
-    if (num >= 1 && num <= 50 && min >= 0 && max >= min) {
+    if (!(num >= 1 && num <= 50)) continue;
+    const minVal = document.getElementById(`pref-min-${i}`)?.value;
+    const maxVal = document.getElementById(`pref-max-${i}`)?.value;
+    const min = minVal !== "" ? parseInt(minVal) : null;
+    const max = maxVal !== "" ? parseInt(maxVal) : null;
+    if (min === 0 && max === 0) {
+      // Exclude: 0-0 means never appear
+      excluir.push(num);
+    } else if (min === null && max === null) {
+      // Include in all: no range = mandatory in every key
+      incluir.push(num);
+    } else if (min !== null && max !== null && min >= 0 && max >= min) {
+      // Frequency-controlled
       preferidos.push({ numero: num, min, max: Math.min(max, qtd) });
+    } else if (min !== null && max === null) {
+      // Only min set: min to qtd
+      preferidos.push({ numero: num, min, max: qtd });
+    } else if (min === null && max !== null) {
+      // Only max set: 0 to max
+      preferidos.push({ numero: num, min: 0, max: Math.min(max, qtd) });
     }
   }
 

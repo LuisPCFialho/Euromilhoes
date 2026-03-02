@@ -187,9 +187,9 @@ def api_gerar():
     excluir = set(int(n) for n in body.get("excluir", []) if 1 <= int(n) <= 50) if body.get("excluir") else set()
     incluir = set(int(n) for n in body.get("incluir", []) if 1 <= int(n) <= 50) if body.get("incluir") else set()
 
-    # Números Preferidos — frequency-controlled inclusion (max 2)
+    # Números Preferidos — frequency-controlled inclusion (max 4)
     preferidos = []
-    for p in body.get("preferidos", [])[:2]:
+    for p in body.get("preferidos", [])[:4]:
         try:
             num = int(p.get("numero", 0))
             pmin = int(p.get("min", 0))
@@ -241,7 +241,7 @@ def api_gerar():
 
     # Pass 2: adjust for preferred numbers
     if pref_state and len(chaves_geradas) == quantidade:
-        MAX_REPLACE_TRIES = 100
+        MAX_REPLACE_TRIES = 500
 
         for ps in pref_state:
             num = ps["numero"]
