@@ -590,13 +590,12 @@
           <div class="mb-2">
             <div class="d-flex align-items-center gap-2">
               <label class="form-label small mb-0" style="color:#9ca3af;">
-                <i class="fa-solid fa-crosshairs me-1" style="color:#74c0fc;font-size:.7rem;"></i>Incluir Numeros (opcional)
+                <i class="fa-solid fa-crosshairs me-1" style="color:#74c0fc;font-size:.7rem;"></i>Incluir Números (opcional)
               </label>
-              <button class="btn btn-sm py-0 px-1" onclick="toggleIncluirNums()" style="font-size:.65rem;color:#74c0fc;background:none;border:1px solid #2a2a4a;line-height:1;" title="Mostrar/esconder">+/-</button>
             </div>
-            <div id="incluir-section" style="display:none;margin-top:6px;">
+            <div id="incluir-section" style="margin-top:6px;">
               <div style="color:#6b7280;font-size:.72rem;margin-bottom:6px;">
-                Numero aparece em <b style="color:#9ca3af;">min</b> a <b style="color:#9ca3af;">max</b> chaves.
+                Número aparece em <b style="color:#9ca3af;">min</b> a <b style="color:#9ca3af;">max</b> chaves.
                 Ex: 0-0 = excluir, vazio min/max = em todas.
               </div>
               <div class="d-flex align-items-center gap-1 mb-1">
@@ -1085,13 +1084,8 @@ function loadSavedFilters() {
       if (saved[`pref_min_${i}`]) document.getElementById(`pref-min-${i}`).value = saved[`pref_min_${i}`];
       if (saved[`pref_max_${i}`]) document.getElementById(`pref-max-${i}`).value = saved[`pref_max_${i}`];
     }
-    if (hasPrefs) document.getElementById("incluir-section").style.display = "block";
     onFiltroAToggle();
   } catch(e) {}
-}
-function toggleIncluirNums() {
-  const el = document.getElementById("incluir-section");
-  el.style.display = el.style.display === "none" ? "block" : "none";
 }
 
 // ════════════════════════════════════════════════════════════════════
