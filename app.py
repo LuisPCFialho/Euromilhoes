@@ -1108,6 +1108,34 @@ def api_estatisticas_premios():
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# API – LATEST PRIZES (last N draws with prize data)
+# ════════════════════════════════════════════════════════════════════════════
+@app.route("/api/ultimos-premios")
+def api_ultimos_premios():
+    """Return prize data for the last N draws (default 10)."""
+    limit = min(int(request.args.get("limit", 10)), 50)
+    todos = db.todos_premios()  # Already sorted DESC
+    premios = todos[:limit]
+    # Enrich with draw numbers from sorteios table
+    all_draws = {s["data"]: s for s in db.todos_sorteios()}
+    resultado = []
+    for p in premios:
+        entry = {
+            "data": p["data"],
+            "jackpot": p.get("jackpot", 0),
+        }
+        s = all_draws.get(p["data"])
+        if s:
+            entry["numeros"] = s.get("numeros", [])
+            entry["estrelas"] = s.get("estrelas", [])
+        for t in range(1, 14):
+            entry[f"t{t}_prize"] = p.get(f"t{t}_prize", 0) or 0
+            entry[f"t{t}_winners"] = p.get(f"t{t}_winners", 0) or 0
+        resultado.append(entry)
+    return jsonify({"premios": resultado, "total": len(resultado)})
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # API – SCRAPE PRIZES (bulk import missing prize data)
 # ════════════════════════════════════════════════════════════════════════════
 _scrape_premios_status = {"running": False, "progresso": 0, "total": 0, "msg": ""}

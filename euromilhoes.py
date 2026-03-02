@@ -605,11 +605,21 @@ class PremiosScraper:
     }
 
     # Map tier names from the website to our tier numbers
+    # Supports both "5 + 2" and "5+2" formats
     TIER_MAP = {
-        "5 + 2": 1, "5 + 1": 2, "5": 3, "5 + 0": 3,
-        "4 + 2": 4, "4 + 1": 5, "3 + 2": 6, "4": 7, "4 + 0": 7,
-        "2 + 2": 8, "3 + 1": 9, "3": 10, "3 + 0": 10,
-        "1 + 2": 11, "2 + 1": 12, "2": 13, "2 + 0": 13,
+        "5 + 2": 1, "5+2": 1,
+        "5 + 1": 2, "5+1": 2,
+        "5": 3, "5 + 0": 3, "5+0": 3,
+        "4 + 2": 4, "4+2": 4,
+        "4 + 1": 5, "4+1": 5,
+        "3 + 2": 6, "3+2": 6,
+        "4": 7, "4 + 0": 7, "4+0": 7,
+        "2 + 2": 8, "2+2": 8,
+        "3 + 1": 9, "3+1": 9,
+        "3": 10, "3 + 0": 10, "3+0": 10,
+        "1 + 2": 11, "1+2": 11,
+        "2 + 1": 12, "2+1": 12,
+        "2": 13, "2 + 0": 13, "2+0": 13,
     }
 
     def scrape_premios(self, data_iso: str) -> dict | None:
@@ -627,21 +637,47 @@ class PremiosScraper:
             return None
 
     def _parse_prizes(self, html: str) -> dict | None:
-        """Parse prize breakdown table from HTML."""
+        """Parse prize breakdown table from HTML.
+        Prefers the Portuguese table (€ values); falls back to first € table."""
         import re
         soup = BeautifulSoup(html, "html.parser")
-        result = {}
 
-        # Find the prize breakdown table
+        # Find the Portuguese prize table (has "Portuguese Winners" header)
         table = None
         for t in soup.find_all("table"):
-            text = t.get_text().lower()
-            if "match" in text and ("prize" in text or "winners" in text):
+            header_text = t.get_text().lower()
+            if "portuguese" in header_text and "winners" in header_text:
                 table = t
                 break
 
+        # Fallback: first table with € amounts and match/prize columns
+        if not table:
+            for t in soup.find_all("table"):
+                text = t.get_text()
+                if ("match" in text.lower() or "+" in text) and "€" in text:
+                    table = t
+                    break
+
+        # Last fallback: any table with match + winners
+        if not table:
+            for t in soup.find_all("table"):
+                text = t.get_text().lower()
+                if "match" in text and ("prize" in text or "winners" in text):
+                    table = t
+                    break
+
         if not table:
             return None
+
+        result = {}
+        # Determine column layout from header row
+        header_row = table.find("tr")
+        headers = [h.get_text(strip=True).lower() for h in header_row.find_all(["td", "th"])] if header_row else []
+        # "Total Winners" is the last column — use it for global winners count
+        total_winners_col = None
+        for idx, h in enumerate(headers):
+            if "total" in h and "winner" in h:
+                total_winners_col = idx
 
         rows = table.find_all("tr")
         for row in rows:
@@ -650,28 +686,24 @@ class PremiosScraper:
                 continue
 
             match_text = cells[0].get_text(strip=True)
-            # Normalize: "Match 5 + 2" → "5 + 2"
+            # Normalize: "Match 5 + 2" → "5+2", strip whitespace around +
             match_text = re.sub(r"(?i)match\s*", "", match_text).strip()
 
             tier = self.TIER_MAP.get(match_text)
             if tier is None:
                 continue
 
-            # Parse prize value (€ amount)
-            prize_text = cells[1].get_text(strip=True) if len(cells) > 1 else ""
+            # Prize Per Winner is column 1
+            prize_text = cells[1].get_text(strip=True)
             prize_val = self._parse_amount(prize_text)
 
-            # Parse winners count
-            winners_text = cells[-1].get_text(strip=True) if len(cells) > 2 else ""
-            # Some pages swap columns: check which has the number
-            if prize_val == 0 and len(cells) > 2:
-                # Try swapped: winners in col 1, prize in col 2
-                alt_prize = self._parse_amount(cells[2].get_text(strip=True))
-                alt_winners = self._parse_int(cells[1].get_text(strip=True))
-                if alt_prize > 0:
-                    prize_val = alt_prize
-                    winners_text = cells[1].get_text(strip=True)
-
+            # Total Winners (last col or dedicated col)
+            if total_winners_col is not None and total_winners_col < len(cells):
+                winners_text = cells[total_winners_col].get_text(strip=True)
+            else:
+                winners_text = cells[-1].get_text(strip=True)
+            # Strip "Rollover!" prefix from winners text
+            winners_text = re.sub(r"(?i)rollover!?\s*", "", winners_text).strip()
             winners = self._parse_int(winners_text)
 
             result[f"t{tier}_prize"] = prize_val
