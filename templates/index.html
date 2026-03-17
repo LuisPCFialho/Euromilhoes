@@ -690,6 +690,20 @@
               <tbody id="chaves-tbody"></tbody>
             </table>
           </div>
+          <!-- Panorama geral -->
+          <div id="panorama-geral" style="display:none;border-top:1px solid #2a2a4a;padding-top:8px;margin-top:4px;">
+            <div style="color:#9ca3af;font-size:.72rem;font-weight:600;margin-bottom:5px;letter-spacing:.04em;">PANORAMA GERAL</div>
+            <div class="d-flex flex-wrap gap-2 align-items-start">
+              <div>
+                <div style="color:#6b7280;font-size:.68rem;margin-bottom:3px;">Dezenas</div>
+                <div id="panorama-dezenas" class="d-flex gap-1 flex-wrap"></div>
+              </div>
+              <div style="margin-left:auto;">
+                <div style="color:#6b7280;font-size:.68rem;margin-bottom:3px;">Estrelas</div>
+                <div id="panorama-estrelas" class="d-flex gap-1 flex-wrap"></div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Filter stats -->
@@ -1479,6 +1493,44 @@ function renderChaves(d) {
   }
   document.getElementById("gen-stats").innerHTML = statsHtml;
   document.getElementById("results-panel").style.display = "";
+
+  // Panorama geral — dezenas e estrelas
+  const allNums2 = d.chaves.flatMap(c => c.numeros);
+  const allStars = d.chaves.flatMap(c => c.estrelas);
+  const dezenas = [
+    {label:"1-10",  min:1,  max:10},
+    {label:"11-20", min:11, max:20},
+    {label:"21-30", min:21, max:30},
+    {label:"31-40", min:31, max:40},
+    {label:"41-50", min:41, max:50},
+  ];
+  const maxDez = Math.max(1, ...dezenas.map(d => allNums2.filter(n => n >= d.min && n <= d.max).length));
+  document.getElementById("panorama-dezenas").innerHTML = dezenas.map(dz => {
+    const cnt = allNums2.filter(n => n >= dz.min && n <= dz.max).length;
+    const pct = Math.round(cnt / maxDez * 100);
+    const col = pct >= 80 ? "#51cf66" : pct >= 50 ? "#74c0fc" : "#6b7280";
+    return `<div style="text-align:center;min-width:36px;">
+      <div style="font-size:.78rem;font-weight:700;color:${col};">${cnt}</div>
+      <div style="font-size:.62rem;color:#6b7280;">${dz.label}</div>
+    </div>`;
+  }).join("");
+  const starCounts = {};
+  for (let s = 1; s <= 12; s++) starCounts[s] = allStars.filter(x => x === s).length;
+  const maxStar = Math.max(1, ...Object.values(starCounts));
+  document.getElementById("panorama-estrelas").innerHTML = Array.from({length:12}, (_,i) => i+1).map(s => {
+    const cnt = starCounts[s];
+    if (cnt === 0) return `<div style="text-align:center;min-width:22px;opacity:.3;">
+      <div style="font-size:.78rem;color:#6b7280;">0</div>
+      <div style="font-size:.62rem;color:#555;">★${s}</div>
+    </div>`;
+    const pct = Math.round(cnt / maxStar * 100);
+    const col = pct >= 80 ? "#ffd700" : pct >= 50 ? "#ffc947" : "#9ca3af";
+    return `<div style="text-align:center;min-width:22px;">
+      <div style="font-size:.78rem;font-weight:700;color:${col};">${cnt}</div>
+      <div style="font-size:.62rem;color:#6b7280;">★${s}</div>
+    </div>`;
+  }).join("");
+  document.getElementById("panorama-geral").style.display = "";
 }
 
 function renderFiltrosUsados(filtros, config) {
