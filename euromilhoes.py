@@ -104,7 +104,7 @@ MAX_HISTORICO_ENTRIES = 20     # Max entries kept in generation history
 MAX_FAVORITES = 50             # Max saved favourite keys
 MAX_SCRAPE_BATCH = 50          # Max dates per bulk prize-scrape run
 SCRAPE_DELAY = 1.5             # Seconds between HTTP requests (rate-limit)
-REQUEST_TIMEOUT = 20           # Default timeout (seconds) for all HTTP requests
+REQUEST_TIMEOUT = 8 if _IS_VERCEL else 20  # Vercel cap: 8s; local: 20s
 
 # ─── User-Agent rotation pool ────────────────────────────────────────────────
 _USER_AGENTS = [
