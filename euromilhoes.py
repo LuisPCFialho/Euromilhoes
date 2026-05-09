@@ -1080,46 +1080,56 @@ class HistoricoScraper:
                "inseridos_db": inseridos, "ficheiro": str(ficheiro)}
 
     def scrape_desde(self, desde_data: str, db: "DatabaseManager") -> dict:
-        """Scrape missing draws and insert into DB.
-        Detects gaps (deleted draws) as well as new draws after the last entry.
-        First tries the /results page (recent draws), then falls back to per-year scraping.
-        """
-        # Build sets of existing dates and number combos
+        """Scrape only the draws missing between last DB date and today."""
         existentes = db.todos_sorteios()
         datas_existentes = {s["data"] for s in existentes}
-        combinacoes_existentes = set()
-        for s in existentes:
-            chave = (tuple(sorted(s["numeros"])), tuple(sorted(s["estrelas"])))
-            combinacoes_existentes.add(chave)
 
-        # Try the recent results page first (covers ~2 months)
-        todos = self._euro_millions_com_recent()
+        # Enumerate expected draw dates (Tue/Fri) between last DB entry and today
+        desde = datetime.date.fromisoformat(desde_data)
+        hoje = datetime.date.today()
+        datas_em_falta = []
+        d = desde + datetime.timedelta(days=1)
+        while d <= hoje:
+            if d.weekday() in (1, 4) and d.isoformat() not in datas_existentes:
+                datas_em_falta.append(d)
+            d += datetime.timedelta(days=1)
 
-        # Fallback: per-year scraping if recent page returned nothing
-        if not todos:
-            desde = datetime.date.fromisoformat(desde_data)
-            ano_atual = datetime.date.today().year
-            anos = list(range(desde.year, ano_atual + 1))
-            for ano in anos:
+        if not datas_em_falta:
+            return {"encontrados": 0, "inseridos": 0, "sorteios": []}
+
+        todos = []
+        if len(datas_em_falta) <= 5:
+            # Few missing: fetch each individual draw page
+            for data in datas_em_falta:
+                url = f"https://www.euro-millions.com/results/{data.day:02d}-{data.month:02d}-{data.year}"
                 try:
-                    resultados = self._scrape_ano(ano)
-                    todos.extend(resultados)
-                except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
-                    continue
+                    r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
+                    if r.status_code == 200:
+                        resultados = self._parse_results_table(r.text)
+                        if resultados:
+                            s = resultados[0]
+                            s["data"] = data.isoformat()
+                            todos.append(s)
                 except Exception:
                     continue
-                time.sleep(0.5)
+        else:
+            # Many missing: fetch full year history pages (1-2 requests)
+            anos = sorted({d.year for d in datas_em_falta})
+            for ano in anos:
+                url = f"https://www.euro-millions.com/results-history-{ano}"
+                try:
+                    r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
+                    if r.status_code == 200:
+                        todos.extend(self._parse_results_table(r.text))
+                except Exception:
+                    continue
 
-        # Accept any scraped draw whose date is NOT in the DB (catches gaps + new draws)
-        vistos_datas = set()
+        # Filter to only new draws
+        vistos = set()
         unicos = []
         for s in todos:
-            chave_nums = (tuple(sorted(s["numeros"])), tuple(sorted(s["estrelas"])))
-            if (s["data"] not in datas_existentes
-                    and s["data"] not in vistos_datas
-                    and chave_nums not in combinacoes_existentes):
-                vistos_datas.add(s["data"])
-                combinacoes_existentes.add(chave_nums)
+            if s["data"] not in datas_existentes and s["data"] not in vistos:
+                vistos.add(s["data"])
                 unicos.append(s)
         unicos.sort(key=lambda s: s["data"])
 
@@ -1128,11 +1138,7 @@ class HistoricoScraper:
             if db.inserir_sorteio(s["data"], s["numeros"], s["estrelas"], "web-auto"):
                 inseridos += 1
 
-        return {
-            "encontrados": len(unicos),
-            "inseridos": inseridos,
-            "sorteios": unicos,
-        }
+        return {"encontrados": len(unicos), "inseridos": inseridos, "sorteios": unicos}
 
     # ── Per-year scraping ─────────────────────────────────────────────────────
     def _scrape_ano(self, ano: int) -> list[dict]:
