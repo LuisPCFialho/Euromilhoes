@@ -672,6 +672,9 @@
               <button class="btn btn-ghost btn-sm" onclick="exportarExcel()" aria-label="Exportar Excel">
                 <i class="fa-solid fa-file-excel me-1" style="color:#51cf66;"></i>Excel
               </button>
+              <button class="btn btn-ghost btn-sm" onclick="apostarNoJSC()" title="Abrir boletim Jogos Santa Casa com as primeiras 5 chaves preenchidas (requer userscript Tampermonkey)" aria-label="Apostar no JSC">
+                <i class="fa-solid fa-dice me-1" style="color:#ffa94d;"></i>JSC
+              </button>
               <button class="btn btn-ghost btn-sm" onclick="partilharChaves()" title="Partilhar chaves" aria-label="Partilhar">
                 <i class="fa-solid fa-share-nodes me-1" style="color:#74c0fc;"></i>Partilhar
               </button>
@@ -2928,6 +2931,26 @@ function partilharChaves() {
     navigator.share({ title:"Chaves EuroMilhões", text }).catch(()=>{});
   } else {
     navigator.clipboard.writeText(text).then(() => toast("Copiado para clipboard!")).catch(()=>{});
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Apostar no Jogos Santa Casa (cold)
+// Abre o boletim com hash #k=N,N,N,N,N:E,E;... (até 5 chaves).
+// Requer o userscript Tampermonkey "Euromilhoes — Auto-preencher chaves no JSC".
+// ════════════════════════════════════════════════════════════════════
+function apostarNoJSC() {
+  if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
+  const usadas = lastChaves.slice(0, 5);
+  const hash = usadas.map(ch =>
+    ch.numeros.join(",") + ":" + ch.estrelas.join(",")
+  ).join(";");
+  const url = "https://www.jogossantacasa.pt/web/JogarEuromilhoes/#k=" + hash;
+  window.open(url, "_blank", "noopener");
+  if (lastChaves.length > 5) {
+    toast(`Abertas as primeiras 5 chaves (de ${lastChaves.length}) no JSC`, "info");
+  } else {
+    toast(`${usadas.length} chave(s) enviadas para o JSC`, "info");
   }
 }
 
