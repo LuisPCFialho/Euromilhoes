@@ -513,9 +513,6 @@ def api_eliminar_sorteio(data):
 # ════════════════════════════════════════════════════════════════════════════
 @app.route("/api/actualizar-recentes", methods=["POST"])
 def api_actualizar_recentes():
-    if not _scrape_lock.acquire(blocking=False):
-        return jsonify({"erro": "Já existe um scraping em curso."}), 429
-
     try:
         ultimo = db.ultimo_sorteio()
         if not ultimo:
@@ -542,8 +539,6 @@ def api_actualizar_recentes():
     except Exception as e:
         logger.exception("Erro no scraping de sorteios recentes")
         return jsonify({"erro": f"Erro no scraping de sorteios recentes: {type(e).__name__}: {e}"}), 502
-    finally:
-        _scrape_lock.release()
 
 
 # ════════════════════════════════════════════════════════════════════════════
