@@ -122,12 +122,14 @@ def _random_user_agent() -> str:
 
 
 def _retry_request(url: str, headers: dict = None, timeout: int = None,
-                   max_retries: int = 3, **kwargs) -> "requests.Response":
+                   max_retries: int = None, **kwargs) -> "requests.Response":
     """GET *url* with exponential-backoff retries.
 
     Raises the last exception if all attempts fail.
     """
     timeout = timeout or REQUEST_TIMEOUT
+    if max_retries is None:
+        max_retries = 1 if os.environ.get("VERCEL") else 3
     if headers is None:
         headers = {}
     # Rotate User-Agent on each call
@@ -1113,16 +1115,10 @@ class HistoricoScraper:
                 except Exception:
                     continue
         else:
-            # Many missing: fetch full year history pages (1-2 requests)
+            # Many missing: use _scrape_ano which has multiple fallback sources
             anos = sorted({d.year for d in datas_em_falta})
             for ano in anos:
-                url = f"https://www.euro-millions.com/results-history-{ano}"
-                try:
-                    r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
-                    if r.status_code == 200:
-                        todos.extend(self._parse_results_table(r.text))
-                except Exception:
-                    continue
+                todos.extend(self._scrape_ano(ano))
 
         # Filter to only new draws
         vistos = set()
@@ -2728,3 +2724,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
