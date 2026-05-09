@@ -1149,57 +1149,56 @@ class HistoricoScraper:
         return []
 
     def _euro_millions_com_recent(self) -> list[dict]:
-        """Scrape the /results page which lists the most recent ~15 draws."""
-        url = "https://www.euro-millions.com/results"
-        try:
-            r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
-            if r.status_code != 200:
-                return []
-        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
-            return []
-        except Exception:
-            return []
+        """Scrape results-history pages for current and previous year."""
+        ano_atual = datetime.date.today().year
+        todos = []
+        for ano in [ano_atual, ano_atual - 1]:
+            url = f"https://www.euro-millions.com/results-history-{ano}"
+            try:
+                r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
+                if r.status_code == 200:
+                    todos.extend(self._parse_results_table(r.text))
+            except Exception:
+                continue
+        return self._deduplicate(todos)
 
-        soup = BeautifulSoup(r.text, "html.parser")
+    def _parse_results_table(self, html: str) -> list[dict]:
+        """Parse euro-millions.com/results-history-YYYY table format."""
+        soup = BeautifulSoup(html, "html.parser")
         results = []
-
-        # Find all <ul class="balls"> — each one is a draw
         for ul in soup.find_all("ul", class_="balls"):
             balls = ul.find_all("li", class_="resultBall")
-            main_nums = [int(b.get_text(strip=True)) for b in balls if "ball" in " ".join(b.get("class", [])) and "lucky-star" not in " ".join(b.get("class", []))]
-            star_nums = [int(b.get_text(strip=True)) for b in balls if "lucky-star" in " ".join(b.get("class", []))]
-
+            main_nums = [int(b.get_text(strip=True)) for b in balls
+                         if "ball" in " ".join(b.get("class", [])) and "lucky-star" not in " ".join(b.get("class", []))]
+            star_nums = [int(b.get_text(strip=True)) for b in balls
+                         if "lucky-star" in " ".join(b.get("class", []))]
             if len(main_nums) < 5 or len(star_nums) < 2:
                 continue
-
-            # Find date from a nearby link like /results/DD-MM-YYYY
             date_str = None
-            for ancestor in [ul.parent, ul.parent.parent if ul.parent else None,
-                             ul.parent.parent.parent if ul.parent and ul.parent.parent else None]:
-                if not ancestor:
-                    continue
-                link = ancestor.find("a", href=_re.compile(r"/results/(\d{2})-(\d{2})-(\d{4})"))
+            tr = ul.find_parent("tr")
+            if tr:
+                link = tr.find("a", href=_re.compile(r"/results/(\d{2})-(\d{2})-(\d{4})"))
                 if link:
                     m = _re.search(r"(\d{2})-(\d{2})-(\d{4})", link["href"])
                     if m:
                         date_str = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
-                        break
-
             if date_str:
                 results.append({
                     "data": date_str,
                     "numeros": sorted(main_nums[:5]),
                     "estrelas": sorted(star_nums[:2]),
                 })
-
-        return self._deduplicate(results)
+        return results
 
     def _euro_millions_com(self, ano: int) -> list[dict]:
-        url = f"https://www.euro-millions.com/results/{ano}"
-        r   = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
-        if r.status_code != 200:
+        url = f"https://www.euro-millions.com/results-history-{ano}"
+        try:
+            r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
+            if r.status_code != 200:
+                return []
+            return self._parse_results_table(r.text)
+        except Exception:
             return []
-        return self._parse_html(r.text, ano)
 
     def _euro_millions_com_pt(self, ano: int) -> list[dict]:
         url = f"https://www.euro-millions.com/pt/resultados/{ano}"
