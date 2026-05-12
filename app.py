@@ -270,67 +270,80 @@ def api_gerar():
             continue
         chaves_geradas.append(chave)
 
-    # Pass 2: adjust for preferred numbers
+    # Pass 2: adjust for preferred numbers — iterative until all in [min, max] or maxed out.
+    # Fixing one pref can break another (replacement key may or may not contain other prefs),
+    # so we loop the entire fix step until everything stabilises.
     if pref_state and len(chaves_geradas) == quantidade:
         MAX_REPLACE_TRIES = 500
+        MAX_PASS2_ITERATIONS = 50
 
-        for ps in pref_state:
-            num = ps["numero"]
-            # Count current appearances
-            has_num = [i for i, ch in enumerate(chaves_geradas) if num in ch["numeros"]]
-            without_num = [i for i, ch in enumerate(chaves_geradas) if num not in ch["numeros"]]
-            current = len(has_num)
-            ps["achieved"] = current
+        for pass2_iter in range(MAX_PASS2_ITERATIONS):
+            # Re-count current achievements
+            for ps in pref_state:
+                ps["achieved"] = sum(1 for ch in chaves_geradas if ps["numero"] in ch["numeros"])
 
-            # Need more: replace keys WITHOUT the number → keys WITH it
-            if current < ps["min"]:
-                deficit = ps["target"] - current
-                _rnd.shuffle(without_num)
-                for idx in without_num[:deficit]:
-                    if ps["achieved"] >= ps["target"]:
-                        break
-                    for _ in range(MAX_REPLACE_TRIES):
-                        outer_tries += 1
-                        chave = gen.gerar_chave()
-                        if not chave:
-                            continue
-                        total_tentativas += chave["tentativas"]
-                        nums_set = set(chave["numeros"])
-                        if excluir and nums_set & excluir:
-                            continue
-                        if incluir and not incluir.issubset(nums_set):
-                            continue
-                        if num not in nums_set:
-                            continue
-                        chaves_geradas[idx] = chave
-                        ps["achieved"] += 1
-                        break
+            # If every pref is within its [min, max] window, we're done
+            if all(ps["min"] <= ps["achieved"] <= ps["max"] for ps in pref_state):
+                break
 
-            # Too many: replace keys WITH the number → keys WITHOUT it
-            elif current > ps["max"]:
-                excess = current - ps["max"]
-                _rnd.shuffle(has_num)
-                replaced = 0
-                for idx in has_num:
-                    if replaced >= excess:
-                        break
-                    for _ in range(MAX_REPLACE_TRIES):
-                        outer_tries += 1
-                        chave = gen.gerar_chave()
-                        if not chave:
-                            continue
-                        total_tentativas += chave["tentativas"]
-                        nums_set = set(chave["numeros"])
-                        if excluir and nums_set & excluir:
-                            continue
-                        if incluir and not incluir.issubset(nums_set):
-                            continue
-                        if num in nums_set:
-                            continue
-                        chaves_geradas[idx] = chave
-                        ps["achieved"] -= 1
-                        replaced += 1
-                        break
+            for ps in pref_state:
+                num = ps["numero"]
+                current = ps["achieved"]
+                if ps["min"] <= current <= ps["max"]:
+                    continue  # this one is fine
+
+                has_num = [i for i, ch in enumerate(chaves_geradas) if num in ch["numeros"]]
+                without_num = [i for i, ch in enumerate(chaves_geradas) if num not in ch["numeros"]]
+
+                # Need more: replace keys WITHOUT the number → keys WITH it
+                if current < ps["min"]:
+                    deficit = ps["target"] - current
+                    _rnd.shuffle(without_num)
+                    for idx in without_num[:deficit]:
+                        if ps["achieved"] >= ps["target"]:
+                            break
+                        for _ in range(MAX_REPLACE_TRIES):
+                            outer_tries += 1
+                            chave = gen.gerar_chave()
+                            if not chave:
+                                continue
+                            total_tentativas += chave["tentativas"]
+                            nums_set = set(chave["numeros"])
+                            if excluir and nums_set & excluir:
+                                continue
+                            if incluir and not incluir.issubset(nums_set):
+                                continue
+                            if num not in nums_set:
+                                continue
+                            chaves_geradas[idx] = chave
+                            ps["achieved"] += 1
+                            break
+
+                # Too many: replace keys WITH the number → keys WITHOUT it
+                elif current > ps["max"]:
+                    excess = current - ps["max"]
+                    _rnd.shuffle(has_num)
+                    replaced = 0
+                    for idx in has_num:
+                        if replaced >= excess:
+                            break
+                        for _ in range(MAX_REPLACE_TRIES):
+                            outer_tries += 1
+                            chave = gen.gerar_chave()
+                            if not chave:
+                                continue
+                            total_tentativas += chave["tentativas"]
+                            nums_set = set(chave["numeros"])
+                            if excluir and nums_set & excluir:
+                                continue
+                            if incluir and not incluir.issubset(nums_set):
+                                continue
+                            if num in nums_set:
+                                continue
+                            chaves_geradas[idx] = chave
+                            ps["achieved"] -= 1
+                            replaced += 1
+                            break
 
         # Recount final achievements
         for ps in pref_state:
