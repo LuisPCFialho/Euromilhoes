@@ -1136,6 +1136,20 @@ class HistoricoScraper:
             for ano in anos:
                 todos.extend(self._scrape_ano(ano))
 
+        # Final fallback: if we still couldn't find some missing dates (e.g. today's draw
+        # just published but slower aggregator sources haven't synced yet), try
+        # euromillones.com which only exposes the most recent draw but is fast.
+        cobertos = {s["data"] for s in todos}
+        em_falta_iso = {d.isoformat() for d in datas_em_falta}
+        if em_falta_iso - cobertos:
+            try:
+                latest = self._euromillones_com_latest()
+                for s in latest:
+                    if s["data"] in em_falta_iso and s["data"] not in cobertos:
+                        todos.append(s)
+            except Exception:
+                pass
+
         # Filter to only new draws
         vistos = set()
         unicos = []
@@ -1151,6 +1165,56 @@ class HistoricoScraper:
                 inseridos += 1
 
         return {"encontrados": len(unicos), "inseridos": inseridos, "sorteios": unicos}
+
+    # ── Latest-draw scraper (single result) ───────────────────────────────────
+    # euromillones.com/pt/resultados/euromilhoes only ever shows the most recent draw.
+    # It's not blocked by Vercel datacenter IPs and publishes results promptly, so it's a
+    # reliable last-resort for picking up today's draw when the regular sources lag.
+    def _euromillones_com_latest(self) -> list[dict]:
+        url = "https://www.euromillones.com/pt/resultados/euromilhoes"
+        try:
+            r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
+        except Exception:
+            return []
+        if r.status_code != 200:
+            return []
+        soup = BeautifulSoup(r.text, "html.parser")
+        date_span = soup.find("span", class_="main-date-draw")
+        if not date_span:
+            return []
+        # Date format: "terça-feira, 12 maio 2026"
+        date_str = date_span.get_text(strip=True)
+        meses_pt = {
+            "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+            "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
+        }
+        m = re.search(r"(\d{1,2})\s+(\w+)\s+(\d{4})", date_str, re.IGNORECASE)
+        if not m:
+            return []
+        dia, mes_str, ano_str = m.group(1), m.group(2).lower(), m.group(3)
+        if mes_str not in meses_pt:
+            return []
+        try:
+            dt = datetime.date(int(ano_str), meses_pt[mes_str], int(dia))
+        except ValueError:
+            return []
+        # Numbers and stars
+        bet_breaks = soup.find_all("span", class_="bet-break")
+        if len(bet_breaks) < 2:
+            return []
+        numeros = []
+        for n in bet_breaks[0].find_all("span", class_="numbers"):
+            t = n.find("span", class_="ball-txt")
+            if t and t.get_text(strip=True).isdigit():
+                numeros.append(int(t.get_text(strip=True)))
+        estrelas = []
+        for s in bet_breaks[1].find_all("span", class_="stars"):
+            t = s.find("span", class_="ball-txt")
+            if t and t.get_text(strip=True).isdigit():
+                estrelas.append(int(t.get_text(strip=True)))
+        if len(numeros) != 5 or len(estrelas) != 2:
+            return []
+        return [{"data": dt.isoformat(), "numeros": sorted(numeros), "estrelas": sorted(estrelas)}]
 
     # ── Per-year scraping ─────────────────────────────────────────────────────
     def _scrape_ano(self, ano: int) -> list[dict]:
