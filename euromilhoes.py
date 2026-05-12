@@ -1101,9 +1101,13 @@ class HistoricoScraper:
 
         todos = []
         if len(datas_em_falta) <= 5:
-            # Few missing: fetch each individual draw page
+            # Few missing: try individual draw pages first (fast), then fall back to the year scrape
+            # (which has its own multi-source fallback chain). This covers the case where Vercel's
+            # datacenter IP is blocked by euro-millions.com for direct-fetch but year pages may be
+            # cached or served by alternative sources.
             for data in datas_em_falta:
                 url = f"https://www.euro-millions.com/results/{data.day:02d}-{data.month:02d}-{data.year}"
+                got = False
                 try:
                     r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
                     if r.status_code == 200:
@@ -1112,8 +1116,20 @@ class HistoricoScraper:
                             s = resultados[0]
                             s["data"] = data.isoformat()
                             todos.append(s)
+                            got = True
                 except Exception:
+                    pass
+                if got:
                     continue
+                # Fallback: scrape the whole year via the multi-source chain, pick this date
+                try:
+                    year_results = self._scrape_ano(data.year)
+                    for s in year_results:
+                        if s.get("data") == data.isoformat():
+                            todos.append(s)
+                            break
+                except Exception:
+                    pass
         else:
             # Many missing: use _scrape_ano which has multiple fallback sources
             anos = sorted({d.year for d in datas_em_falta})
