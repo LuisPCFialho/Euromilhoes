@@ -672,7 +672,7 @@
               <button class="btn btn-ghost btn-sm" onclick="exportarExcel()" aria-label="Exportar Excel">
                 <i class="fa-solid fa-file-excel me-1" style="color:#51cf66;"></i>Excel
               </button>
-              <button class="btn btn-ghost btn-sm" onclick="apostarNoJSC()" title="Abrir boletim Jogos Santa Casa com as primeiras 5 chaves preenchidas (requer userscript Tampermonkey)" aria-label="Apostar no JSC">
+              <button class="btn btn-ghost btn-sm" onclick="apostarNoJSC()" title="Registar todas as chaves geradas como Favoritas no JSC, em lotes de 5, com nomes sequenciais CF_AAAA_NNN (requer userscript Tampermonkey + login no JSC)" aria-label="Registar nas Favoritas JSC">
                 <i class="fa-solid fa-dice me-1" style="color:#ffa94d;"></i>JSC
               </button>
               <button class="btn btn-ghost btn-sm" onclick="partilharChaves()" title="Partilhar chaves" aria-label="Partilhar">
@@ -2941,17 +2941,19 @@ function partilharChaves() {
 // ════════════════════════════════════════════════════════════════════
 function apostarNoJSC() {
   if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
-  const usadas = lastChaves.slice(0, 5);
-  const hash = usadas.map(ch =>
+  const ano = new Date().getFullYear();
+  const prefix = prompt(`Nome base para chaves favoritas (será PREFIX_001, PREFIX_002, ...):`, `CF_${ano}`);
+  if (!prefix) return;
+  const startStr = prompt(`Começar a numeração em (1 = ${prefix}_001):`, "1");
+  const start = parseInt(startStr, 10);
+  if (!Number.isInteger(start) || start < 1) { toast("Número inicial inválido", "error"); return; }
+  const hash = lastChaves.map(ch =>
     ch.numeros.join(",") + ":" + ch.estrelas.join(",")
   ).join(";");
-  const url = "https://www.jogossantacasa.pt/web/JogarEuromilhoes/#k=" + hash;
+  const total = Math.ceil(lastChaves.length / 5);
+  const url = `https://www.jogossantacasa.pt/web/ChavesFavoritas/#fav=${hash}&p=${encodeURIComponent(prefix)}&s=${start}&b=0`;
   window.open(url, "_blank", "noopener");
-  if (lastChaves.length > 5) {
-    toast(`Abertas as primeiras 5 chaves (de ${lastChaves.length}) no JSC`, "info");
-  } else {
-    toast(`${usadas.length} chave(s) enviadas para o JSC`, "info");
-  }
+  toast(`${lastChaves.length} chaves → ${total} lote(s) → ${prefix}_${String(start).padStart(3,"0")} … ${prefix}_${String(start+total-1).padStart(3,"0")}`, "info");
 }
 
 // ════════════════════════════════════════════════════════════════════
