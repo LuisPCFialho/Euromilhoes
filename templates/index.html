@@ -2954,6 +2954,42 @@ function apostarNoJSC() {
   const url = `https://www.jogossantacasa.pt/web/ChavesFavoritas/#fav=${hash}&p=${encodeURIComponent(prefix)}&s=${start}&b=0`;
   window.open(url, "_blank", "noopener");
   toast(`${lastChaves.length} chaves → ${total} lote(s) → ${prefix}_${String(start).padStart(3,"0")} … ${prefix}_${String(start+total-1).padStart(3,"0")}`, "info");
+  // Enviar as mesmas chaves para AIJackpot.pt para tracking de prémios
+  enviarParaAIJackpot(lastChaves, prefix, start);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Envia as chaves geradas para AIJackpot.pt (POST /api/receive-keys)
+// O secret é público (frontend) — só protege contra POSTs acidentais.
+// ════════════════════════════════════════════════════════════════════
+async function enviarParaAIJackpot(chaves, prefix, start) {
+  const SECRET = "0a518ed67d8b163cfc554f62c2f5a14c2168f35f6f623ebfead362b4e1499fa4";
+  const ENDPOINT = "https://jackpot-pt.vercel.app/api/receive-keys";
+  const keys = chaves.map((ch, idx) => {
+    const batchNum = start + Math.floor(idx / 5);
+    const posInBatch = (idx % 5) + 1;
+    return {
+      numeros: ch.numeros,
+      estrelas: ch.estrelas,
+      label: `${prefix}_${String(batchNum).padStart(3, "0")}.${posInBatch}`,
+    };
+  });
+  try {
+    const r = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SECRET}` },
+      body: JSON.stringify({ keys, source: "euromilhoes-generator" }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    const msg = d.sorteioCreated
+      ? `AIJackpot: ${d.inseridas} chave(s) → novo sorteio ${d.sorteioDate}`
+      : `AIJackpot: ${d.inseridas} chave(s) inseridas no sorteio ${d.sorteioDate} (${d.totalNoSorteio} total)`;
+    toast(msg, "success");
+  } catch (e) {
+    console.error("AIJackpot failed:", e);
+    toast(`AIJackpot falhou: ${e.message}`, "warning");
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════
