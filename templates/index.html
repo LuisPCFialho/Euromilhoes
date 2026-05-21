@@ -2964,7 +2964,7 @@ function apostarNoJSC() {
 // ════════════════════════════════════════════════════════════════════
 async function enviarParaAIJackpot(chaves, prefix, start) {
   const SECRET = "0a518ed67d8b163cfc554f62c2f5a14c2168f35f6f623ebfead362b4e1499fa4";
-  const ENDPOINT = "https://jackpot-pt.vercel.app/api/receive-keys";
+  const ENDPOINT = "https://aijackpot.pt/api/receive-keys";
   const keys = chaves.map((ch, idx) => {
     const batchNum = start + Math.floor(idx / 5);
     const posInBatch = (idx % 5) + 1;
