@@ -8,6 +8,12 @@
   "routes": [
     {
       "src": "/(.*)",
+      "has": [{ "type": "host", "value": "euromilhoes.luisfialho.pt" }],
+      "headers": { "Location": "https://euromilhoes.luisfialho.com/$1" },
+      "status": 301
+    },
+    {
+      "src": "/(.*)",
       "dest": "api/index.py"
     }
   ]
