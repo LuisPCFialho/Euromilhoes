@@ -2955,11 +2955,9 @@ function apostarNoJSC() {
   ).join(";");
   const total = Math.ceil(lastChaves.length / 5);
   const url = `https://www.jogossantacasa.pt/web/ChavesFavoritas/#fav=${hash}&p=${encodeURIComponent(prefix)}&s=${start}&b=0`;
-  const win = window.open(url, "_blank", "noopener");
-  if (!win) {
-    toast("JSC: popup bloqueado pelo browser. Permite popups deste site.", "error");
-    return;
-  }
+  // NOTA: window.open com "noopener" devolve SEMPRE null, mesmo quando o popup abre.
+  // Por isso NÃO usar `if (!win) return` aqui — abortaria silenciosamente a chamada à AIJackpot.
+  window.open(url, "_blank", "noopener");
   // INCREMENTA o contador para a próxima vez (assim nunca repete)
   const nextStart = start + total;
   localStorage.setItem("jscStart", String(nextStart));
@@ -3014,7 +3012,7 @@ async function enviarParaAIJackpot(chaves, prefix, start) {
     return {
       numeros: ch.numeros,
       estrelas: ch.estrelas,
-      label: `${prefix}_${String(batchNum).padStart(3, "0")}.${posInBatch}`,
+      label: `${prefix}_${String(batchNum).padStart(4, "0")}.${posInBatch}`,
     };
   });
   try {
