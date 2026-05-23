@@ -2951,9 +2951,42 @@ function apostarNoJSC() {
     ch.numeros.join(",") + ":" + ch.estrelas.join(",")
   ).join(";");
   const total = Math.ceil(lastChaves.length / 5);
-  const url = `https://www.jogossantacasa.pt/web/JogarEuromilhoes/#fav=${hash}&p=${encodeURIComponent(prefix)}&s=${start}&b=0`;
-  window.open(url, "_blank", "noopener");
+  // Open JSC tab WITHOUT noopener so we can postMessage the keys directly
+  // (JSC strips URL hash on /JogarEuromilhoes/, so URL-based passing doesn't work)
+  const url = `https://www.jogossantacasa.pt/web/JogarEuromilhoes/`;
+  const jscWin = window.open(url, "_blank");
+  if (!jscWin) {
+    toast("Popup bloqueado — permite popups para o site Euromilhoes", "error");
+    return;
+  }
   toast(`${lastChaves.length} chaves → ${total} lote(s) → ${prefix}_${String(start).padStart(3,"0")} … ${prefix}_${String(start+total-1).padStart(3,"0")}`, "info");
+  // Post the keys to the JSC window. Userscript listens at document-start.
+  // Retry every 400ms until ACK or 30s timeout (JSC takes time to load).
+  const payload = {
+    type: "JSC_AUTOFILL_KEYS",
+    keys: lastChaves.map(ch => ({ numeros: ch.numeros, estrelas: ch.estrelas })),
+    prefix,
+    start,
+    batch: 0,
+  };
+  let acked = false;
+  const ackListener = (e) => {
+    if (e.source === jscWin && e.data && e.data.type === "JSC_AUTOFILL_ACK") {
+      acked = true;
+      window.removeEventListener("message", ackListener);
+      toast("JSC: chaves recebidas pelo userscript ✓", "success");
+    }
+  };
+  window.addEventListener("message", ackListener);
+  let tries = 0;
+  const iv = setInterval(() => {
+    if (acked || jscWin.closed || ++tries > 75) {
+      clearInterval(iv);
+      if (!acked && !jscWin.closed) toast("JSC: timeout 30s sem ACK — userscript instalado?", "warning");
+      return;
+    }
+    try { jscWin.postMessage(payload, "https://www.jogossantacasa.pt"); } catch (e) {}
+  }, 400);
   // Enviar as mesmas chaves para AIJackpot.pt para tracking de prémios
   enviarParaAIJackpot(lastChaves, prefix, start);
 }
