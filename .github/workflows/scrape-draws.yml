@@ -2,8 +2,10 @@ name: Auto-update EuroMillions DB
 
 on:
   schedule:
-    - cron: '0 21 * * 2,5'
-    - cron: '0 22 * * 2,5'
+    # Tuesday and Friday at 20:30 UTC (21:30 Lisbon summer / 20:30 Lisbon winter)
+    - cron: '30 20 * * 2,5'
+    # Retry at 21:30 UTC (22:30 Lisbon summer / 21:30 Lisbon winter) — covers DST + late publish
+    - cron: '30 21 * * 2,5'
   workflow_dispatch:
 
 permissions:
@@ -32,7 +34,7 @@ jobs:
         run: |
           pip install requests beautifulsoup4 openpyxl rich lxml
 
-      - name: Scrape new draws
+      - name: Scrape new draws (Euromilhoes DB)
         run: python scripts/scrape_new.py
 
       - name: Commit and push if DB changed
@@ -47,3 +49,12 @@ jobs:
           else
             echo "Nada para commit, DB inalterada."
           fi
+
+      - name: Trigger AIJackpot auto-fetch (oficial + auto-popula apostasGrupo)
+        run: |
+          SECRET="0a518ed67d8b163cfc554f62c2f5a14c2168f35f6f623ebfead362b4e1499fa4"
+          ENDPOINT="https://jackpot-pt.vercel.app/api/auto-fetch-result"
+          echo "POST $ENDPOINT"
+          curl -sS -w "\nHTTP %{http_code}\n" -X POST "$ENDPOINT" \
+            -H "Authorization: Bearer $SECRET" \
+            --max-time 30 || echo "(curl falhou, mas não bloqueamos o workflow)"
