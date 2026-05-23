@@ -2941,9 +2941,9 @@ function partilharChaves() {
 // ════════════════════════════════════════════════════════════════════
 function apostarNoJSC() {
   if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
-  // ABRIR O TAB IMEDIATAMENTE no clique para preservar o "user gesture"
-  // (Chrome bloqueia popups se window.open acontecer depois de prompt())
-  const jscWin = window.open("about:blank", "_blank");
+  // Abrir o JSC URL DIRETAMENTE no clique (preserva user gesture E evita navegação posterior)
+  const url = `https://www.jogossantacasa.pt/web/JogarEuromilhoes/`;
+  const jscWin = window.open(url, "_blank");
   if (!jscWin) {
     toast("Popup bloqueado — permite popups para o site Euromilhoes", "error");
     return;
@@ -2958,12 +2958,6 @@ function apostarNoJSC() {
     ch.numeros.join(",") + ":" + ch.estrelas.join(",")
   ).join(";");
   const total = Math.ceil(lastChaves.length / 5);
-  // Navegar o tab já aberto para JSC (cross-origin nav permitido mesmo sem same-origin)
-  const url = `https://www.jogossantacasa.pt/web/JogarEuromilhoes/`;
-  try { jscWin.location.href = url; } catch (e) {
-    toast("Erro a navegar tab JSC: " + e.message, "error");
-    return;
-  }
   toast(`${lastChaves.length} chaves → ${total} lote(s) → ${prefix}_${String(start).padStart(3,"0")} … ${prefix}_${String(start+total-1).padStart(3,"0")}`, "info");
   // Post the keys to the JSC window. Userscript listens at document-start.
   // Retry every 400ms until ACK or 30s timeout (JSC takes time to load).
