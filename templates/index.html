@@ -2953,7 +2953,7 @@ function apostarNoJSC() {
   const total = Math.ceil(lastChaves.length / 5);
   // Open JSC tab WITHOUT noopener so we can postMessage the keys directly
   // (JSC strips URL hash on /JogarEuromilhoes/, so URL-based passing doesn't work)
-  const url = `https://www.jogossantacasa.pt/web/ChavesFavoritas/`;
+  const url = `https://www.jogossantacasa.pt/web/JogarEuromilhoes/`;
   const jscWin = window.open(url, "_blank");
   if (!jscWin) {
     toast("Popup bloqueado — permite popups para o site Euromilhoes", "error");
