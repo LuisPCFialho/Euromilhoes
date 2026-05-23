@@ -2944,11 +2944,11 @@ function partilharChaves() {
 // ════════════════════════════════════════════════════════════════════
 function apostarNoJSC() {
   if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
-  // Usa valores guardados em localStorage (configurável via botão ⚙️). Sem prompts —
-  // prompts demoram tempo e fazem expirar o "user gesture", o que faz o Chrome
-  // bloquear silenciosamente o window.open posterior.
+  // Usa prefixo + contador guardados em localStorage. Contador auto-incrementa
+  // após cada clique para nunca repetir nomes entre sessões. Sem prompts (popup blocker).
+  // Configura prefixo / reset do contador via botão ⚙️.
   const ano = new Date().getFullYear();
-  const prefix = (localStorage.getItem("jscPrefix") || `CF_${ano}`).trim();
+  const prefix = (localStorage.getItem("jscPrefix") || String(ano)).trim();
   const start = parseInt(localStorage.getItem("jscStart") || "1", 10) || 1;
   const hash = lastChaves.map(ch =>
     ch.numeros.join(",") + ":" + ch.estrelas.join(",")
@@ -2960,32 +2960,45 @@ function apostarNoJSC() {
     toast("JSC: popup bloqueado pelo browser. Permite popups deste site.", "error");
     return;
   }
-  toast(`${lastChaves.length} chaves → ${total} lote(s) → ${prefix}_${String(start).padStart(3,"0")} … ${prefix}_${String(start+total-1).padStart(3,"0")}`, "info");
+  // INCREMENTA o contador para a próxima vez (assim nunca repete)
+  const nextStart = start + total;
+  localStorage.setItem("jscStart", String(nextStart));
+  toast(`${lastChaves.length} chaves → ${total} lote(s) → ${prefix}_${String(start).padStart(4,"0")} … ${prefix}_${String(start+total-1).padStart(4,"0")} · Próximo: ${prefix}_${String(nextStart).padStart(4,"0")}`, "info");
   // Enviar as mesmas chaves para AIJackpot.pt para tracking de prémios
   enviarParaAIJackpot(lastChaves, prefix, start);
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Botão ⚙️: configurar prefixo e número inicial usados pelo JSC.
+// Botão ⚙️: configurar prefixo e contador usados pelo JSC.
 // Os prompts aqui são OK porque o utilizador clicou DESTE botão (e não do JSC).
-// Os valores ficam guardados em localStorage até serem alterados de novo.
+// Os valores ficam guardados em localStorage; o contador auto-incrementa após cada JSC.
 // ════════════════════════════════════════════════════════════════════
 function configurarJSC() {
   const ano = new Date().getFullYear();
-  const curPrefix = localStorage.getItem("jscPrefix") || `CF_${ano}`;
-  const newPrefix = prompt("Prefixo das chaves favoritas (ex: CF_2026):", curPrefix);
-  if (newPrefix === null) return;
+  const curPrefix = localStorage.getItem("jscPrefix") || String(ano);
   const curStart = localStorage.getItem("jscStart") || "1";
-  const newStart = prompt("Número inicial (1 = PREFIXO_001):", curStart);
+  const newPrefix = prompt(
+    `Prefixo das chaves favoritas (formato PREFIXO_NNNN).\n` +
+    `Atual: ${curPrefix}\n` +
+    `Default: ${ano}`,
+    curPrefix
+  );
+  if (newPrefix === null) return;
+  const newStart = prompt(
+    `Próximo número a usar (4 dígitos, ex: 1 = ${newPrefix || ano}_0001).\n` +
+    `Atual: ${curStart}\n` +
+    `Auto-incrementa após cada clique JSC.`,
+    curStart
+  );
   if (newStart === null) return;
   const startN = parseInt(newStart, 10);
   if (!Number.isInteger(startN) || startN < 1) {
-    toast("Número inicial inválido. Configuração não guardada.", "error");
+    toast("Número inválido. Configuração não guardada.", "error");
     return;
   }
-  localStorage.setItem("jscPrefix", newPrefix.trim() || `CF_${ano}`);
+  localStorage.setItem("jscPrefix", newPrefix.trim() || String(ano));
   localStorage.setItem("jscStart", String(startN));
-  toast(`Configuração guardada: prefixo=${newPrefix} | início=${startN}`, "success");
+  toast(`✓ Guardado: ${newPrefix}_${String(startN).padStart(4,"0")} (próximo a usar)`, "success");
 }
 
 // ════════════════════════════════════════════════════════════════════
