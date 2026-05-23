@@ -2941,22 +2941,27 @@ function partilharChaves() {
 // ════════════════════════════════════════════════════════════════════
 function apostarNoJSC() {
   if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
+  // ABRIR O TAB IMEDIATAMENTE no clique para preservar o "user gesture"
+  // (Chrome bloqueia popups se window.open acontecer depois de prompt())
+  const jscWin = window.open("about:blank", "_blank");
+  if (!jscWin) {
+    toast("Popup bloqueado — permite popups para o site Euromilhoes", "error");
+    return;
+  }
   const ano = new Date().getFullYear();
   const prefix = prompt(`Nome base para chaves favoritas (será PREFIX_001, PREFIX_002, ...):`, `CF_${ano}`);
-  if (!prefix) return;
+  if (!prefix) { jscWin.close(); return; }
   const startStr = prompt(`Começar a numeração em (1 = ${prefix}_001):`, "1");
   const start = parseInt(startStr, 10);
-  if (!Number.isInteger(start) || start < 1) { toast("Número inicial inválido", "error"); return; }
+  if (!Number.isInteger(start) || start < 1) { jscWin.close(); toast("Número inicial inválido", "error"); return; }
   const hash = lastChaves.map(ch =>
     ch.numeros.join(",") + ":" + ch.estrelas.join(",")
   ).join(";");
   const total = Math.ceil(lastChaves.length / 5);
-  // Open JSC tab WITHOUT noopener so we can postMessage the keys directly
-  // (JSC strips URL hash on /JogarEuromilhoes/, so URL-based passing doesn't work)
+  // Navegar o tab já aberto para JSC (cross-origin nav permitido mesmo sem same-origin)
   const url = `https://www.jogossantacasa.pt/web/JogarEuromilhoes/`;
-  const jscWin = window.open(url, "_blank");
-  if (!jscWin) {
-    toast("Popup bloqueado — permite popups para o site Euromilhoes", "error");
+  try { jscWin.location.href = url; } catch (e) {
+    toast("Erro a navegar tab JSC: " + e.message, "error");
     return;
   }
   toast(`${lastChaves.length} chaves → ${total} lote(s) → ${prefix}_${String(start).padStart(3,"0")} … ${prefix}_${String(start+total-1).padStart(3,"0")}`, "info");
