@@ -672,8 +672,11 @@
               <button class="btn btn-ghost btn-sm" onclick="exportarExcel()" aria-label="Exportar Excel">
                 <i class="fa-solid fa-file-excel me-1" style="color:#51cf66;"></i>Excel
               </button>
-              <button class="btn btn-ghost btn-sm" onclick="apostarNoJSC()" title="Registar todas as chaves geradas como Favoritas no JSC, em lotes de 5, com nomes sequenciais CF_AAAA_NNN (requer userscript Tampermonkey + login no JSC)" aria-label="Registar nas Favoritas JSC">
+              <button class="btn btn-ghost btn-sm" onclick="apostarNoJSC()" title="Registar todas as chaves geradas como Favoritas no JSC, em lotes de 5 (usa prefixo guardado em ⚙️)" aria-label="Registar nas Favoritas JSC">
                 <i class="fa-solid fa-dice me-1" style="color:#ffa94d;"></i>JSC
+              </button>
+              <button class="btn btn-ghost btn-sm" onclick="configurarJSC()" title="Configurar prefixo e número inicial usados pelo botão JSC" aria-label="Configurar JSC">
+                <i class="fa-solid fa-gear" style="color:#74c0fc;"></i>
               </button>
               <button class="btn btn-ghost btn-sm" onclick="partilharChaves()" title="Partilhar chaves" aria-label="Partilhar">
                 <i class="fa-solid fa-share-nodes me-1" style="color:#74c0fc;"></i>Partilhar
@@ -2941,21 +2944,48 @@ function partilharChaves() {
 // ════════════════════════════════════════════════════════════════════
 function apostarNoJSC() {
   if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
+  // Usa valores guardados em localStorage (configurável via botão ⚙️). Sem prompts —
+  // prompts demoram tempo e fazem expirar o "user gesture", o que faz o Chrome
+  // bloquear silenciosamente o window.open posterior.
   const ano = new Date().getFullYear();
-  const prefix = prompt(`Nome base para chaves favoritas (será PREFIX_001, PREFIX_002, ...):`, `CF_${ano}`);
-  if (!prefix) return;
-  const startStr = prompt(`Começar a numeração em (1 = ${prefix}_001):`, "1");
-  const start = parseInt(startStr, 10);
-  if (!Number.isInteger(start) || start < 1) { toast("Número inicial inválido", "error"); return; }
+  const prefix = (localStorage.getItem("jscPrefix") || `CF_${ano}`).trim();
+  const start = parseInt(localStorage.getItem("jscStart") || "1", 10) || 1;
   const hash = lastChaves.map(ch =>
     ch.numeros.join(",") + ":" + ch.estrelas.join(",")
   ).join(";");
   const total = Math.ceil(lastChaves.length / 5);
   const url = `https://www.jogossantacasa.pt/web/ChavesFavoritas/#fav=${hash}&p=${encodeURIComponent(prefix)}&s=${start}&b=0`;
-  window.open(url, "_blank", "noopener");
+  const win = window.open(url, "_blank", "noopener");
+  if (!win) {
+    toast("JSC: popup bloqueado pelo browser. Permite popups deste site.", "error");
+    return;
+  }
   toast(`${lastChaves.length} chaves → ${total} lote(s) → ${prefix}_${String(start).padStart(3,"0")} … ${prefix}_${String(start+total-1).padStart(3,"0")}`, "info");
   // Enviar as mesmas chaves para AIJackpot.pt para tracking de prémios
   enviarParaAIJackpot(lastChaves, prefix, start);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Botão ⚙️: configurar prefixo e número inicial usados pelo JSC.
+// Os prompts aqui são OK porque o utilizador clicou DESTE botão (e não do JSC).
+// Os valores ficam guardados em localStorage até serem alterados de novo.
+// ════════════════════════════════════════════════════════════════════
+function configurarJSC() {
+  const ano = new Date().getFullYear();
+  const curPrefix = localStorage.getItem("jscPrefix") || `CF_${ano}`;
+  const newPrefix = prompt("Prefixo das chaves favoritas (ex: CF_2026):", curPrefix);
+  if (newPrefix === null) return;
+  const curStart = localStorage.getItem("jscStart") || "1";
+  const newStart = prompt("Número inicial (1 = PREFIXO_001):", curStart);
+  if (newStart === null) return;
+  const startN = parseInt(newStart, 10);
+  if (!Number.isInteger(startN) || startN < 1) {
+    toast("Número inicial inválido. Configuração não guardada.", "error");
+    return;
+  }
+  localStorage.setItem("jscPrefix", newPrefix.trim() || `CF_${ano}`);
+  localStorage.setItem("jscStart", String(startN));
+  toast(`Configuração guardada: prefixo=${newPrefix} | início=${startN}`, "success");
 }
 
 // ════════════════════════════════════════════════════════════════════
