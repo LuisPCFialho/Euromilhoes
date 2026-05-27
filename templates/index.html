@@ -2861,12 +2861,19 @@ function partilharChaves() {
 // ════════════════════════════════════════════════════════════════════
 function apostarNoJSC() {
   if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
-  // Usa prefixo + contador guardados em localStorage. Contador auto-incrementa
-  // após cada clique para nunca repetir nomes entre sessões. Sem prompts (popup blocker).
-  // Configura prefixo / reset do contador via botão ⚙️.
-  const ano = new Date().getFullYear();
-  const prefix = (localStorage.getItem("jscPrefix") || String(ano)).trim();
-  const start = parseInt(localStorage.getItem("jscStart") || "1", 10) || 1;
+  // Prefixo = YYYYMM do mês atual (auto). Contador persiste DENTRO do mês e reset a 1
+  // quando o mês muda. Tudo guardado em localStorage. Sem prompts (popup blocker).
+  const now = new Date();
+  const prefixoAtual = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const prefixoGuardado = (localStorage.getItem("jscPrefix") || "").trim();
+  let start = parseInt(localStorage.getItem("jscStart") || "1", 10) || 1;
+  // Auto-reset do contador se mudou o mês (ou primeira vez)
+  if (prefixoGuardado !== prefixoAtual) {
+    localStorage.setItem("jscPrefix", prefixoAtual);
+    start = 1;
+    localStorage.setItem("jscStart", "1");
+  }
+  const prefix = prefixoAtual;
   const hash = lastChaves.map(ch =>
     ch.numeros.join(",") + ":" + ch.estrelas.join(",")
   ).join(";");
@@ -2875,7 +2882,7 @@ function apostarNoJSC() {
   // NOTA: window.open com "noopener" devolve SEMPRE null, mesmo quando o popup abre.
   // Por isso NÃO usar `if (!win) return` aqui — abortaria silenciosamente a chamada à AIJackpot.
   window.open(url, "_blank", "noopener");
-  // INCREMENTA o contador para a próxima vez (assim nunca repete)
+  // INCREMENTA o contador para a próxima vez (assim nunca repete dentro do mesmo mês)
   const nextStart = start + total;
   localStorage.setItem("jscStart", String(nextStart));
   toast(`${lastChaves.length} chaves → ${total} lote(s) → ${prefix}_${String(start).padStart(4,"0")} … ${prefix}_${String(start+total-1).padStart(4,"0")} · Próximo: ${prefix}_${String(nextStart).padStart(4,"0")}`, "info");
@@ -2889,20 +2896,16 @@ function apostarNoJSC() {
 // Os valores ficam guardados em localStorage; o contador auto-incrementa após cada JSC.
 // ════════════════════════════════════════════════════════════════════
 function configurarJSC() {
-  const ano = new Date().getFullYear();
-  const curPrefix = localStorage.getItem("jscPrefix") || String(ano);
+  // O prefixo é AUTOMÁTICO (YYYYMM do mês atual) — não editável.
+  // Só permite ajustar o contador (caso já tenhas guardado favoritas manualmente
+  // no início do mês e queiras saltar a numeração para o número certo).
+  const now = new Date();
+  const prefixoAtual = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
   const curStart = localStorage.getItem("jscStart") || "1";
-  const newPrefix = prompt(
-    `Prefixo das chaves favoritas (formato PREFIXO_NNNN).\n` +
-    `Atual: ${curPrefix}\n` +
-    `Default: ${ano}`,
-    curPrefix
-  );
-  if (newPrefix === null) return;
   const newStart = prompt(
-    `Próximo número a usar (4 dígitos, ex: 1 = ${newPrefix || ano}_0001).\n` +
-    `Atual: ${curStart}\n` +
-    `Auto-incrementa após cada clique JSC.`,
+    `Contador do próximo lote a registar (prefixo automático = ${prefixoAtual}).\n\n` +
+    `Atual: ${prefixoAtual}_${String(parseInt(curStart, 10) || 1).padStart(4, "0")}\n\n` +
+    `O contador reset-a automaticamente a 1 quando muda o mês.`,
     curStart
   );
   if (newStart === null) return;
@@ -2911,9 +2914,9 @@ function configurarJSC() {
     toast("Número inválido. Configuração não guardada.", "error");
     return;
   }
-  localStorage.setItem("jscPrefix", newPrefix.trim() || String(ano));
+  localStorage.setItem("jscPrefix", prefixoAtual);
   localStorage.setItem("jscStart", String(startN));
-  toast(`✓ Guardado: ${newPrefix}_${String(startN).padStart(4,"0")} (próximo a usar)`, "success");
+  toast(`✓ Próximo lote: ${prefixoAtual}_${String(startN).padStart(4,"0")}`, "success");
 }
 
 // ════════════════════════════════════════════════════════════════════
