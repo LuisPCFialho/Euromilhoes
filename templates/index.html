@@ -452,6 +452,66 @@
 </head>
 <body>
 
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- ── AUTH: LOGIN OVERLAY (shown until session válido) ── -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<div id="auth-overlay" style="position:fixed;inset:0;background:linear-gradient(135deg,#1a1a2e,#0f3460);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:rgba(22,33,62,0.95);padding:36px 32px;border-radius:14px;min-width:320px;max-width:420px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,0.6);border:1px solid #2a2a4a;">
+    <h2 style="color:#fff;text-align:center;margin:0 0 6px;font-size:1.35rem;">
+      <i class="fa-solid fa-dice" style="color:#ffa94d;margin-right:8px;"></i>EuroMilhões
+    </h2>
+    <p style="color:#9ca3af;text-align:center;margin:0 0 26px;font-size:0.85rem;">Gerador Profissional</p>
+
+    <form id="auth-login-form" onsubmit="event.preventDefault(); authDoLogin();">
+      <div style="margin-bottom:14px;">
+        <label style="color:#9ca3af;font-size:0.8rem;display:block;margin-bottom:4px;">Email</label>
+        <input type="email" id="auth-email" required autocomplete="username" autofocus style="width:100%;padding:10px 12px;font-size:14px;background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:6px;">
+      </div>
+      <div style="margin-bottom:18px;">
+        <label style="color:#9ca3af;font-size:0.8rem;display:block;margin-bottom:4px;">Password</label>
+        <input type="password" id="auth-password" required autocomplete="current-password" style="width:100%;padding:10px 12px;font-size:14px;background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:6px;">
+      </div>
+      <button type="submit" id="auth-login-btn" style="width:100%;padding:12px;background:#1c7a37;color:#fff;border:none;font-size:14px;border-radius:6px;font-weight:600;cursor:pointer;">
+        <i class="fa-solid fa-right-to-bracket me-2"></i>Entrar
+      </button>
+      <div id="auth-error" style="color:#ff6b6b;margin-top:14px;text-align:center;font-size:13px;min-height:18px;"></div>
+      <p style="color:#666;font-size:11px;margin-top:16px;text-align:center;line-height:1.55;">
+        Primeira vez? Password = <code style="color:#74c0fc;background:#1a1a2e;padding:1px 6px;border-radius:3px;">123</code><br>
+        Serás obrigado a definir nova password.
+      </p>
+    </form>
+  </div>
+</div>
+
+<!-- ── AUTH: CHANGE PASSWORD MODAL ── -->
+<div id="auth-change-pw" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#16213e;padding:28px 30px;border-radius:12px;min-width:320px;max-width:420px;width:100%;border:1px solid #2a2a4a;">
+    <h3 style="color:#fff;margin:0 0 8px;font-size:1.05rem;"><i class="fa-solid fa-key me-2" style="color:#ffd700;"></i>Mudar Password</h3>
+    <p id="auth-change-msg" style="color:#9ca3af;font-size:0.85rem;margin:0 0 18px;">Define a tua nova password.</p>
+    <form onsubmit="event.preventDefault(); authDoChange();">
+      <input type="password" id="auth-new-pw" placeholder="Nova password (min 4 caracteres)" required minlength="4" autocomplete="new-password" style="width:100%;padding:10px 12px;font-size:14px;background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:6px;margin-bottom:10px;">
+      <input type="password" id="auth-new-pw-confirm" placeholder="Repetir nova password" required minlength="4" autocomplete="new-password" style="width:100%;padding:10px 12px;font-size:14px;background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:6px;margin-bottom:14px;">
+      <div style="display:flex;gap:8px;">
+        <button type="submit" style="flex:1;padding:10px;background:#1c7a37;color:#fff;border:none;font-size:14px;border-radius:6px;cursor:pointer;font-weight:600;">Guardar</button>
+        <button type="button" id="auth-change-cancel" onclick="authHideChange()" style="padding:10px 14px;background:#444;color:#ccc;border:none;font-size:14px;border-radius:6px;cursor:pointer;">Cancelar</button>
+      </div>
+      <div id="auth-change-error" style="color:#ff6b6b;margin-top:10px;text-align:center;font-size:13px;min-height:18px;"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ── AUTH: USER MENU (top right, shows after login) ── -->
+<div id="auth-user-menu" style="display:none;position:fixed;top:6px;right:8px;z-index:500;background:rgba(22,33,62,0.95);border:1px solid #2a2a4a;border-radius:8px;padding:5px 12px;align-items:center;gap:10px;font-size:12px;backdrop-filter:blur(4px);">
+  <span style="color:#9ca3af;">Olá,</span>
+  <span id="auth-user-name" style="color:#fff;font-weight:600;"></span>
+  <button onclick="authShowChange()" title="Mudar password" style="padding:3px 8px;background:transparent;color:#74c0fc;border:1px solid #2a2a4a;border-radius:4px;cursor:pointer;font-size:11px;">
+    <i class="fa-solid fa-key"></i>
+  </button>
+  <button onclick="authDoLogout()" title="Sair" style="padding:3px 8px;background:transparent;color:#ff6b6b;border:1px solid #2a2a4a;border-radius:4px;cursor:pointer;font-size:11px;">
+    <i class="fa-solid fa-right-from-bracket"></i>
+  </button>
+</div>
+
 <!-- ── Loading overlay ── -->
 <div id="loading" role="alertdialog" aria-label="A processar">
   <div class="spinner-border text-warning" style="width:3rem;height:3rem;"></div>
@@ -905,6 +965,160 @@
 
 
 <script>
+// ════════════════════════════════════════════════════════════════════
+// AUTH — login com email + password, sync via Supabase (com fallback localStorage).
+// Mesma BD do AIJackpot mas linha separada (id='users-euromilhoes').
+// Primeira vez: password = "123" e o user é forçado a definir nova.
+// ════════════════════════════════════════════════════════════════════
+const AUTH_SUPABASE_URL = "https://faluhrstwikaimgwavdh.supabase.co";
+const AUTH_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZhbHVocnN0d2lrYWltZ3dhdmRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0NzIwODMsImV4cCI6MjA5MzA0ODA4M30.xye4WcLtvLqS5xef6gF0pq3r9jhF09E2ynAHYUfpxG8";
+const AUTH_USERS_ROW_ID = "users-euromilhoes";
+const AUTH_APP_SECRET   = "euromilhoes-2026";
+const AUTH_SESSION_KEY  = "euromilhoes-session";
+const AUTH_USERS_CACHE  = "euromilhoes-users";
+
+const AUTH_SEED_USERS = [
+  { email: "luispcfialho@gmail.com",  username: "Luís Fialho", passwordHash: "DEFAULT", role: "admin", createdAt: new Date().toISOString() },
+  { email: "joaofialho.jf@gmail.com", username: "João Fialho", passwordHash: "DEFAULT", role: "admin", createdAt: new Date().toISOString() },
+];
+
+async function authHash(email, password) {
+  const data = new TextEncoder().encode(`${AUTH_APP_SECRET}:${email.toLowerCase().trim()}:${password}`);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function authLoadUsers() {
+  // 1. Tentar Supabase (fonte de verdade, sincroniza entre dispositivos)
+  try {
+    const res = await fetch(`${AUTH_SUPABASE_URL}/rest/v1/app_state?id=eq.${AUTH_USERS_ROW_ID}&select=payload`, {
+      headers: { apikey: AUTH_SUPABASE_KEY, Authorization: `Bearer ${AUTH_SUPABASE_KEY}` }
+    });
+    if (res.ok) {
+      const rows = await res.json();
+      if (rows.length && rows[0].payload && Array.isArray(rows[0].payload.users) && rows[0].payload.users.length > 0) {
+        localStorage.setItem(AUTH_USERS_CACHE, JSON.stringify(rows[0].payload.users));
+        return rows[0].payload.users;
+      }
+    }
+  } catch (e) { console.warn('Auth Supabase load failed:', e); }
+  // 2. Fallback: cache local
+  try {
+    const cached = JSON.parse(localStorage.getItem(AUTH_USERS_CACHE) || 'null');
+    if (Array.isArray(cached) && cached.length > 0) return cached;
+  } catch {}
+  // 3. Seed inicial
+  await authSaveUsers(AUTH_SEED_USERS);
+  return AUTH_SEED_USERS;
+}
+
+async function authSaveUsers(users) {
+  localStorage.setItem(AUTH_USERS_CACHE, JSON.stringify(users));
+  try {
+    await fetch(`${AUTH_SUPABASE_URL}/rest/v1/app_state`, {
+      method: 'POST',
+      headers: {
+        apikey: AUTH_SUPABASE_KEY,
+        Authorization: `Bearer ${AUTH_SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify({ id: AUTH_USERS_ROW_ID, payload: { users }, updated_at: new Date().toISOString() })
+    });
+  } catch (e) { console.warn('Auth Supabase save failed:', e); }
+}
+
+function authGetSession() {
+  try { return JSON.parse(localStorage.getItem(AUTH_SESSION_KEY) || 'null'); } catch { return null; }
+}
+function authSetSession(s) { localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s)); }
+function authClearSession() { localStorage.removeItem(AUTH_SESSION_KEY); }
+
+async function authDoLogin() {
+  const email = (document.getElementById('auth-email').value || '').trim().toLowerCase();
+  const password = document.getElementById('auth-password').value || '';
+  const err = document.getElementById('auth-error');
+  const btn = document.getElementById('auth-login-btn');
+  err.textContent = ''; btn.disabled = true;
+  try {
+    const users = await authLoadUsers();
+    const user = users.find(u => (u.email || '').toLowerCase() === email);
+    if (!user) { err.textContent = 'Email não encontrado'; return; }
+    const ok = user.passwordHash === 'DEFAULT'
+      ? password === '123'
+      : (await authHash(user.email, password)) === user.passwordHash;
+    if (!ok) { err.textContent = 'Password incorreta'; return; }
+    authSetSession({ email: user.email, username: user.username, role: user.role });
+    authShowApp(user);
+    document.getElementById('auth-password').value = '';
+    if (user.passwordHash === 'DEFAULT') authShowChange(true);
+  } finally { btn.disabled = false; }
+}
+
+function authDoLogout() {
+  authClearSession();
+  document.getElementById('auth-overlay').style.display = 'flex';
+  document.getElementById('auth-user-menu').style.display = 'none';
+  document.getElementById('auth-email').value = '';
+  document.getElementById('auth-password').value = '';
+  document.getElementById('auth-error').textContent = '';
+  setTimeout(() => document.getElementById('auth-email').focus(), 100);
+}
+
+function authShowApp(user) {
+  document.getElementById('auth-overlay').style.display = 'none';
+  const menu = document.getElementById('auth-user-menu');
+  menu.style.display = 'flex';
+  document.getElementById('auth-user-name').textContent = user.username;
+}
+
+function authShowChange(forced = false) {
+  document.getElementById('auth-change-pw').style.display = 'flex';
+  document.getElementById('auth-new-pw').value = '';
+  document.getElementById('auth-new-pw-confirm').value = '';
+  document.getElementById('auth-change-error').textContent = '';
+  document.getElementById('auth-change-cancel').style.display = forced ? 'none' : '';
+  document.getElementById('auth-change-msg').textContent = forced
+    ? 'Primeira sessão — define a tua password.'
+    : 'Define a tua nova password.';
+  setTimeout(() => document.getElementById('auth-new-pw').focus(), 100);
+}
+
+function authHideChange() { document.getElementById('auth-change-pw').style.display = 'none'; }
+
+async function authDoChange() {
+  const a = document.getElementById('auth-new-pw').value;
+  const b = document.getElementById('auth-new-pw-confirm').value;
+  const err = document.getElementById('auth-change-error');
+  err.textContent = '';
+  if (a.length < 4) { err.textContent = 'Mínimo 4 caracteres'; return; }
+  if (a !== b) { err.textContent = 'Passwords não coincidem'; return; }
+  if (a === '123') { err.textContent = 'Não podes usar a password default'; return; }
+  const session = authGetSession();
+  if (!session) { err.textContent = 'Sessão expirada'; return; }
+  const users = await authLoadUsers();
+  const idx = users.findIndex(u => (u.email || '').toLowerCase() === session.email.toLowerCase());
+  if (idx < 0) { err.textContent = 'Utilizador não encontrado'; return; }
+  users[idx].passwordHash = await authHash(users[idx].email, a);
+  await authSaveUsers(users);
+  authHideChange();
+  if (typeof toast === 'function') toast('Password actualizada ✓', 'success');
+}
+
+async function authInit() {
+  await authLoadUsers(); // garante seed
+  const session = authGetSession();
+  if (session) {
+    const users = await authLoadUsers();
+    const user = users.find(u => (u.email || '').toLowerCase() === (session.email || '').toLowerCase());
+    if (user) { authShowApp(user); return; }
+    authClearSession();
+  }
+  document.getElementById('auth-overlay').style.display = 'flex';
+  setTimeout(() => document.getElementById('auth-email').focus(), 100);
+}
+document.addEventListener('DOMContentLoaded', authInit);
+
 // ════════════════════════════════════════════════════════════════════
 // Filter metadata – add new filters here (plus backend changes)
 // ════════════════════════════════════════════════════════════════════
