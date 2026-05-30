@@ -1047,6 +1047,9 @@ class HistoricoScraper:
         "august":8,"september":9,"october":10,"november":11,"december":12,
         "enero":1,"febrero":2,"marzo":3,"abril":4,"mayo":5,"junio":6,
         "julio":7,"agosto":8,"septiembre":9,"octubre":10,"noviembre":11,"diciembre":12,
+        # Portuguese
+        "janeiro":1,"fevereiro":2,"março":3,"maio":5,"junho":6,
+        "julho":7,"setembro":9,"outubro":10,"novembro":11,"dezembro":12,
     }
 
     def scrape_completo(self, db: "DatabaseManager", ficheiro: Path):
@@ -1167,54 +1170,63 @@ class HistoricoScraper:
         return {"encontrados": len(unicos), "inseridos": inseridos, "sorteios": unicos}
 
     # ── Latest-draw scraper (single result) ───────────────────────────────────
-    # euromillones.com/pt/resultados/euromilhoes only ever shows the most recent draw.
-    # It's not blocked by Vercel datacenter IPs and publishes results promptly, so it's a
-    # reliable last-resort for picking up today's draw when the regular sources lag.
+    # euromillones.com only ever shows the most recent draw. It's not blocked by Vercel
+    # datacenter IPs and publishes results promptly, so it's a reliable last-resort for
+    # picking up today's draw when the regular sources lag.
     def _euromillones_com_latest(self) -> list[dict]:
-        url = "https://www.euromillones.com/pt/resultados/euromilhoes"
-        try:
-            r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
-        except Exception:
-            return []
-        if r.status_code != 200:
-            return []
-        soup = BeautifulSoup(r.text, "html.parser")
-        date_span = soup.find("span", class_="main-date-draw")
-        if not date_span:
-            return []
-        # Date format: "terça-feira, 12 maio 2026"
-        date_str = date_span.get_text(strip=True)
+        urls = [
+            "https://www.euromillones.com/pt/resultados/euromilhoes",
+            "https://www.euromillones.com/en/results/euromillions",
+        ]
         meses_pt = {
             "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
             "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
         }
-        m = re.search(r"(\d{1,2})\s+(\w+)\s+(\d{4})", date_str, re.IGNORECASE)
-        if not m:
-            return []
-        dia, mes_str, ano_str = m.group(1), m.group(2).lower(), m.group(3)
-        if mes_str not in meses_pt:
-            return []
-        try:
-            dt = datetime.date(int(ano_str), meses_pt[mes_str], int(dia))
-        except ValueError:
-            return []
-        # Numbers and stars
-        bet_breaks = soup.find_all("span", class_="bet-break")
-        if len(bet_breaks) < 2:
-            return []
-        numeros = []
-        for n in bet_breaks[0].find_all("span", class_="numbers"):
-            t = n.find("span", class_="ball-txt")
-            if t and t.get_text(strip=True).isdigit():
-                numeros.append(int(t.get_text(strip=True)))
-        estrelas = []
-        for s in bet_breaks[1].find_all("span", class_="stars"):
-            t = s.find("span", class_="ball-txt")
-            if t and t.get_text(strip=True).isdigit():
-                estrelas.append(int(t.get_text(strip=True)))
-        if len(numeros) != 5 or len(estrelas) != 2:
-            return []
-        return [{"data": dt.isoformat(), "numeros": sorted(numeros), "estrelas": sorted(estrelas)}]
+        for url in urls:
+            try:
+                r = _retry_request(url, headers=self.HEADERS, timeout=REQUEST_TIMEOUT)
+            except Exception:
+                continue
+            if r.status_code != 200:
+                continue
+            soup = BeautifulSoup(r.text, "html.parser")
+
+            # Try original class-based approach first
+            date_span = soup.find("span", class_="main-date-draw")
+            if date_span:
+                date_str = date_span.get_text(strip=True)
+                m = re.search(r"(\d{1,2})\s+(\w+)\s+(\d{4})", date_str, re.IGNORECASE)
+                if m:
+                    dia, mes_str, ano_str = m.group(1), m.group(2).lower(), m.group(3)
+                    if mes_str in meses_pt:
+                        try:
+                            dt = datetime.date(int(ano_str), meses_pt[mes_str], int(dia))
+                        except ValueError:
+                            pass
+                        else:
+                            bet_breaks = soup.find_all("span", class_="bet-break")
+                            if len(bet_breaks) >= 2:
+                                numeros = []
+                                for n in bet_breaks[0].find_all("span", class_="numbers"):
+                                    t = n.find("span", class_="ball-txt")
+                                    if t and t.get_text(strip=True).isdigit():
+                                        numeros.append(int(t.get_text(strip=True)))
+                                estrelas = []
+                                for s in bet_breaks[1].find_all("span", class_="stars"):
+                                    t = s.find("span", class_="ball-txt")
+                                    if t and t.get_text(strip=True).isdigit():
+                                        estrelas.append(int(t.get_text(strip=True)))
+                                if len(numeros) == 5 and len(estrelas) == 2:
+                                    return [{"data": dt.isoformat(), "numeros": sorted(numeros), "estrelas": sorted(estrelas)}]
+
+            # Fallback: use _parse_html which has multi-strategy parsing including regex
+            today = datetime.date.today()
+            resultados = self._parse_html(r.text, today.year)
+            if resultados:
+                resultados.sort(key=lambda x: x["data"], reverse=True)
+                return [resultados[0]]
+
+        return []
 
     # ── Per-year scraping ─────────────────────────────────────────────────────
     def _scrape_ano(self, ano: int) -> list[dict]:
