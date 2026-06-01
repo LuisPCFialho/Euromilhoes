@@ -3073,12 +3073,28 @@ function partilharChaves() {
 // Abre o boletim com hash #k=N,N,N,N,N:E,E;... (até 5 chaves).
 // Requer o userscript Tampermonkey "Euromilhoes — Auto-preencher chaves no JSC".
 // ════════════════════════════════════════════════════════════════════
+// Calcula o YYYYMM do próximo sorteio EuroMilhões (Ter=2 ou Sex=5).
+// Se hoje for dia de sorteio, usa hoje. Caso contrário, procura o próximo Ter/Sex.
+function proximoSorteioYYYYMM() {
+  const today = new Date();
+  const dow = today.getDay();
+  let target = new Date(today);
+  if (dow !== 2 && dow !== 5) {
+    for (let i = 1; i <= 7; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      if (d.getDay() === 2 || d.getDay() === 5) { target = d; break; }
+    }
+  }
+  return `${target.getFullYear()}${String(target.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function apostarNoJSC() {
   if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
-  // Prefixo = YYYYMM do mês atual (auto). Contador persiste DENTRO do mês e reset a 1
-  // quando o mês muda. Tudo guardado em localStorage. Sem prompts (popup blocker).
-  const now = new Date();
-  const prefixoAtual = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
+  // Prefixo = YYYYMM do PRÓXIMO sorteio (Ter/Sex). Contador persiste DENTRO do mês e
+  // reset a 1 quando o mês do próximo sorteio muda. Tudo guardado em localStorage.
+  // Sem prompts (popup blocker).
+  const prefixoAtual = proximoSorteioYYYYMM();
   const prefixoGuardado = (localStorage.getItem("jscPrefix") || "").trim();
   let start = parseInt(localStorage.getItem("jscStart") || "1", 10) || 1;
   // Auto-reset do contador se mudou o mês (ou primeira vez)
@@ -3110,11 +3126,10 @@ function apostarNoJSC() {
 // Os valores ficam guardados em localStorage; o contador auto-incrementa após cada JSC.
 // ════════════════════════════════════════════════════════════════════
 function configurarJSC() {
-  // O prefixo é AUTOMÁTICO (YYYYMM do mês atual) — não editável.
+  // O prefixo é AUTOMÁTICO (YYYYMM do próximo sorteio) — não editável.
   // Só permite ajustar o contador (caso já tenhas guardado favoritas manualmente
   // no início do mês e queiras saltar a numeração para o número certo).
-  const now = new Date();
-  const prefixoAtual = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const prefixoAtual = proximoSorteioYYYYMM();
   const curStart = localStorage.getItem("jscStart") || "1";
   const newStart = prompt(
     `Contador do próximo lote a registar (prefixo automático = ${prefixoAtual}).\n\n` +
