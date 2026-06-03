@@ -7,3 +7,7 @@ chaves_geradas/
 # Keep euromilhoes.db tracked (needed for Vercel deploy)
 !euromilhoes.db
 .vercel
+
+# PDF de funcionalidades e respetivo script — só local, nunca para o GitHub
+Funcionalidades-Gerador-Euromilhoes.pdf
+scripts/gerar_pdf_funcionalidades.py
