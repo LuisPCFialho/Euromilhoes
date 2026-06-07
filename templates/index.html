@@ -3075,18 +3075,38 @@ function partilharChaves() {
 // ════════════════════════════════════════════════════════════════════
 // Calcula o YYYYMM do próximo sorteio EuroMilhões (Ter=2 ou Sex=5).
 // Se hoje for dia de sorteio, usa hoje. Caso contrário, procura o próximo Ter/Sex.
-function proximoSorteioYYYYMM() {
+// Devolve info do PRÓXIMO sorteio (Ter/Sex): { yyyymm, numero, dataLabel, dataISO }
+// numero = "046/2026" (contagem de Ter/Sex desde 1 Jan do ano, valida contra âncora 044=02/06/2026)
+// dataLabel = "09 Junho"
+function proximoSorteioInfo() {
+  const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+                 "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
   const today = new Date();
   const dow = today.getDay();
-  let target = new Date(today);
+  let target = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   if (dow !== 2 && dow !== 5) {
     for (let i = 1; i <= 7; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() + i);
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
       if (d.getDay() === 2 || d.getDay() === 5) { target = d; break; }
     }
   }
-  return `${target.getFullYear()}${String(target.getMonth() + 1).padStart(2, "0")}`;
+  const ano = target.getFullYear();
+  // Número do sorteio = nº de Ter/Sex desde 1 Jan do ano até ao sorteio (inclusive)
+  let count = 0;
+  for (let d = new Date(ano, 0, 1); d <= target; d.setDate(d.getDate() + 1)) {
+    const wd = d.getDay();
+    if (wd === 2 || wd === 5) count++;
+  }
+  return {
+    yyyymm: `${ano}${String(target.getMonth() + 1).padStart(2, "0")}`,
+    numero: `${String(count).padStart(3, "0")}/${ano}`,
+    dataLabel: `${String(target.getDate()).padStart(2, "0")} ${MESES[target.getMonth()]}`,
+    dataISO: `${ano}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`,
+  };
+}
+
+function proximoSorteioYYYYMM() {
+  return proximoSorteioInfo().yyyymm;
 }
 
 function apostarNoJSC() {
@@ -3118,6 +3138,69 @@ function apostarNoJSC() {
   toast(`${lastChaves.length} chaves → ${total} lote(s) → ${prefix}_${String(start).padStart(4,"0")} … ${prefix}_${String(start+total-1).padStart(4,"0")} · Próximo: ${prefix}_${String(nextStart).padStart(4,"0")}`, "info");
   // Enviar as mesmas chaves para AIJackpot.pt para tracking de prémios
   enviarParaAIJackpot(lastChaves, prefix, start);
+  // Preparar a partilha WhatsApp e mostrar o banner com o botão de envio
+  prepararPartilhaWhatsApp(lastChaves, prefix);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Partilha WhatsApp — lista de chaves registadas como favoritas no SCML.
+// Mostra um banner com botão (o clique do utilizador é necessário para
+// abrir o WhatsApp: o browser bloqueia 2ª janela no mesmo clique, e o
+// WhatsApp exige sempre confirmação de envio pelo utilizador).
+// ════════════════════════════════════════════════════════════════════
+const WHATSAPP_DESTINO = "351960052973"; // +351 960 052 973 (sem + nem espaços)
+
+function construirMensagemWhatsApp(chaves, prefix) {
+  const info = proximoSorteioInfo();
+  const titulo =
+    "AIJACKPOT.PT\n" +
+    "Chaves registadas no site SCML\n" +
+    `Sorteio nº ${info.numero}, de ${info.dataLabel}`;
+  const linhas = chaves.map((ch, i) => {
+    const nome = `${prefix}_${String(i + 1).padStart(4, "0")}`;
+    return `${nome}: ${ch.numeros.join(" ")} + ${ch.estrelas.join(" ")}`;
+  });
+  return titulo + "\n\n" + linhas.join("\n");
+}
+
+function prepararPartilhaWhatsApp(chaves, prefix) {
+  const msg = construirMensagemWhatsApp(chaves, prefix);
+  window._waMensagem = msg;
+  const info = proximoSorteioInfo();
+
+  let banner = document.getElementById("wa-share-banner");
+  if (banner) banner.remove();
+  banner = document.createElement("div");
+  banner.id = "wa-share-banner";
+  banner.style.cssText =
+    "position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:9999;" +
+    "background:#16213e;border:1px solid #25d366;border-radius:12px;padding:14px 18px;" +
+    "box-shadow:0 8px 28px rgba(0,0,0,.5);max-width:92vw;width:380px;font-family:inherit;";
+  banner.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">' +
+      '<i class="fa-brands fa-whatsapp" style="color:#25d366;font-size:1.5rem;"></i>' +
+      '<div style="color:#e0e0e0;font-size:.86rem;line-height:1.3;">' +
+        `<b style="color:#fff;">${chaves.length} chave(s)</b> prontas para partilhar<br>` +
+        `<span style="color:#9ca3af;font-size:.78rem;">Sorteio nº ${info.numero}, de ${info.dataLabel}</span>` +
+      '</div>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;">' +
+      '<button id="wa-send-btn" style="flex:1;background:#25d366;color:#08231a;border:none;' +
+        'border-radius:8px;padding:11px;font-weight:700;font-size:.9rem;cursor:pointer;">' +
+        '<i class="fa-brands fa-whatsapp me-2"></i>Enviar lista para WhatsApp</button>' +
+      '<button id="wa-close-btn" title="Fechar" style="background:transparent;color:#9ca3af;' +
+        'border:1px solid #2a2a4a;border-radius:8px;padding:11px 13px;cursor:pointer;">✕</button>' +
+    '</div>';
+  document.body.appendChild(banner);
+  document.getElementById("wa-send-btn").onclick = abrirPartilhaWhatsApp;
+  document.getElementById("wa-close-btn").onclick = () => banner.remove();
+}
+
+function abrirPartilhaWhatsApp() {
+  const msg = window._waMensagem;
+  if (!msg) { toast("Nada para partilhar. Clica primeiro no botão JSC.", "warning"); return; }
+  const url = `https://wa.me/${WHATSAPP_DESTINO}?text=${encodeURIComponent(msg)}`;
+  window.open(url, "_blank");
 }
 
 // ════════════════════════════════════════════════════════════════════
