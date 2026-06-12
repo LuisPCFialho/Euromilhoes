@@ -3139,7 +3139,7 @@ function apostarNoJSC() {
   // Enviar as mesmas chaves para AIJackpot.pt para tracking de prémios
   enviarParaAIJackpot(lastChaves, prefix, start);
   // Preparar a partilha WhatsApp e mostrar o banner com o botão de envio
-  prepararPartilhaWhatsApp(lastChaves, prefix);
+  prepararPartilhaWhatsApp(lastChaves, prefix, start);
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -3150,21 +3150,25 @@ function apostarNoJSC() {
 // ════════════════════════════════════════════════════════════════════
 const WHATSAPP_DESTINO = "351960052973"; // +351 960 052 973 (sem + nem espaços)
 
-function construirMensagemWhatsApp(chaves, prefix) {
+function construirMensagemWhatsApp(chaves, prefix, start) {
   const info = proximoSorteioInfo();
   const titulo =
     "AIJACKPOT.PT\n" +
     "Chaves registadas no site SCML\n" +
     `Sorteio nº ${info.numero}, de ${info.dataLabel}`;
-  const linhas = chaves.map((ch, i) => {
-    const nome = `${prefix}_${String(i + 1).padStart(4, "0")}`;
+  // Nomenclatura IDÊNTICA à do SCML/AIJackpot (ver enviarParaAIJackpot):
+  // {prefixo}_{lote 4 dígitos}.{posição 1..5}, lotes de 5 a partir de `start`.
+  const linhas = chaves.map((ch, idx) => {
+    const batchNum = start + Math.floor(idx / 5);
+    const posInBatch = (idx % 5) + 1;
+    const nome = `${prefix}_${String(batchNum).padStart(4, "0")}.${posInBatch}`;
     return `${nome}: ${ch.numeros.join(" ")} + ${ch.estrelas.join(" ")}`;
   });
   return titulo + "\n\n" + linhas.join("\n");
 }
 
-function prepararPartilhaWhatsApp(chaves, prefix) {
-  const msg = construirMensagemWhatsApp(chaves, prefix);
+function prepararPartilhaWhatsApp(chaves, prefix, start) {
+  const msg = construirMensagemWhatsApp(chaves, prefix, start);
   window._waMensagem = msg;
   const info = proximoSorteioInfo();
 
