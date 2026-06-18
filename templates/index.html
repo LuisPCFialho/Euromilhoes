@@ -732,6 +732,9 @@
               <button class="btn btn-ghost btn-sm" onclick="apostarNoJSC()" title="Registar todas as chaves geradas como Favoritas no JSC, em lotes de 5 (usa prefixo guardado em ⚙️)" aria-label="Registar nas Favoritas JSC">
                 <i class="fa-solid fa-dice me-1" style="color:#ffa94d;"></i>JSC
               </button>
+              <button class="btn btn-ghost btn-sm" onclick="reenviarAIJackpot()" title="Reenviar ao AIJackpot os lotes que ficaram pendentes na fila (sem mexer na Santa Casa nem no contador)" aria-label="Reenviar ao AIJackpot">
+                <i class="fa-solid fa-rotate me-1" style="color:#74c0fc;"></i>Reenviar AIJackpot
+              </button>
               <button class="btn btn-ghost btn-sm" onclick="configurarJSC()" title="Configurar prefixo e número inicial usados pelo botão JSC" aria-label="Configurar JSC">
                 <i class="fa-solid fa-gear" style="color:#74c0fc;"></i>
               </button>
@@ -3129,6 +3132,11 @@ function apostarNoJSC() {
   ).join(";");
   const total = Math.ceil(lastChaves.length / 5);
   const url = `https://www.jogossantacasa.pt/web/ChavesFavoritas/#fav=${hash}&p=${encodeURIComponent(prefix)}&s=${start}&b=0`;
+  // Enviar para AIJackpot ANTES de abrir a janela da Santa Casa: enfileira
+  // (operação que nunca falha) e arranca o envio enquanto a página ainda está
+  // em primeiro plano. Não usar await aqui — abortaria silenciosamente o popup.
+  aijackpotEnfileirar(lastChaves, prefix, start);
+  aijackpotFlush(false);
   // NOTA: window.open com "noopener" devolve SEMPRE null, mesmo quando o popup abre.
   // Por isso NÃO usar `if (!win) return` aqui — abortaria silenciosamente a chamada à AIJackpot.
   window.open(url, "_blank", "noopener");
@@ -3136,8 +3144,6 @@ function apostarNoJSC() {
   const nextStart = start + total;
   localStorage.setItem("jscStart", String(nextStart));
   toast(`${lastChaves.length} chaves → ${total} lote(s) → ${prefix}_${String(start).padStart(4,"0")} … ${prefix}_${String(start+total-1).padStart(4,"0")} · Próximo: ${prefix}_${String(nextStart).padStart(4,"0")}`, "info");
-  // Enviar as mesmas chaves para AIJackpot.pt para tracking de prémios
-  enviarParaAIJackpot(lastChaves, prefix, start);
   // Preparar a partilha WhatsApp e mostrar o banner com o botão de envio
   prepararPartilhaWhatsApp(lastChaves, prefix, start);
 }
@@ -3156,7 +3162,7 @@ function construirMensagemWhatsApp(chaves, prefix, start) {
     "AIJACKPOT.PT\n" +
     "Chaves registadas no site SCML\n" +
     `Sorteio nº ${info.numero}, de ${info.dataLabel}`;
-  // Nomenclatura IDÊNTICA à do SCML/AIJackpot (ver enviarParaAIJackpot):
+  // Nomenclatura IDÊNTICA à do SCML/AIJackpot (ver aijackpotEnfileirar):
   // {prefixo}_{lote 4 dígitos}.{posição 1..5}, lotes de 5 a partir de `start`.
   const linhas = chaves.map((ch, idx) => {
     const batchNum = start + Math.floor(idx / 5);
@@ -3238,10 +3244,25 @@ function configurarJSC() {
 // ════════════════════════════════════════════════════════════════════
 // Envia as chaves geradas para AIJackpot.pt (POST /api/receive-keys)
 // O secret é público (frontend) — só protege contra POSTs acidentais.
+//
+// Resiliência: as chaves são primeiro ENFILEIRADAS em localStorage (operação
+// que nunca falha) e só depois enviadas. O envio tem retry e, se falhar, o
+// lote PERMANECE na fila e é reenviado no próximo flush (ao carregar a página,
+// ao clicar JSC de novo, ou pelo botão "Reenviar AIJackpot"). Assim nunca se
+// perdem chaves por uma falha de rede pontual.
 // ════════════════════════════════════════════════════════════════════
-async function enviarParaAIJackpot(chaves, prefix, start) {
-  const SECRET = "0a518ed67d8b163cfc554f62c2f5a14c2168f35f6f623ebfead362b4e1499fa4";
-  const ENDPOINT = "https://jackpot-pt.vercel.app/api/receive-keys";
+const AIJACKPOT_ENDPOINT = "https://aijackpot.pt/api/receive-keys";
+const AIJACKPOT_SECRET = "0a518ed67d8b163cfc554f62c2f5a14c2168f35f6f623ebfead362b4e1499fa4";
+const AIJACKPOT_QUEUE_KEY = "aijackpotQueue";
+
+function aijackpotQueueLer() {
+  try { return JSON.parse(localStorage.getItem(AIJACKPOT_QUEUE_KEY) || "[]"); }
+  catch { return []; }
+}
+function aijackpotQueueGravar(q) {
+  localStorage.setItem(AIJACKPOT_QUEUE_KEY, JSON.stringify(q));
+}
+function aijackpotEnfileirar(chaves, prefix, start) {
   const keys = chaves.map((ch, idx) => {
     const batchNum = start + Math.floor(idx / 5);
     const posInBatch = (idx % 5) + 1;
@@ -3251,23 +3272,67 @@ async function enviarParaAIJackpot(chaves, prefix, start) {
       label: `${prefix}_${String(batchNum).padStart(4, "0")}.${posInBatch}`,
     };
   });
+  const q = aijackpotQueueLer();
+  q.push({ id: `${prefix}_${start}_${keys.length}`, keys, ts: new Date().toISOString() });
+  aijackpotQueueGravar(q);
+}
+
+let aijackpotAFlush = false;
+async function aijackpotFlush(silencioso = true) {
+  if (aijackpotAFlush) return;
+  aijackpotAFlush = true;
   try {
-    const r = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SECRET}` },
-      body: JSON.stringify({ keys, source: "euromilhoes-generator" }),
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
-    const msg = d.sorteioCreated
-      ? `AIJackpot: ${d.inseridas} chave(s) → novo sorteio ${d.sorteioDate}`
-      : `AIJackpot: ${d.inseridas} chave(s) inseridas no sorteio ${d.sorteioDate} (${d.totalNoSorteio} total)`;
-    toast(msg, "success");
-  } catch (e) {
-    console.error("AIJackpot failed:", e);
-    toast(`AIJackpot falhou: ${e.message}`, "warning");
+    while (true) {
+      const q = aijackpotQueueLer();
+      if (!q.length) break;
+      const lote = q[0];
+      let ok = false, ultimoErro = null, resposta = null;
+      for (let tentativa = 1; tentativa <= 3 && !ok; tentativa++) {
+        try {
+          const r = await fetch(AIJACKPOT_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${AIJACKPOT_SECRET}` },
+            body: JSON.stringify({ keys: lote.keys, source: "euromilhoes-generator" }),
+            keepalive: true,
+          });
+          resposta = await r.json();
+          if (!r.ok) throw new Error(resposta.error || `HTTP ${r.status}`);
+          ok = true;
+        } catch (e) {
+          ultimoErro = e;
+          if (tentativa < 3) await new Promise((res) => setTimeout(res, 800 * tentativa));
+        }
+      }
+      if (!ok) {
+        console.error("AIJackpot: lote falhou, fica na fila:", ultimoErro);
+        if (!silencioso) toast(`AIJackpot: envio falhou, fica na fila (${ultimoErro.message})`, "warning");
+        return; // mantém o lote na fila para a próxima tentativa
+      }
+      const q2 = aijackpotQueueLer();
+      q2.shift();
+      aijackpotQueueGravar(q2);
+      if (!silencioso) {
+        const d = resposta;
+        const msg = d.sorteioCreated
+          ? `AIJackpot: ${d.inseridas} chave(s) → novo sorteio ${d.sorteioDate}`
+          : `AIJackpot: ${d.inseridas} chave(s) no sorteio ${d.sorteioDate} (${d.totalNoSorteio} total)`;
+        toast(msg, "success");
+      }
+    }
+  } finally {
+    aijackpotAFlush = false;
   }
 }
+
+// Botão manual "Reenviar AIJackpot" — reenvia o que estiver pendente na fila.
+async function reenviarAIJackpot() {
+  if (!aijackpotQueueLer().length) { toast("AIJackpot: nada pendente na fila", "info"); return; }
+  await aijackpotFlush(false);
+  if (aijackpotQueueLer().length) toast("AIJackpot: ainda há lotes por enviar — tenta de novo", "warning");
+}
+
+// Ao carregar a página, tenta reenviar qualquer lote que tenha ficado pendente.
+document.addEventListener("DOMContentLoaded", () => { aijackpotFlush(true); });
 
 // ════════════════════════════════════════════════════════════════════
 // #37 Stats CSV export
