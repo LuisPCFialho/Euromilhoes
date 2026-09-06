@@ -1842,7 +1842,7 @@ class StatisticsAnalyzer:
 class FilterEngine:
     """
     All filters ordered by computational cost (cheapest first).
-    All filters A-H can be independently toggled via config.
+    All filters A-I can be independently toggled via config.
 
     Config keys (all optional, all default to True/active):
       soma_range : "padrao" (80–190) | "apertado" (95–160)
@@ -1854,12 +1854,13 @@ class FilterEngine:
       filtro_F   : bool – Colour system (last 9 draws)
       filtro_G   : bool – Regra do 31 (also accepts legacy key "regra31")
       filtro_H   : bool – Anti-arithmetic-progression (also accepts legacy "progressao")
+      filtro_I   : bool – AC Value (arithmetic complexity 5 or 6)
 
     To add a new filter: add its id to ALL_FILTERS, add info to FILTER_INFO,
     add stat key to stats dict, add check block in verificar(), add to STAT_MAP.
     """
 
-    ALL_FILTERS = list("ABCDEFGH")
+    ALL_FILTERS = list("ABCDEFGHI")
 
     FILTER_INFO = {
         "A": {
@@ -1903,6 +1904,12 @@ class FilterEngine:
             "descricao": "Rejeita progressões aritméticas perfeitas (ex: 5,10,15,20,25). "
                          "Estas sequências são muito populares entre jogadores ingénuos.",
         },
+        "I": {
+            "nome": "AC Value",
+            "descricao": "Complexidade Aritmética: nº de diferenças distintas entre todos os "
+                         "pares da chave, menos 4. Varia de 0 a 6. Aceita só AC 5 ou 6, "
+                         "que cobrem 78,3% das combinações C(50,5) (AC 6: 56,7%; AC 5: 21,6%).",
+        },
     }
 
     STAT_MAP = {
@@ -1914,6 +1921,7 @@ class FilterEngine:
         "F": "reprovadas_cores",
         "G": "reprovadas_regra31",
         "H": "reprovadas_progressao",
+        "I": "reprovadas_ac",
     }
 
     SOMA_RANGES = {
@@ -1950,6 +1958,7 @@ class FilterEngine:
             "reprovadas_finais": 0, "reprovadas_decadas": 0,
             "reprovadas_repeticao": 0, "reprovadas_cores": 0,
             "reprovadas_regra31": 0, "reprovadas_progressao": 0,
+            "reprovadas_ac": 0,
         }
 
     def verificar(self, chave: list) -> bool:
@@ -2028,6 +2037,14 @@ class FilterEngine:
                 self.stats["reprovadas_progressao"] += 1
                 return False
 
+        # ── Filter I – AC Value (arithmetic complexity must be 5 or 6) ───────
+        if "I" in self.active_filters:
+            diffs_unicas = {chave_s[j] - chave_s[i]
+                            for i in range(5) for j in range(i + 1, 5)}
+            if len(diffs_unicas) - 4 not in (5, 6):
+                self.stats["reprovadas_ac"] += 1
+                return False
+
         self.stats["aprovadas"] += 1
         return True
 
@@ -2049,6 +2066,7 @@ class FilterEngine:
                 "F": "V:1-3 | G:1-3 | A:0-1 | C:0",
                 "G": "mín 1 número > 31",
                 "H": "rejeitar sequências perfeitas",
+                "I": "AC = 5 ou 6",
             }[f_id]
             result.append({
                 "id":        f_id,

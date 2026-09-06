@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#1a1a2e"/>
   <meta name="robots" content="index, follow"/>
   <meta property="og:title" content="EuroMilhões – Gerador Profissional"/>
-  <meta property="og:description" content="Gera chaves EuroMilhões com 8 filtros inteligentes e metodologia Lotterycodex BI-BP-AI-AP."/>
+  <meta property="og:description" content="Gera chaves EuroMilhões com 9 filtros inteligentes e metodologia Lotterycodex BI-BP-AI-AP."/>
   <meta property="og:type" content="website"/>
   <link rel="canonical" href="https://www.luisfialho.pt/euromilhoes/"/>
   <title>EuroMilhões – Gerador Profissional v{{ version }}</title>
@@ -1143,6 +1143,8 @@ const FILTER_META = [
     tooltip:'Mín 1 número acima de 31. A maioria dos jogadores usa aniversários (1-31); forçar números altos reduz a partilha do jackpot.' },
   { id:'H', nome:'Anti-Progressão',
     tooltip:'Rejeita progressões aritméticas perfeitas (ex: 5,10,15,20,25). Sequências uniformes são muito populares e devem ser evitadas.' },
+  { id:'I', nome:'AC Value',
+    tooltip:'Complexidade Aritmética: nº de diferenças distintas entre todos os pares da chave, menos 4 (varia de 0 a 6). Só aceita chaves com AC 5 ou 6 — 78,3% das combinações C(50,5) (AC 6: 56,7%; AC 5: 21,6%).' },
 ];
 
 // ════════════════════════════════════════════════════════════════════
@@ -1338,6 +1340,7 @@ async function luckyPick() {
         quantidade:1, soma_range:"padrao",
         filtro_A:false, filtro_B:false, filtro_C:false, filtro_D:false,
         filtro_E:false, filtro_F:false, filtro_G:false, filtro_H:false,
+        filtro_I:false,
       })
     });
     const d = await resp.json();
@@ -2140,7 +2143,7 @@ let _filterHistogram = null;
 const _FILTER_NAMES = {
   A:"Soma (80–190)", B:"Consecutivos", C:"Dígito Final",
   D:"Dezenas (mín 3)", E:"Anti-Repetição", F:"Cores (9 sorteios)",
-  G:"Regra do 31", H:"Anti-Progressão"
+  G:"Regra do 31", H:"Anti-Progressão", I:"AC Value (5 ou 6)"
 };
 
 function updateFilterCombined() {
@@ -2148,12 +2151,12 @@ function updateFilterCombined() {
   const hist = _filterHistogram.histogram;
   const total = _filterHistogram.total;
   let activeMask = 0;
-  "ABCDEFGH".split("").forEach((f, i) => {
+  "ABCDEFGHI".split("").forEach((f, i) => {
     const cb = document.getElementById("fs-" + f);
     if (cb && cb.checked) activeMask |= (1 << i);
   });
   let accepted = 0;
-  for (let m = 0; m < 256; m++) {
+  for (let m = 0; m < 512; m++) {
     if ((m & activeMask) === activeMask) accepted += hist[m];
   }
   const eliminated = total - accepted;
@@ -2177,7 +2180,7 @@ function renderFilterStatsCard(data) {
   if (!el) return;
   const total = data.total;
   let rows = "";
-  "ABCDEFGH".split("").forEach(f => {
+  "ABCDEFGHI".split("").forEach(f => {
     const s = data.per_filter[f];
     const pct = ((s.eliminadas / total) * 100).toFixed(1);
     rows += `<div class="d-flex align-items-center gap-2 mb-2" style="font-size:.85rem;">
@@ -2983,7 +2986,7 @@ function updateFilterPreview() {
     return el && el.checked;
   }).length;
   const el = document.getElementById("btn-gerar");
-  if (el) el.innerHTML = `<i class="fa-solid fa-play me-2"></i>Gerar Chaves (${active}/8 filtros)`;
+  if (el) el.innerHTML = `<i class="fa-solid fa-play me-2"></i>Gerar Chaves (${active}/9 filtros)`;
 }
 // Attach to all filter checkboxes after they render
 const _origRenderFilterConfig = renderFilterConfig;

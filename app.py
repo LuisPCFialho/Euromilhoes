@@ -200,7 +200,7 @@ def api_gerar():
     body = request.get_json(silent=True) or {}
     quantidade = max(1, min(int(body.get("quantidade", 10)), 100))
 
-    # Support per-filter toggles (filtro_A … filtro_H).
+    # Support per-filter toggles (filtro_A … filtro_I).
     # Fall back to legacy keys regra31/progressao for G and H.
     cfg = {
         "soma_range": body.get("soma_range", "padrao"),
@@ -212,6 +212,7 @@ def api_gerar():
         "filtro_F":   bool(body.get("filtro_F", True)),
         "filtro_G":   bool(body.get("filtro_G", body.get("regra31",   True))),
         "filtro_H":   bool(body.get("filtro_H", body.get("progressao", True))),
+        "filtro_I":   bool(body.get("filtro_I", True)),
     }
 
     # #33/#34 Exclusion/inclusion lists
@@ -620,6 +621,7 @@ def api_estrategias():
             {"id": "F", "nome": "Cores (9 sorteios)", "descricao": "VERMELHOS 1–3 | VERDES 1–3 | AZUIS 0–2 | CASTANHOS 0."},
             {"id": "G", "nome": "Regra do 31",         "descricao": "Mín 1 número > 31. Reduz partilha de jackpot com jogadores de aniversários."},
             {"id": "H", "nome": "Progressão Aritmét.", "descricao": "Rejeita sequências como 5,10,15,20,25. Muito populares → má escolha."},
+            {"id": "I", "nome": "AC Value",             "descricao": "Complexidade Aritmética (diferenças distintas entre pares − 4), de 0 a 6. Só aceita AC 5 ou 6 → 78,3% de C(50,5)."},
         ],
         "estrelas": "O sistema memoriza o uso de cada estrela (1–12) e selecciona sempre as 2 menos usadas.",
         "cores_actuais": _cores_serializable(cores),
@@ -633,8 +635,8 @@ _filter_cache = {"key": None, "data": None}
 
 
 def _compute_filter_histogram(cores, ultimo_nums):
-    """Iterate all C(50,5) combos once; build 256-entry histogram keyed by
-    an 8-bit mask (bit i = combo passes filter i).  The frontend can then
+    """Iterate all C(50,5) combos once; build 512-entry histogram keyed by
+    a 9-bit mask (bit i = combo passes filter i).  The frontend can then
     compute the accepted count for ANY filter combination instantly."""
 
     # Lookup arrays for O(1) per-number checks (index 0..50)
@@ -655,7 +657,7 @@ def _compute_filter_histogram(cores, ultimo_nums):
         is_u[n] = True
     has_ult = bool(ultimo_nums)
 
-    hist = [0] * 256
+    hist = [0] * 512
 
     for combo in combinations(range(1, 51), 5):
         n0, n1, n2, n3, n4 = combo
@@ -714,13 +716,19 @@ def _compute_filter_histogram(cores, ultimo_nums):
         if not (d01 == d12 == d23 == d34):
             mask |= 128
 
+        # I: AC Value 5 or 6 (>= 9 distinct pairwise differences)
+        if len({d01, d12, d23, d34,
+                n2 - n0, n3 - n1, n4 - n2,
+                n3 - n0, n4 - n1, n4 - n0}) >= 9:
+            mask |= 256
+
         hist[mask] += 1
 
     # Per-filter individual stats (from the histogram)
     total = sum(hist)
     per_filter = {}
-    for bit, fid in enumerate("ABCDEFGH"):
-        accepted = sum(hist[m] for m in range(256) if m & (1 << bit))
+    for bit, fid in enumerate("ABCDEFGHI"):
+        accepted = sum(hist[m] for m in range(512) if m & (1 << bit))
         per_filter[fid] = {"aceites": accepted, "eliminadas": total - accepted}
 
     return {"histogram": hist, "per_filter": per_filter, "total": total}
