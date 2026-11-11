@@ -8,13 +8,13 @@
 
 Estratégias implementadas:
   - 16 Padrões Equilibrados (Lotterycodex BI/BP/AI/AP)
-  - Filtro A: Soma configurável (padrão 80–190 | apertado 95–160)
+  - Filtro A: Soma configurável (padrão 90–195 | apertado 95–160)
   - Filtro B: Máx 1 par consecutivo, 0 triplos
   - Filtro C: Máx 2 números com mesmo dígito final
   - Filtro D: Mín 3 décadas diferentes
   - Filtro E: Máx 2 repetições do sorteio anterior
   - Filtro F: Sistema de cores (últimos 9 sorteios)
-  - Filtro G: Regra do 31 – mín 1 número > 31 (anti-calendário)
+  - Filtro G: Regra do 31 – mín 2 números > 31 (anti-calendário)
   - Filtro H: Rejeitar progressões aritméticas perfeitas
   - Estrelas Equilibradas: sempre as 2 menos usadas
 """
@@ -291,10 +291,10 @@ def classificar_padrao_cores(numeros: list, cores: dict) -> str:
 
 
 # Colour system thresholds
-# VERMELHOS: 0 appearances in last 9 draws → 1–3 in combo
-# VERDES: 1 appearance → 1–3 in combo
+# VERMELHOS: 0 appearances in last 9 draws → 0–3 in combo
+# VERDES: 1 appearance → 0–3 in combo
 # AZUIS: 2 appearances → 0–2 in combo
-# CASTANHOS: 3+ appearances → EXCLUDED (0 in combo)
+# CASTANHOS: 3+ appearances → 0–1 in combo
 
 # ═════════════════════════════════════════════════════════════════════════════
 # DATABASE MANAGER
@@ -1687,14 +1687,16 @@ class StatisticsAnalyzer:
                     if v:
                         certos_por_filtro[f] += 1
                 # Filtro F: com estas cores, que fração das 2.118.760 chaves
-                # possíveis passaria? (vermelhos 1-3, verdes 1-3, azuis 0-2,
-                # castanhos 0 — logo v+g+a tem de dar 5)
-                nv, ng, na = (len(cores["vermelhos"]), len(cores["verdes"]),
-                              len(cores["azuis"]))
+                # possíveis passaria? (vermelhos 0-3, verdes 0-3, azuis 0-2,
+                # castanhos 0-1 — logo v+g+a+c tem de dar 5)
+                # TEM DE ACOMPANHAR a regra em verificar()/avaliar_todos().
+                nv, ng, na, nc = (len(cores["vermelhos"]), len(cores["verdes"]),
+                                  len(cores["azuis"]), len(cores["castanhos"]))
                 passam_f += sum(
-                    comb(nv, v) * comb(ng, g) * comb(na, a)
-                    for v in range(1, 4) for g in range(1, 4) for a in range(3)
-                    if v + g + a == 5
+                    comb(nv, v) * comb(ng, g) * comb(na, a) * comb(nc, c)
+                    for v in range(4) for g in range(4)
+                    for a in range(3) for c in range(2)
+                    if v + g + a + c == 5
                 ) / FilterEngine.TOTAL_COMBINACOES
 
             sorteios.append({
@@ -1948,7 +1950,7 @@ class FilterEngine:
     All filters A-I can be independently toggled via config.
 
     Config keys (all optional, all default to True/active):
-      soma_range : "padrao" (80–190) | "apertado" (95–160)
+      soma_range : "padrao" (90–195) | "apertado" (95–160)
       filtro_A   : bool – Soma range
       filtro_B   : bool – Consecutive pairs/triples
       filtro_C   : bool – Same final digit
@@ -1957,7 +1959,7 @@ class FilterEngine:
       filtro_F   : bool – Colour system (last 9 draws)
       filtro_G   : bool – Regra do 31 (also accepts legacy key "regra31")
       filtro_H   : bool – Anti-arithmetic-progression (also accepts legacy "progressao")
-      filtro_I   : bool – AC Value (arithmetic complexity 5 or 6)
+      filtro_I   : bool – AC Value (arithmetic complexity 4, 5 or 6)
 
     To add a new filter: add its id to ALL_FILTERS, add info to FILTER_INFO,
     add stat key to stats dict, add check block in verificar(), add to STAT_MAP,
@@ -1970,7 +1972,7 @@ class FilterEngine:
         "A": {
             "nome": "Soma",
             "descricao": "Limita a soma dos 5 números ao intervalo configurado. "
-                         "Cerca de 93% dos sorteios históricos têm somas entre 80–190.",
+                         "Cerca de 88% dos sorteios históricos têm somas entre 90–195.",
         },
         "B": {
             "nome": "Consecutivos",
@@ -1995,13 +1997,15 @@ class FilterEngine:
         "F": {
             "nome": "Cores (9 sorteios)",
             "descricao": "Sistema de cores baseado nos últimos 9 sorteios: "
-                         "Vermelhos (0×) → 1-3 por chave; Verdes (1×) → 1-3; "
-                         "Azuis (2×) → 0-2; Castanhos (3×+) → excluídos.",
+                         "Vermelhos (0×) → 0-3 por chave; Verdes (1×) → 0-3; "
+                         "Azuis (2×) → 0-2; Castanhos (3×+) → 0-1.",
         },
         "G": {
             "nome": "Regra do 31",
-            "descricao": "Mín 1 número acima de 31. A maioria dos jogadores usa aniversários "
-                         "(1-31), forçar números altos reduz a partilha do jackpot.",
+            "descricao": "Mín 2 números acima de 31. Medido no histórico de prémios: cada "
+                         "número ≤31 atrai cerca de 1,3% mais co-vencedores, porque a "
+                         "maioria dos jogadores usa aniversários. Não prevê o sorteio — "
+                         "reduz a partilha do prémio.",
         },
         "H": {
             "nome": "Anti-Progressão",
@@ -2011,8 +2015,9 @@ class FilterEngine:
         "I": {
             "nome": "AC Value",
             "descricao": "Complexidade Aritmética: nº de diferenças distintas entre todos os "
-                         "pares da chave, menos 4. Varia de 0 a 6. Aceita só AC 5 ou 6, "
-                         "que cobrem 78,3% das combinações C(50,5) (AC 6: 56,7%; AC 5: 21,6%).",
+                         "pares da chave, menos 4. Varia de 0 a 6. Aceita AC 4, 5 ou 6, "
+                         "que cobrem 96,4% das combinações C(50,5) "
+                         "(AC 6: 56,7%; AC 5: 21,6%; AC 4: 18,2%).",
         },
     }
 
@@ -2029,7 +2034,7 @@ class FilterEngine:
     }
 
     SOMA_RANGES = {
-        "padrao":   (80, 190),
+        "padrao":   (90, 195),
         "apertado": (95, 160),
     }
 
@@ -2049,14 +2054,14 @@ class FilterEngine:
     # SE ALGUMA REGRA MUDAR, estes números têm de ser recalculados.
     TOTAL_COMBINACOES = 2_118_760
     REJEITADAS_AO_ACASO = {
-        "A": 171_695,   # soma fora de 80–190
+        "A": 266_209,   # soma fora de 90–195
         "B":  95_266,   # mais de 1 par consecutivo, ou um triplo
         "C": 101_260,   # 3+ números com o mesmo dígito final
         "D": 151_260,   # menos de 3 dezenas diferentes
         "E":  10_126,   # 3+ números repetidos do sorteio anterior
-        "G": 169_911,   # nenhum número acima de 31
+        "G": 767_746,   # menos de 2 números acima de 31
         "H":     288,   # progressões aritméticas perfeitas
-        "I": 460_302,   # AC Value diferente de 5 ou 6
+        "I":  75_470,   # AC Value diferente de 4, 5 ou 6
     }
 
     def __init__(self, cores: dict, ultimo_sorteio: list | None = None,
@@ -2065,7 +2070,7 @@ class FilterEngine:
         self.ultimo_sorteio = ultimo_sorteio or []
         cfg = config or {}
 
-        rng = self.SOMA_RANGES.get(cfg.get("soma_range", "padrao"), (80, 190))
+        rng = self.SOMA_RANGES.get(cfg.get("soma_range", "padrao"), (90, 195))
         self.soma_min = cfg.get("soma_min", rng[0])
         self.soma_max = cfg.get("soma_max", rng[1])
 
@@ -2148,15 +2153,15 @@ class FilterEngine:
             qtd_a = sum(1 for n in chave_s if n in a)
             qtd_c = sum(1 for n in chave_s if n in c)
 
-            if not (1 <= qtd_v <= 3): self.stats["reprovadas_cores"] += 1; return False
-            if not (1 <= qtd_g <= 3): self.stats["reprovadas_cores"] += 1; return False
-            if not (0 <= qtd_a <= 2): self.stats["reprovadas_cores"] += 1; return False
-            if qtd_c > 0:             self.stats["reprovadas_cores"] += 1; return False
+            if qtd_v > 3: self.stats["reprovadas_cores"] += 1; return False
+            if qtd_g > 3: self.stats["reprovadas_cores"] += 1; return False
+            if qtd_a > 2: self.stats["reprovadas_cores"] += 1; return False
+            if qtd_c > 1: self.stats["reprovadas_cores"] += 1; return False
 
         # ── Filter G – Regra do 31 (anti-calendário) ─────────────────────────
         if "G" in self.active_filters:
             acima_31 = sum(1 for n in chave_s if n > 31)
-            if acima_31 < 1:
+            if acima_31 < 2:
                 self.stats["reprovadas_regra31"] += 1
                 return False
 
@@ -2167,11 +2172,11 @@ class FilterEngine:
                 self.stats["reprovadas_progressao"] += 1
                 return False
 
-        # ── Filter I – AC Value (arithmetic complexity must be 5 or 6) ───────
+        # ── Filter I – AC Value (arithmetic complexity must be 4, 5 or 6) ────
         if "I" in self.active_filters:
             diffs_unicas = {chave_s[j] - chave_s[i]
                             for i in range(5) for j in range(i + 1, 5)}
-            if len(diffs_unicas) - 4 not in (5, 6):
+            if len(diffs_unicas) - 4 not in (4, 5, 6):
                 self.stats["reprovadas_ac"] += 1
                 return False
 
@@ -2181,7 +2186,7 @@ class FilterEngine:
     @staticmethod
     def avaliar_todos(chave: list, ultimo_sorteio: list | None = None,
                       cores: dict | None = None,
-                      soma_min: int = 80, soma_max: int = 190) -> dict:
+                      soma_min: int = 90, soma_max: int = 195) -> dict:
         """
         Verdict of EVERY filter for one key, evaluated independently.
 
@@ -2231,17 +2236,17 @@ class FilterEngine:
             qtd_g = sum(1 for n in k if n in cores.get("verdes", set()))
             qtd_a = sum(1 for n in k if n in cores.get("azuis", set()))
             qtd_c = sum(1 for n in k if n in cores.get("castanhos", set()))
-            r["F"] = (1 <= qtd_v <= 3) and (1 <= qtd_g <= 3) and (qtd_a <= 2) and (qtd_c == 0)
+            r["F"] = (qtd_v <= 3) and (qtd_g <= 3) and (qtd_a <= 2) and (qtd_c <= 1)
 
-        # G – at least 1 number above 31
-        r["G"] = sum(1 for n in k if n > 31) >= 1
+        # G – at least 2 numbers above 31
+        r["G"] = sum(1 for n in k if n > 31) >= 2
 
         # H – reject perfect arithmetic progressions
         r["H"] = len({k[i+1] - k[i] for i in range(len(k) - 1)}) != 1
 
-        # I – AC Value must be 5 or 6
+        # I – AC Value must be 4, 5 or 6
         diffs = {k[j] - k[i] for i in range(len(k)) for j in range(i + 1, len(k))}
-        r["I"] = (len(diffs) - 4) in (5, 6)
+        r["I"] = (len(diffs) - 4) in (4, 5, 6)
 
         return r
 
@@ -2260,10 +2265,10 @@ class FilterEngine:
                 "C": "máx 2 iguais",
                 "D": "mín 3 décadas",
                 "E": "máx 2 do anterior",
-                "F": "V:1-3 | G:1-3 | A:0-1 | C:0",
-                "G": "mín 1 número > 31",
+                "F": "V:0-3 | G:0-3 | A:0-2 | C:0-1",
+                "G": "mín 2 números > 31",
                 "H": "rejeitar sequências perfeitas",
-                "I": "AC = 5 ou 6",
+                "I": "AC = 4, 5 ou 6",
             }[f_id]
             result.append({
                 "id":        f_id,
@@ -2656,10 +2661,10 @@ class TerminalUI:
         table.add_column("Regra combo")
 
         rows = [
-            ("VERMELHOS", "0 aparições", sorted(cores["vermelhos"]), "bold red", "1–3"),
-            ("VERDES",    "1 aparição",  sorted(cores["verdes"]),    "bold green", "1–3"),
+            ("VERMELHOS", "0 aparições", sorted(cores["vermelhos"]), "bold red", "0–3"),
+            ("VERDES",    "1 aparição",  sorted(cores["verdes"]),    "bold green", "0–3"),
             ("AZUIS",     "2 aparições", sorted(cores["azuis"]),     "bold blue",  "0–2"),
-            ("CASTANHOS", "3+ aparições",sorted(cores["castanhos"]), "bold #8B4513", "EXCLUÍDOS"),
+            ("CASTANHOS", "3+ aparições",sorted(cores["castanhos"]), "bold #8B4513", "0–1"),
         ]
         for nome, crit, nums, style, regra in rows:
             nums_str = " ".join(str(n) for n in nums)
@@ -2898,8 +2903,8 @@ Apenas combinações com distribuição equilibrada entre quadrantes.
 Estes 16 padrões cobrem ~1.333.800 combinações possíveis.
 
 [bold yellow]FILTROS ACTIVOS:[/]
-  [A] Soma configurável: padrão 80–190 | apertado 95–160
-      → ~93% dos sorteios históricos têm soma neste intervalo
+  [A] Soma configurável: padrão 90–195 | apertado 95–160
+      → ~88% dos sorteios históricos têm soma neste intervalo
   [B] Máx 1 par consecutivo, 0 triplos consecutivos
       → pares: ~42% dos sorteios | triplos: <1% → sempre eliminar
   [C] Máx 2 números com o mesmo dígito final
@@ -2909,13 +2914,13 @@ Estes 16 padrões cobrem ~1.333.800 combinações possíveis.
   [E] Máx 2 repetições do sorteio anterior
       → restrição de curto prazo baseada em tendências
   [F] Sistema de cores (últimos 9 sorteios):
-      • VERMELHOS (0×) → 1 a 3 na chave
-      • VERDES    (1×) → 1 a 3 na chave
+      • VERMELHOS (0×) → 0 a 3 na chave
+      • VERDES    (1×) → 0 a 3 na chave
       • AZUIS     (2×) → 0 a 2 na chave
-      • CASTANHOS (3×+) → EXCLUÍDOS (0 na chave)
-  [G] Regra do 31 – mínimo 1 número acima de 31
-      → a maioria dos jogadores usa aniversários (1–31);
-        forçar números altos reduz partilha do jackpot
+      • CASTANHOS (3×+) → 0 a 1 na chave
+  [G] Regra do 31 – mínimo 2 números acima de 31
+      → cada número ≤31 atrai ~1,3% mais co-vencedores
+        (medido no histórico de prémios): reduz a partilha
   [H] Rejeitar progressões aritméticas perfeitas
       → ex: 5,10,15,20,25 ou 3,9,15,21,27 são escolhas
         demasiado populares e devem ser evitadas

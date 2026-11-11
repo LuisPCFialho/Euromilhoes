@@ -613,15 +613,15 @@ def api_historico_filtros():
     result["condicoes"] = [
         {"id": f, "nome": FilterEngine.FILTER_INFO[f]["nome"], "condicao": c}
         for f, c in [
-            ("A", "Soma entre 80–190"),
+            ("A", "Soma entre 90–195"),
             ("B", "Máximo 1 par e zero triplos"),
             ("C", "Máximo 2 iguais"),
             ("D", "Mínimo 3 dezenas"),
             ("E", "Máximo 2 do sorteio anterior"),
-            ("F", "Vermelhos 1–3 · Verdes 1–3 · Azuis 0–2 · Castanhos 0"),
-            ("G", "Mínimo 1 maior que 31"),
+            ("F", "Vermelhos 0–3 · Verdes 0–3 · Azuis 0–2 · Castanhos 0–1"),
+            ("G", "Mínimo 2 maiores que 31"),
             ("H", "Rejeitar sequências perfeitas"),
-            ("I", "AC Value = 5 ou 6"),
+            ("I", "AC Value = 4, 5 ou 6"),
         ]
     ]
     _hist_filtros_cache["data"] = result
@@ -647,15 +647,15 @@ def api_estrategias():
         "total_combinacoes_universo": 2_118_760,
         "total_combinacoes_aceites":  1_333_800,
         "filtros": [
-            {"id": "A", "nome": "Soma",               "descricao": "Entre 80–190 (padrão) ou 95–160 (apertado). ~93% dos sorteios históricos."},
+            {"id": "A", "nome": "Soma",               "descricao": "Entre 90–195 (padrão) ou 95–160 (apertado). ~88% dos sorteios históricos."},
             {"id": "B", "nome": "Consecutivos",        "descricao": "Máx 1 par consecutivo, 0 triplos. Pares: ~42% histórico, triplos: <1%."},
             {"id": "C", "nome": "Dígito Final",        "descricao": "Máx 2 números com mesmo dígito final. 3+ iguais: <4% histórico."},
             {"id": "D", "nome": "Dezenas",              "descricao": "Mín 3 dezenas diferentes (1-10, 11-20, 21-30, 31-40, 41-50)."},
             {"id": "E", "nome": "Anti-Repetição",      "descricao": "Máx 2 números em comum com o sorteio anterior."},
-            {"id": "F", "nome": "Cores (9 sorteios)", "descricao": "VERMELHOS 1–3 | VERDES 1–3 | AZUIS 0–2 | CASTANHOS 0."},
-            {"id": "G", "nome": "Regra do 31",         "descricao": "Mín 1 número > 31. Reduz partilha de jackpot com jogadores de aniversários."},
+            {"id": "F", "nome": "Cores (9 sorteios)", "descricao": "VERMELHOS 0–3 | VERDES 0–3 | AZUIS 0–2 | CASTANHOS 0–1."},
+            {"id": "G", "nome": "Regra do 31",         "descricao": "Mín 2 números > 31. Cada número ≤31 atrai ~1,3% mais co-vencedores (medido no histórico de prémios)."},
             {"id": "H", "nome": "Progressão Aritmét.", "descricao": "Rejeita sequências como 5,10,15,20,25. Muito populares → má escolha."},
-            {"id": "I", "nome": "AC Value",             "descricao": "Complexidade Aritmética (diferenças distintas entre pares − 4), de 0 a 6. Só aceita AC 5 ou 6 → 78,3% de C(50,5)."},
+            {"id": "I", "nome": "AC Value",             "descricao": "Complexidade Aritmética (diferenças distintas entre pares − 4), de 0 a 6. Aceita AC 4, 5 ou 6 → 96,4% de C(50,5)."},
         ],
         "estrelas": "O sistema memoriza o uso de cada estrela (1–12) e selecciona sempre as 2 menos usadas.",
         "cores_actuais": _cores_serializable(cores),
@@ -697,9 +697,9 @@ def _compute_filter_histogram(cores, ultimo_nums):
         n0, n1, n2, n3, n4 = combo
         mask = 0
 
-        # A: sum 80-190
+        # A: sum 90-195
         s = n0 + n1 + n2 + n3 + n4
-        if 80 <= s <= 190:
+        if 90 <= s <= 195:
             mask = 1
 
         # B: max 1 consecutive pair, 0 triples
@@ -739,21 +739,21 @@ def _compute_filter_histogram(cores, ultimo_nums):
         qg = is_g[n0] + is_g[n1] + is_g[n2] + is_g[n3] + is_g[n4]
         qa = is_a[n0] + is_a[n1] + is_a[n2] + is_a[n3] + is_a[n4]
         qc = is_c[n0] + is_c[n1] + is_c[n2] + is_c[n3] + is_c[n4]
-        if 1 <= qv <= 3 and 1 <= qg <= 3 and 0 <= qa <= 2 and qc == 0:
+        if qv <= 3 and qg <= 3 and qa <= 2 and qc <= 1:
             mask |= 32
 
-        # G: min 1 number > 31
-        if (n0 > 31) + (n1 > 31) + (n2 > 31) + (n3 > 31) + (n4 > 31) >= 1:
+        # G: min 2 numbers > 31
+        if (n0 > 31) + (n1 > 31) + (n2 > 31) + (n3 > 31) + (n4 > 31) >= 2:
             mask |= 64
 
         # H: not perfect arithmetic progression
         if not (d01 == d12 == d23 == d34):
             mask |= 128
 
-        # I: AC Value 5 or 6 (>= 9 distinct pairwise differences)
+        # I: AC Value 4, 5 or 6 (>= 8 distinct pairwise differences)
         if len({d01, d12, d23, d34,
                 n2 - n0, n3 - n1, n4 - n2,
-                n3 - n0, n4 - n1, n4 - n0}) >= 9:
+                n3 - n0, n4 - n1, n4 - n0}) >= 8:
             mask |= 256
 
         hist[mask] += 1
