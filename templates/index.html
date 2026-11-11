@@ -219,6 +219,7 @@
     .tbl-cond td.pct-alta  { color:#5fd38d; font-weight:700; }
     .tbl-cond td.pct-media { color:#e8c55f; font-weight:700; }
     .tbl-cond td.pct-baixa { color:#e88a5f; font-weight:700; }
+    .tbl-cond td.acaso { color:#8a8aa8; font-style:italic; }
 
     body.light-mode .tbl-filtros { color:#333; }
     body.light-mode .tbl-filtros th, body.light-mode .tbl-filtros td { border-color:#ddd; }
@@ -1971,12 +1972,21 @@ async function loadHistoricoFiltros() {
           <tr><td class="rotulo">% de acerto</td>${d.condicoes.map(c =>
             `<td class="${pf[c.id].pct >= 90 ? "pct-alta" : pf[c.id].pct >= 70 ? "pct-media" : "pct-baixa"}"
              >${pf[c.id].pct.toFixed(2)}%</td>`).join("")}</tr>
+          <tr><td class="rotulo">Ao acaso seria</td>${d.condicoes.map(c =>
+            `<td class="acaso">${pf[c.id].pct_acaso.toFixed(2)}%</td>`).join("")}</tr>
         </tbody>
       </table>
     </div>
     <div style="color:#9ca3af;font-size:.78rem;margin-top:10px;">
       Quantas vezes cada filtro teria aceitado o sorteio que realmente saiu,
       nos mesmos <b>${r.avaliaveis}</b> sorteios da tabela seguinte.
+      <br/>
+      <b>Ao acaso seria</b> = a que taxa o filtro aceitaria uma chave tirada à
+      sorte, calculado sobre as 2 118 760 chaves possíveis. Quando as duas
+      linhas são parecidas, o filtro está a rejeitar os sorteios reais ao mesmo
+      ritmo a que rejeitaria o puro acaso — ou seja, não está a captar nenhum
+      padrão dos sorteios. É o que acontece nos nove: o maior afastamento é o
+      da Soma, e mesmo esse cabe dentro da variação normal.
     </div>`;
 
   // 2) Quantas vezes os filtros acertaram

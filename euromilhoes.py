@@ -29,6 +29,7 @@ import csv
 import time
 import re
 from collections import Counter
+from math import comb
 from pathlib import Path
 
 # ─── Dependency check ────────────────────────────────────────────────────────
@@ -1664,6 +1665,7 @@ class StatisticsAnalyzer:
         dist = Counter()
         certos_por_filtro = Counter()
         avaliaveis = 0
+        passam_f = 0.0      # soma das probabilidades do filtro F, contexto a contexto
 
         for i, s in enumerate(crono):
             anterior = crono[i-1]["numeros"] if i > 0 else None
@@ -1684,6 +1686,16 @@ class StatisticsAnalyzer:
                 for f, v in veredictos.items():
                     if v:
                         certos_por_filtro[f] += 1
+                # Filtro F: com estas cores, que fração das 2.118.760 chaves
+                # possíveis passaria? (vermelhos 1-3, verdes 1-3, azuis 0-2,
+                # castanhos 0 — logo v+g+a tem de dar 5)
+                nv, ng, na = (len(cores["vermelhos"]), len(cores["verdes"]),
+                              len(cores["azuis"]))
+                passam_f += sum(
+                    comb(nv, v) * comb(ng, g) * comb(na, a)
+                    for v in range(1, 4) for g in range(1, 4) for a in range(3)
+                    if v + g + a == 5
+                ) / FilterEngine.TOTAL_COMBINACOES
 
             sorteios.append({
                 "n": i + 1,
@@ -1699,6 +1711,14 @@ class StatisticsAnalyzer:
 
         def pct(q):
             return round(q / avaliaveis * 100, 2) if avaliaveis else 0.0
+
+        def acerto_ao_acaso(f):
+            """Fração das chaves possíveis que este filtro aceitaria se a chave
+            fosse tirada ao acaso — o termo de comparação da taxa real."""
+            if f == "F":
+                return passam_f / avaliaveis if avaliaveis else 0.0
+            return 1 - (FilterEngine.REJEITADAS_AO_ACASO[f]
+                        / FilterEngine.TOTAL_COMBINACOES)
 
         todos_certos = dist[0]
         mais_de_3 = sum(q for e, q in dist.items() if e > 3)
@@ -1718,7 +1738,8 @@ class StatisticsAnalyzer:
             "por_filtro": {
                 f: {"certos": certos_por_filtro[f],
                     "errados": avaliaveis - certos_por_filtro[f],
-                    "pct": pct(certos_por_filtro[f])}
+                    "pct": pct(certos_por_filtro[f]),
+                    "pct_acaso": round(acerto_ao_acaso(f) * 100, 2)}
                 for f in FilterEngine.ALL_FILTERS
             },
         }
@@ -2010,6 +2031,32 @@ class FilterEngine:
     SOMA_RANGES = {
         "padrao":   (80, 190),
         "apertado": (95, 160),
+    }
+
+    # Quantas das 2.118.760 chaves possíveis cada filtro rejeitaria se a chave
+    # fosse tirada PURAMENTE AO ACASO. Serve de termo de comparação na tabela
+    # de estatísticas: só se o filtro rejeitar os sorteios reais a uma taxa
+    # diferente desta é que estará a captar algum padrão dos sorteios.
+    #
+    # Valores exatos, obtidos percorrendo todas as combinações com
+    # avaliar_todos() (soma_range "padrao"). E, G e H foram ainda conferidos
+    # por fórmula fechada. O cálculo demora ~8s, por isso fica aqui fixado em
+    # vez de ser repetido a cada pedido.
+    #
+    # O filtro F não está aqui: depende das cores, que mudam a cada sorteio,
+    # e por isso é calculado contexto a contexto em historico_filtros().
+    #
+    # SE ALGUMA REGRA MUDAR, estes números têm de ser recalculados.
+    TOTAL_COMBINACOES = 2_118_760
+    REJEITADAS_AO_ACASO = {
+        "A": 171_695,   # soma fora de 80–190
+        "B":  95_266,   # mais de 1 par consecutivo, ou um triplo
+        "C": 101_260,   # 3+ números com o mesmo dígito final
+        "D": 151_260,   # menos de 3 dezenas diferentes
+        "E":  10_126,   # 3+ números repetidos do sorteio anterior
+        "G": 169_911,   # nenhum número acima de 31
+        "H":     288,   # progressões aritméticas perfeitas
+        "I": 460_302,   # AC Value diferente de 5 ou 6
     }
 
     def __init__(self, cores: dict, ultimo_sorteio: list | None = None,
