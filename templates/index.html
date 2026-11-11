@@ -184,6 +184,52 @@
     }
     table.table th:hover::after { background:rgba(116,192,252,.5); }
 
+    /* ── Tabelas dos filtros por sorteio ── */
+    .tbl-filtros { width:100%; border-collapse:collapse; font-size:.72rem;
+                   white-space:nowrap; color:#d0d0d0; }
+    .tbl-filtros th, .tbl-filtros td { padding:3px 7px; text-align:center;
+                   border:1px solid #2a2a4a; }
+    /* Cabeçalho parte em 2 linhas para as 13 colunas caberem no ecrã. */
+    .tbl-filtros thead th { position:sticky; top:0; background:#141432;
+                   color:#9ca3af; font-weight:600; z-index:2; line-height:1.25;
+                   white-space:normal; }
+    .tbl-filtros thead th b { color:var(--em-gold); font-size:.78rem; }
+    .tbl-filtros td.col-n    { color:#7a7a9a; }
+    .tbl-filtros td.col-nums { font-variant-numeric:tabular-nums; letter-spacing:.3px; }
+    .tbl-filtros td.col-est  { color:#ffd700; }
+    .tbl-filtros tbody tr:hover td { filter:brightness(1.18); }
+    .cel-sim { background:#1f7a3d; color:#fff;    font-weight:600; }
+    .cel-nao { background:#c9a06a; color:#3a2608; font-weight:600; }
+    .cel-na  { background:#272742; color:#6b6b85; }
+    .tbl-scroll { max-height:70vh; overflow:auto; border:1px solid #2a2a4a;
+                  border-radius:8px; }
+    .tbl-resumo { border-collapse:collapse; font-size:.8rem; color:#d0d0d0; }
+    .tbl-resumo th, .tbl-resumo td { border:1px solid #2a2a4a; padding:7px 14px;
+                  text-align:center; white-space:nowrap; }
+    .tbl-resumo th { background:#141432; color:#9ca3af; font-weight:600; }
+    .tbl-resumo td.rotulo { text-align:right; color:#9ca3af; background:#141432; }
+    .tbl-cond { width:100%; border-collapse:collapse; font-size:.72rem; color:#d0d0d0; }
+    .tbl-cond th, .tbl-cond td { border:1px solid #2a2a4a; padding:5px 7px;
+                  text-align:center; vertical-align:top; }
+    .tbl-cond th { background:#2a2208; color:var(--em-gold); font-weight:600; }
+    .tbl-cond td { white-space:normal; min-width:92px; }
+
+    body.light-mode .tbl-filtros { color:#333; }
+    body.light-mode .tbl-filtros th, body.light-mode .tbl-filtros td { border-color:#ddd; }
+    body.light-mode .tbl-filtros thead th { background:#eef1f5; color:#555; }
+    body.light-mode .tbl-filtros td.col-n { color:#999; }
+    body.light-mode .tbl-filtros td.col-est { color:#b8860b; }
+    body.light-mode .cel-sim { background:#5fbf7f; color:#10351d; }
+    body.light-mode .cel-na  { background:#f0f0f4; color:#aaa; }
+    body.light-mode .tbl-scroll { border-color:#ddd; }
+    body.light-mode .tbl-resumo { color:#333; }
+    body.light-mode .tbl-resumo th, body.light-mode .tbl-resumo td { border-color:#ddd; }
+    body.light-mode .tbl-resumo th,
+    body.light-mode .tbl-resumo td.rotulo { background:#eef1f5; color:#555; }
+    body.light-mode .tbl-cond { color:#333; }
+    body.light-mode .tbl-cond th, body.light-mode .tbl-cond td { border-color:#ddd; }
+    body.light-mode .tbl-cond th { background:#fdf3d0; color:#8a6d00; }
+
     .badge-padrao { background:#1a3a60; color:var(--em-azul); font-size:.72rem; padding:3px 8px; border-radius:8px; }
 
     #no-draws-msg { color:#9ca3af; text-align:center; padding:40px; }
@@ -809,6 +855,27 @@
         <span style="color:#9ca3af;">A carregar...</span>
       </div>
     </div>
+
+    <!-- ── Filtros aplicados ao histórico ── -->
+    <div class="card-dark">
+      <h5><i class="fa-solid fa-list-check me-2"></i>Condições a verificar por cada Filtro</h5>
+      <div id="filtros-condicoes"></div>
+    </div>
+
+    <div class="card-dark">
+      <h5><i class="fa-solid fa-percent me-2"></i>Estatísticas sobre os Filtros</h5>
+      <div id="filtros-resumo"></div>
+    </div>
+
+    <div class="card-dark">
+      <h5><i class="fa-solid fa-table-list me-2"></i>Resultados dos Filtros em cada sorteio</h5>
+      <div id="filtros-historico">
+        <div class="text-center py-4">
+          <div class="spinner-border text-warning mb-2"></div><br/>
+          <span style="color:#9ca3af;">A calcular...</span>
+        </div>
+      </div>
+    </div>
   </div>
 
 
@@ -1423,7 +1490,7 @@ function showTab(name, el) {
   if (window.innerWidth <= 991) document.getElementById('sidebar').classList.remove('open');
 
   if (name === "sorteio")       loadUltimoSorteio();
-  if (name === "estatisticas")  loadEstatisticas();
+  if (name === "estatisticas")  { loadEstatisticas(); loadHistoricoFiltros(); }
   if (name === "estrategias")   loadEstrategias();
   if (name === "padroes")       loadPadroes();
   if (name === "hist-padroes")  loadHistoricoPadroes();
@@ -1867,6 +1934,77 @@ function renderCoresHTML(cores) {
 let _statsCache = null;
 let _statsCacheTime = 0;
 const STATS_CACHE_TTL = 300000; // 5 minutes
+
+// ── Filtros aplicados a todos os sorteios já realizados ──────────────
+let _histFiltrosFeito = false;
+
+async function loadHistoricoFiltros() {
+  if (_histFiltrosFeito) return;
+  const d = await (await fetch("api/historico-filtros")).json();
+  const r = d.resumo;
+
+  // 1) Condições de cada filtro
+  document.getElementById("filtros-condicoes").innerHTML = `
+    <div style="overflow-x:auto;">
+      <table class="tbl-cond">
+        <thead><tr>${d.condicoes.map(c =>
+          `<th>${c.id} · ${c.nome}</th>`).join("")}</tr></thead>
+        <tbody><tr>${d.condicoes.map(c =>
+          `<td>${c.condicao}</td>`).join("")}</tr></tbody>
+      </table>
+    </div>`;
+
+  // 2) Quantas vezes os filtros acertaram
+  document.getElementById("filtros-resumo").innerHTML = `
+    <div style="overflow-x:auto;">
+      <table class="tbl-resumo">
+        <thead><tr><th></th>${r.linhas.map(l =>
+          `<th>${l.rotulo}</th>`).join("")}</tr></thead>
+        <tbody>
+          <tr><td class="rotulo">Quantidade</td>${r.linhas.map(l =>
+            `<td>${l.q}</td>`).join("")}</tr>
+          <tr><td class="rotulo">%</td>${r.linhas.map(l =>
+            `<td>${l.pct.toFixed(2)}%</td>`).join("")}</tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="color:#9ca3af;font-size:.78rem;margin-top:10px;">
+      Calculado sobre <b>${r.avaliaveis}</b> dos ${r.total_sorteios} sorteios.
+      Os primeiros ${r.total_sorteios - r.avaliaveis} ficam de fora porque ainda não
+      havia sorteios anteriores suficientes para avaliar a Anti-Repetição e as Cores.
+    </div>`;
+
+  // 3) Resultado de cada filtro em cada sorteio
+  const cel = ch => ch === "1" ? '<td class="cel-sim">Sim</td>'
+                  : ch === "0" ? '<td class="cel-nao">Não</td>'
+                  : '<td class="cel-na" title="Sem sorteios anteriores suficientes">—</td>';
+
+  const linhas = d.sorteios.map(s => `<tr>
+      <td class="col-n">${s.n}</td>
+      <td>${s.data}</td>
+      <td class="col-nums">${s.numeros.join("-")}</td>
+      <td class="col-est">${s.estrelas.join("-")}</td>
+      ${[...s.f].map(cel).join("")}
+    </tr>`).join("");
+
+  document.getElementById("filtros-historico").innerHTML = `
+    <div class="tbl-scroll">
+      <table class="tbl-filtros">
+        <thead><tr>
+          <th>Nº do<br>Sorteio</th><th>Data</th><th>Números</th><th>Estrelas</th>
+          ${d.condicoes.map(c => `<th><b>${c.id}</b><br>${c.nome}</th>`).join("")}
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+    <div style="color:#9ca3af;font-size:.78rem;margin-top:10px;">
+      O sorteio mais recente fica no topo. Cada filtro é avaliado com a informação
+      que existia <i>antes</i> desse sorteio — a Anti-Repetição olha para o sorteio
+      anterior e as Cores para os ${r.janela_cores} anteriores.
+    </div>`;
+
+  _histFiltrosFeito = true;
+}
 
 async function loadEstatisticas() {
   const now = Date.now();

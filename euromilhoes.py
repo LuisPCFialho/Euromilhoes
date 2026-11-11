@@ -1642,6 +1642,76 @@ class StatisticsAnalyzer:
         return {"vermelhos": vermelhos, "verdes": verdes,
                 "azuis": azuis, "castanhos": castanhos}
 
+    def historico_filtros(self) -> dict:
+        """
+        Run the 9 filters against every draw ever held, as if each filter had
+        been applied *before* that draw was known: filters E and F are
+        evaluated with the context available at the time (the previous draw,
+        and the colours from the previous COLOR_WINDOW_DRAWS draws).
+
+        Draw number = chronological position, so the first draw ever
+        (2004-02-13) is nº 1.
+
+        Returns:
+          sorteios – newest first; "f" is a 9-char string, one per filter
+                     A-I: "1" passed, "0" failed, "-" not evaluable
+          resumo   – counts and percentages over the draws with full context
+        """
+        todos = self.db.todos_sorteios()          # newest first
+        crono = list(reversed(todos))             # oldest first, so index+1 = nº
+
+        sorteios = []
+        dist = Counter()
+        avaliaveis = 0
+
+        for i, s in enumerate(crono):
+            anterior = crono[i-1]["numeros"] if i > 0 else None
+            janela = crono[max(0, i - COLOR_WINDOW_DRAWS):i]
+            cores = (self.classificar_cores(janela)
+                     if len(janela) == COLOR_WINDOW_DRAWS else None)
+
+            veredictos = FilterEngine.avaliar_todos(
+                s["numeros"], ultimo_sorteio=anterior, cores=cores)
+
+            completo = all(v is not None for v in veredictos.values())
+            errados = sum(1 for v in veredictos.values() if v is False)
+            if completo:
+                avaliaveis += 1
+                dist[errados] += 1
+
+            sorteios.append({
+                "n": i + 1,
+                "data": s["data"],
+                "numeros": s["numeros"],
+                "estrelas": s["estrelas"],
+                "f": "".join("-" if veredictos[f] is None else ("1" if veredictos[f] else "0")
+                             for f in FilterEngine.ALL_FILTERS),
+                "errados": errados if completo else None,
+            })
+
+        sorteios.reverse()   # newest first, so the latest draw heads the table
+
+        def pct(q):
+            return round(q / avaliaveis * 100, 2) if avaliaveis else 0.0
+
+        todos_certos = dist[0]
+        mais_de_3 = sum(q for e, q in dist.items() if e > 3)
+        pelo_menos_1 = avaliaveis - todos_certos
+        resumo = {
+            "avaliaveis": avaliaveis,
+            "total_sorteios": len(crono),
+            "janela_cores": COLOR_WINDOW_DRAWS,
+            "linhas": [
+                {"rotulo": "Todos Certos",        "q": todos_certos, "pct": pct(todos_certos)},
+                {"rotulo": "Pelo menos 1 Errado", "q": pelo_menos_1, "pct": pct(pelo_menos_1)},
+                {"rotulo": "Só 1 Errado",         "q": dist[1],      "pct": pct(dist[1])},
+                {"rotulo": "2 Errados",           "q": dist[2],      "pct": pct(dist[2])},
+                {"rotulo": "3 Errados",           "q": dist[3],      "pct": pct(dist[3])},
+                {"rotulo": "Mais de 3 Errados",   "q": mais_de_3,    "pct": pct(mais_de_3)},
+            ],
+        }
+        return {"sorteios": sorteios, "resumo": resumo}
+
     def frequencia_numeros(self) -> dict:
         todos = self.db.todos_sorteios()
         freq = Counter()
@@ -1857,7 +1927,8 @@ class FilterEngine:
       filtro_I   : bool – AC Value (arithmetic complexity 5 or 6)
 
     To add a new filter: add its id to ALL_FILTERS, add info to FILTER_INFO,
-    add stat key to stats dict, add check block in verificar(), add to STAT_MAP.
+    add stat key to stats dict, add check block in verificar(), add to STAT_MAP,
+    and add the same check to avaliar_todos().
     """
 
     ALL_FILTERS = list("ABCDEFGHI")
@@ -2047,6 +2118,73 @@ class FilterEngine:
 
         self.stats["aprovadas"] += 1
         return True
+
+    @staticmethod
+    def avaliar_todos(chave: list, ultimo_sorteio: list | None = None,
+                      cores: dict | None = None,
+                      soma_min: int = 80, soma_max: int = 190) -> dict:
+        """
+        Verdict of EVERY filter for one key, evaluated independently.
+
+        Unlike verificar(), this does not short-circuit: it answers "which
+        filters would have accepted this key", which is what the historical
+        filter table needs.
+
+        Returns {"A": True/False/None, ... "I": ...}, where None means the
+        filter could not be evaluated for lack of context:
+          E – no previous draw (only the very first draw ever)
+          F – fewer than COLOR_WINDOW_DRAWS previous draws
+
+        IMPORTANT: the conditions below must stay in step with verificar()
+        above. They are written out twice on purpose — verificar() runs
+        millions of times during generation and is kept short-circuited.
+        """
+        k = sorted(chave)
+        r = {}
+
+        # A – sum within range
+        r["A"] = soma_min <= sum(k) <= soma_max
+
+        # B – max 1 consecutive pair, no triples
+        pares = 0
+        triplo = False
+        for i in range(len(k) - 1):
+            if k[i+1] == k[i] + 1:
+                pares += 1
+                if i < len(k) - 2 and k[i+2] == k[i] + 2:
+                    triplo = True
+        r["B"] = (pares <= 1) and not triplo
+
+        # C – max 2 numbers sharing the same final digit
+        r["C"] = max(Counter(n % 10 for n in k).values()) <= 2
+
+        # D – at least 3 different decades
+        r["D"] = len({(n - 1) // 10 for n in k}) >= 3
+
+        # E – max 2 numbers repeated from the previous draw
+        r["E"] = None if not ultimo_sorteio else len(set(k) & set(ultimo_sorteio)) <= 2
+
+        # F – colour system over the last COLOR_WINDOW_DRAWS draws
+        if cores is None:
+            r["F"] = None
+        else:
+            qtd_v = sum(1 for n in k if n in cores.get("vermelhos", set()))
+            qtd_g = sum(1 for n in k if n in cores.get("verdes", set()))
+            qtd_a = sum(1 for n in k if n in cores.get("azuis", set()))
+            qtd_c = sum(1 for n in k if n in cores.get("castanhos", set()))
+            r["F"] = (1 <= qtd_v <= 3) and (1 <= qtd_g <= 3) and (qtd_a <= 2) and (qtd_c == 0)
+
+        # G – at least 1 number above 31
+        r["G"] = sum(1 for n in k if n > 31) >= 1
+
+        # H – reject perfect arithmetic progressions
+        r["H"] = len({k[i+1] - k[i] for i in range(len(k) - 1)}) != 1
+
+        # I – AC Value must be 5 or 6
+        diffs = {k[j] - k[i] for i in range(len(k)) for j in range(i + 1, len(k))}
+        r["I"] = (len(diffs) - 4) in (5, 6)
+
+        return r
 
     def reset_stats(self):
         for k in self.stats:

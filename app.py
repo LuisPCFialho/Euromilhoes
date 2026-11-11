@@ -132,6 +132,9 @@ _STATS_TTL = 300  # 5 minutes
 _cores_cache = {"data": None, "ts": 0}
 _CORES_TTL = 10   # 10 seconds
 
+_hist_filtros_cache = {"data": None, "ts": 0}
+_HIST_FILTROS_TTL = 300  # 5 minutes
+
 
 def _invalidate_caches():
     """Clear all caches. Call after insert / delete / import operations."""
@@ -141,6 +144,8 @@ def _invalidate_caches():
     _cores_cache["ts"] = 0
     _filter_cache["key"] = None
     _filter_cache["data"] = None
+    _hist_filtros_cache["data"] = None
+    _hist_filtros_cache["ts"] = 0
     logger.debug("All caches invalidated")
 
 
@@ -592,6 +597,35 @@ def api_estatisticas():
     }
     _stats_cache["data"] = result
     _stats_cache["ts"] = now
+    return jsonify(result)
+
+
+@app.route("/api/historico-filtros")
+def api_historico_filtros():
+    """Verdict of each of the 9 filters for every draw ever held, plus the
+    summary of how often the filters got it right."""
+    now = _time.monotonic()
+    if (_hist_filtros_cache["data"] is not None
+            and (now - _hist_filtros_cache["ts"]) < _HIST_FILTROS_TTL):
+        return jsonify(_hist_filtros_cache["data"])
+
+    result = stats.historico_filtros()
+    result["condicoes"] = [
+        {"id": f, "nome": FilterEngine.FILTER_INFO[f]["nome"], "condicao": c}
+        for f, c in [
+            ("A", "Soma entre 80–190"),
+            ("B", "Máximo 1 par e zero triplos"),
+            ("C", "Máximo 2 iguais"),
+            ("D", "Mínimo 3 dezenas"),
+            ("E", "Máximo 2 do sorteio anterior"),
+            ("F", "Vermelhos 1–3 · Verdes 1–3 · Azuis 0–2 · Castanhos 0"),
+            ("G", "Mínimo 1 maior que 31"),
+            ("H", "Rejeitar sequências perfeitas"),
+            ("I", "AC Value = 5 ou 6"),
+        ]
+    ]
+    _hist_filtros_cache["data"] = result
+    _hist_filtros_cache["ts"] = now
     return jsonify(result)
 
 
