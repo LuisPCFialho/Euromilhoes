@@ -1686,18 +1686,9 @@ class StatisticsAnalyzer:
                 for f, v in veredictos.items():
                     if v:
                         certos_por_filtro[f] += 1
-                # Filtro F: com estas cores, que fração das 2.118.760 chaves
-                # possíveis passaria? (vermelhos 0-3, verdes 0-3, azuis 0-2,
-                # castanhos 0-1 — logo v+g+a+c tem de dar 5)
-                # TEM DE ACOMPANHAR a regra em verificar()/avaliar_todos().
-                nv, ng, na, nc = (len(cores["vermelhos"]), len(cores["verdes"]),
-                                  len(cores["azuis"]), len(cores["castanhos"]))
-                passam_f += sum(
-                    comb(nv, v) * comb(ng, g) * comb(na, a) * comb(nc, c)
-                    for v in range(4) for g in range(4)
-                    for a in range(3) for c in range(2)
-                    if v + g + a + c == 5
-                ) / FilterEngine.TOTAL_COMBINACOES
+                # Filtro F: com estas cores, que fração das chaves possíveis
+                # passaria se a chave fosse tirada ao acaso?
+                passam_f += FilterEngine.fracao_cores_ao_acaso(cores)
 
             sorteios.append({
                 "n": i + 1,
@@ -2249,6 +2240,33 @@ class FilterEngine:
         r["I"] = (len(diffs) - 4) in (4, 5, 6)
 
         return r
+
+    @staticmethod
+    def fracao_cores_ao_acaso(cores: dict) -> float:
+        """
+        Fraction of all C(50,5) keys that filter F would accept, given these
+        colours. Closed form: pick v reds, g greens, a blues and c browns with
+        v+g+a+c = 5, within the allowed range of each colour.
+
+        This is the "by chance" term the historical filter table compares the
+        real hit rate against. It is a closed form instead of a loop over two
+        million keys because it is evaluated once per draw.
+
+        IMPORTANT: the ranges below must stay in step with the colour rule in
+        verificar() and avaliar_todos(). scripts/testar_filtros.py checks this
+        one against brute force.
+        """
+        nv = len(cores.get("vermelhos", ()))
+        ng = len(cores.get("verdes", ()))
+        na = len(cores.get("azuis", ()))
+        nc = len(cores.get("castanhos", ()))
+        passam = sum(
+            comb(nv, v) * comb(ng, g) * comb(na, a) * comb(nc, c)
+            for v in range(4) for g in range(4)
+            for a in range(3) for c in range(2)
+            if v + g + a + c == 5
+        )
+        return passam / FilterEngine.TOTAL_COMBINACOES
 
     def reset_stats(self):
         for k in self.stats:

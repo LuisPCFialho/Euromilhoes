@@ -943,34 +943,13 @@ def api_proximo_sorteio():
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# API – FAVORITOS (save / load / delete)
+# FAVORITOS – já não têm API aqui
 # ════════════════════════════════════════════════════════════════════════════
-@app.route("/api/favoritos", methods=["GET"])
-def api_get_favoritos():
-    return jsonify(_get_metadata_list("favoritos"))
-
-@app.route("/api/favoritos", methods=["POST"])
-def api_save_favorito():
-    body = request.get_json(silent=True) or {}
-    favs = _get_metadata_list("favoritos")
-    fav = {
-        "id": str(int(datetime.datetime.now().timestamp() * 1000)),
-        "chaves": body.get("chaves", []),
-        "data": datetime.datetime.now().isoformat(),
-        "nome": body.get("nome", ""),
-    }
-    favs.insert(0, fav)
-    if len(favs) > 50:
-        favs = favs[:50]
-    db.set_metadata("favoritos", json.dumps(favs, ensure_ascii=False))
-    return jsonify({"ok": True, "id": fav["id"]})
-
-@app.route("/api/favoritos/<fav_id>", methods=["DELETE"])
-def api_delete_favorito(fav_id):
-    favs = _get_metadata_list("favoritos")
-    favs = [f for f in favs if f["id"] != fav_id]
-    db.set_metadata("favoritos", json.dumps(favs, ensure_ascii=False))
-    return jsonify({"ok": True})
+# Os favoritos já não passam por aqui. Viviam na tabela metadata da base de
+# dados, que no Vercel está em /tmp e desaparece quando a instância arrefece —
+# em produção devolviam sempre uma lista vazia. Passaram para o Supabase, no
+# frontend (ver stateLoad/stateSave em templates/index.html, linha
+# id='euromilhoes-state'), que é a mesma base de dados usada pelo login.
 
 
 # ════════════════════════════════════════════════════════════════════════════

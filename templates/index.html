@@ -983,6 +983,10 @@
             <td class="ef-nada">sem efeito</td><td>—</td><td>1978 sorteios</td>
           </tr>
           <tr>
+            <td class="esq">Chave em padrão equilibrado <span class="memo-esc">BI/BP/AI/AP</span></td>
+            <td class="ef-nada">−0,32%</td><td>−2,34% a +1,70%</td><td>1601 sorteios</td>
+          </tr>
+          <tr>
             <td class="esq">Jackpot 5+2 em chaves só de datas</td>
             <td class="ef-nada">39 vs 43,5 esperados</td><td>desvio de −0,68 σ</td>
             <td>158 sorteios</td>
@@ -1001,6 +1005,9 @@
         <li><b>Os apostadores não evitam números consecutivos.</b> Dois pares consecutivos
             dão, se alguma coisa, ligeiramente <i>mais</i> vencedores. É folclore repetido.</li>
         <li><b>Os meses (números ≤ 12) não têm efeito nenhum.</b> Zero em todos os grupos.</li>
+        <li><b>Os 16 padrões equilibrados não servem para nada de mensurável.</b>
+            Não preveem o sorteio (62,98% real contra 62,95% ao acaso) nem reduzem
+            a partilha (−0,3% ± 1,0). É a metodologia base da app, e é decorativa.</li>
         <li><b>O efeito das datas é real mas pequeno.</b> Cerca de 4% numa chave
             inteiramente de datas — uma ordem de grandeza abaixo dos 20-30% que se leem
             por aí. Os dados excluem com confiança qualquer efeito acima de ~2,5% por número.</li>
@@ -1248,6 +1255,64 @@ function authGetSession() {
 }
 function authSetSession(s) { localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s)); }
 function authClearSession() { localStorage.removeItem(AUTH_SESSION_KEY); }
+
+// ════════════════════════════════════════════════════════════════════
+// ESTADO PERSISTENTE — o que o utilizador guarda vai para o Supabase.
+//
+// No Vercel a base de dados é copiada para /tmp (ver DB_PATH em
+// euromilhoes.py) e esse /tmp só existe enquanto a instância está quente:
+// quando arrefece, ou a cada deploy, tudo o que lá foi escrito desaparece
+// e volta a versão do repositório. Guardar favoritos na base de dados
+// funcionava uns minutos e depois esquecia.
+//
+// Mesma base de dados e mesma chave do login, em linha própria.
+// Só se faz upsert (merge-duplicates), nunca DELETE.
+// ════════════════════════════════════════════════════════════════════
+const STATE_ROW_ID    = "euromilhoes-state";
+const STATE_CACHE_KEY = "euromilhoes-state-cache";
+
+async function stateLoad() {
+  try {
+    const res = await fetch(`${AUTH_SUPABASE_URL}/rest/v1/app_state?id=eq.${STATE_ROW_ID}&select=payload`, {
+      headers: { apikey: AUTH_SUPABASE_KEY, Authorization: `Bearer ${AUTH_SUPABASE_KEY}` }
+    });
+    if (res.ok) {
+      const rows = await res.json();
+      const payload = (rows.length && rows[0].payload) ? rows[0].payload : {};
+      localStorage.setItem(STATE_CACHE_KEY, JSON.stringify(payload));
+      return payload;
+    }
+  } catch (e) { console.warn('Estado: leitura do Supabase falhou:', e); }
+  // Sem rede: devolve o que estiver em cache, para a app continuar utilizável.
+  try { return JSON.parse(localStorage.getItem(STATE_CACHE_KEY) || '{}'); } catch { return {}; }
+}
+
+async function stateSave(payload) {
+  localStorage.setItem(STATE_CACHE_KEY, JSON.stringify(payload));
+  const res = await fetch(`${AUTH_SUPABASE_URL}/rest/v1/app_state`, {
+    method: 'POST',
+    headers: {
+      apikey: AUTH_SUPABASE_KEY,
+      Authorization: `Bearer ${AUTH_SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=minimal'
+    },
+    body: JSON.stringify({ id: STATE_ROW_ID, payload, updated_at: new Date().toISOString() })
+  });
+  if (!res.ok) throw new Error('Supabase devolveu ' + res.status);
+}
+
+async function favoritosLoad() {
+  const payload = await stateLoad();
+  return Array.isArray(payload.favoritos) ? payload.favoritos : [];
+}
+
+async function favoritosSave(favs) {
+  // Lê antes de gravar para não apagar outras chaves do payload.
+  const payload = await stateLoad();
+  payload.favoritos = favs.slice(0, 50);
+  await stateSave(payload);
+}
 
 async function authDoLogin() {
   const email = (document.getElementById('auth-email').value || '').trim().toLowerCase();
@@ -1531,12 +1596,15 @@ async function guardarFavorito() {
   if (!lastChaves.length) { toast("Gera chaves primeiro", "warning"); return; }
   const nome = prompt("Nome do favorito (opcional):") || "";
   try {
-    const r = await fetch("api/favoritos", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({chaves:lastChaves, nome})
+    const favs = await favoritosLoad();
+    favs.unshift({
+      id: String(Date.now()),
+      chaves: lastChaves,
+      data: new Date().toISOString(),
+      nome
     });
-    const d = await r.json();
-    if (d.ok) toast("Favorito guardado!");
+    await favoritosSave(favs);
+    toast("Favorito guardado!");
   } catch(e) { toast("Erro ao guardar", "error"); }
 }
 
@@ -2558,8 +2626,33 @@ async function loadEstrategias() {
           <div>${padroes}</div>
           <p style="color:#9ca3af;font-size:.82rem;margin-top:10px;">
             Formato: [BI, BP, AI, AP]. Todos os padrões somam 5.
-            Cobrem 1.333.800 das 2.118.760 combinações possíveis.
+            Cobrem 1.333.800 das 2.118.760 combinações possíveis
+            <span style="color:#5fd38d;">(contagem confirmada)</span>.
           </p>
+          <p style="color:#9ca3af;font-size:.82rem;">
+            <b style="color:#e8c55f;">Dois já não são alcançáveis:</b>
+            <code style="color:#74c0fc;">[2,2,0,1]</code> e
+            <code style="color:#74c0fc;">[2,2,1,0]</code> têm só 1 número nos
+            quadrantes altos, e os quadrantes cortam em 25/26 enquanto a Regra
+            do 31 corta em 31 — os números 26 a 31 são altos no quadrante mas
+            não contam para a regra. Com o mínimo de 2 acima de 31, estes dois
+            padrões ficaram sem chaves possíveis. Restam 14, e a geração
+            continua abaixo de 1 segundo para 50 chaves.
+          </p>
+          <div class="memo-aviso" style="margin:0;">
+            <i class="fa-solid fa-triangle-exclamation me-1"></i>
+            <b>Medido: estes padrões não preveem nada.</b>
+            Em 1980 sorteios, <b>62,98%</b> caíram num padrão equilibrado;
+            ao acaso seriam <b>62,95%</b> — um desvio de 0,03 erros-padrão.
+            Os grupos &quot;best&quot;, &quot;middle&quot; e &quot;worst&quot; do Lotterycodex
+            não se ordenam: ficam todos a menos de 0,7 pontos do acaso. E dos
+            56 padrões possíveis só 1 se desvia mais de 2 sigma, quando ao
+            acaso se esperavam 2,8.
+            <br/><br/>
+            Também <b>não reduzem a partilha</b>: uma chave equilibrada atrai
+            −0,3% ± 1,0 co-vencedores, ou seja, zero. Servem para variar a
+            construção das chaves — não como estratégia.
+          </div>
         </div>
       </div>
       <div class="col-lg-5">
@@ -3668,11 +3761,9 @@ async function exportarStatsCSV() {
 // ════════════════════════════════════════════════════════════════════
 async function exportarFavoritos() {
   try {
-    const r = await fetch("api/favoritos");
-    const favs = await r.json();
+    const favs = await favoritosLoad();
     if (!favs.length) { toast("Sem favoritos", "warning"); return; }
-    const data = JSON.stringify(favs, null, 2);
-    downloadText(data, "favoritos_euromilhoes.json");
+    downloadText(JSON.stringify(favs, null, 2), "favoritos_euromilhoes.json");
     toast("Favoritos exportados!");
   } catch(e) { toast("Erro ao exportar", "error"); }
 }
