@@ -213,6 +213,12 @@
                   text-align:center; vertical-align:top; }
     .tbl-cond th { background:#2a2208; color:var(--em-gold); font-weight:600; }
     .tbl-cond td { white-space:normal; min-width:92px; }
+    .tbl-cond td.rotulo { text-align:right; color:#9ca3af; background:#141432;
+                  white-space:nowrap; min-width:0; font-weight:600; }
+    .tbl-cond th.canto { background:#141432; }
+    .tbl-cond td.pct-alta  { color:#5fd38d; font-weight:700; }
+    .tbl-cond td.pct-media { color:#e8c55f; font-weight:700; }
+    .tbl-cond td.pct-baixa { color:#e88a5f; font-weight:700; }
 
     body.light-mode .tbl-filtros { color:#333; }
     body.light-mode .tbl-filtros th, body.light-mode .tbl-filtros td { border-color:#ddd; }
@@ -229,6 +235,11 @@
     body.light-mode .tbl-cond { color:#333; }
     body.light-mode .tbl-cond th, body.light-mode .tbl-cond td { border-color:#ddd; }
     body.light-mode .tbl-cond th { background:#fdf3d0; color:#8a6d00; }
+    body.light-mode .tbl-cond th.canto,
+    body.light-mode .tbl-cond td.rotulo { background:#eef1f5; color:#555; }
+    body.light-mode .tbl-cond td.pct-alta  { color:#1e7a46; }
+    body.light-mode .tbl-cond td.pct-media { color:#8a6d00; }
+    body.light-mode .tbl-cond td.pct-baixa { color:#b35019; }
 
     .badge-padrao { background:#1a3a60; color:var(--em-azul); font-size:.72rem; padding:3px 8px; border-radius:8px; }
 
@@ -858,7 +869,7 @@
 
     <!-- ── Filtros aplicados ao histórico ── -->
     <div class="card-dark">
-      <h5><i class="fa-solid fa-list-check me-2"></i>Condições a verificar por cada Filtro</h5>
+      <h5><i class="fa-solid fa-list-check me-2"></i>Condições a verificar por cada Filtro, e quantas vezes acertou</h5>
       <div id="filtros-condicoes"></div>
     </div>
 
@@ -1943,15 +1954,29 @@ async function loadHistoricoFiltros() {
   const d = await (await fetch("api/historico-filtros")).json();
   const r = d.resumo;
 
-  // 1) Condições de cada filtro
+  // 1) Condições de cada filtro + quantas vezes cada um acertou
+  const pf = r.por_filtro;
   document.getElementById("filtros-condicoes").innerHTML = `
     <div style="overflow-x:auto;">
       <table class="tbl-cond">
-        <thead><tr>${d.condicoes.map(c =>
+        <thead><tr><th class="canto"></th>${d.condicoes.map(c =>
           `<th>${c.id} · ${c.nome}</th>`).join("")}</tr></thead>
-        <tbody><tr>${d.condicoes.map(c =>
-          `<td>${c.condicao}</td>`).join("")}</tr></tbody>
+        <tbody>
+          <tr><td class="rotulo">Condição</td>${d.condicoes.map(c =>
+            `<td>${c.condicao}</td>`).join("")}</tr>
+          <tr><td class="rotulo">Acertou</td>${d.condicoes.map(c =>
+            `<td>${pf[c.id].certos}</td>`).join("")}</tr>
+          <tr><td class="rotulo">Errou</td>${d.condicoes.map(c =>
+            `<td>${pf[c.id].errados}</td>`).join("")}</tr>
+          <tr><td class="rotulo">% de acerto</td>${d.condicoes.map(c =>
+            `<td class="${pf[c.id].pct >= 90 ? "pct-alta" : pf[c.id].pct >= 70 ? "pct-media" : "pct-baixa"}"
+             >${pf[c.id].pct.toFixed(2)}%</td>`).join("")}</tr>
+        </tbody>
       </table>
+    </div>
+    <div style="color:#9ca3af;font-size:.78rem;margin-top:10px;">
+      Quantas vezes cada filtro teria aceitado o sorteio que realmente saiu,
+      nos mesmos <b>${r.avaliaveis}</b> sorteios da tabela seguinte.
     </div>`;
 
   // 2) Quantas vezes os filtros acertaram

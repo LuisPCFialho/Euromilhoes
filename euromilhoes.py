@@ -1662,6 +1662,7 @@ class StatisticsAnalyzer:
 
         sorteios = []
         dist = Counter()
+        certos_por_filtro = Counter()
         avaliaveis = 0
 
         for i, s in enumerate(crono):
@@ -1678,6 +1679,11 @@ class StatisticsAnalyzer:
             if completo:
                 avaliaveis += 1
                 dist[errados] += 1
+                # Contado só sobre os sorteios com contexto completo, para que
+                # os 9 filtros sejam comparáveis entre si na mesma base.
+                for f, v in veredictos.items():
+                    if v:
+                        certos_por_filtro[f] += 1
 
             sorteios.append({
                 "n": i + 1,
@@ -1709,6 +1715,12 @@ class StatisticsAnalyzer:
                 {"rotulo": "3 Errados",           "q": dist[3],      "pct": pct(dist[3])},
                 {"rotulo": "Mais de 3 Errados",   "q": mais_de_3,    "pct": pct(mais_de_3)},
             ],
+            "por_filtro": {
+                f: {"certos": certos_por_filtro[f],
+                    "errados": avaliaveis - certos_por_filtro[f],
+                    "pct": pct(certos_por_filtro[f])}
+                for f in FilterEngine.ALL_FILTERS
+            },
         }
         return {"sorteios": sorteios, "resumo": resumo}
 
