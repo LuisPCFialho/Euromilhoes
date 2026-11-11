@@ -619,13 +619,31 @@ def api_historico_filtros():
             ("D", "Mínimo 3 dezenas"),
             ("E", "Máximo 2 do sorteio anterior"),
             ("F", "Vermelhos 0–3 · Verdes 0–3 · Azuis 0–2 · Castanhos 0–1"),
-            ("G", "Mínimo 2 maiores que 31"),
+            ("G", "Mínimo 1 maior que 31"),
             ("H", "Rejeitar sequências perfeitas"),
             ("I", "AC Value = 4, 5 ou 6"),
         ]
     ]
     _hist_filtros_cache["data"] = result
     _hist_filtros_cache["ts"] = now
+    return jsonify(result)
+
+
+
+_ev_cache = {"data": None, "ts": 0.0}
+_EV_TTL = 3600
+
+
+@app.route("/api/valor-esperado")
+def api_valor_esperado():
+    """Quanto vale uma linha de 2,50 EUR: probabilidades exactas, prémios
+    medianos do histórico, e o modelo de partilha do jackpot."""
+    now = _time.monotonic()
+    if _ev_cache["data"] is not None and (now - _ev_cache["ts"]) < _EV_TTL:
+        return jsonify(_ev_cache["data"])
+    result = stats.valor_esperado()
+    _ev_cache["data"] = result
+    _ev_cache["ts"] = now
     return jsonify(result)
 
 
@@ -653,7 +671,7 @@ def api_estrategias():
             {"id": "D", "nome": "Dezenas",              "descricao": "Mín 3 dezenas diferentes (1-10, 11-20, 21-30, 31-40, 41-50)."},
             {"id": "E", "nome": "Anti-Repetição",      "descricao": "Máx 2 números em comum com o sorteio anterior."},
             {"id": "F", "nome": "Cores (9 sorteios)", "descricao": "VERMELHOS 0–3 | VERDES 0–3 | AZUIS 0–2 | CASTANHOS 0–1."},
-            {"id": "G", "nome": "Regra do 31",         "descricao": "Mín 2 números > 31. Cada número ≤31 atrai ~1,3% mais co-vencedores (medido no histórico de prémios)."},
+            {"id": "G", "nome": "Regra do 31",         "descricao": "Mín 1 número > 31. As chaves 100% de datas atraem +4,1% de co-vencedores (medido no histórico de prémios)."},
             {"id": "H", "nome": "Progressão Aritmét.", "descricao": "Rejeita sequências como 5,10,15,20,25. Muito populares → má escolha."},
             {"id": "I", "nome": "AC Value",             "descricao": "Complexidade Aritmética (diferenças distintas entre pares − 4), de 0 a 6. Aceita AC 4, 5 ou 6 → 96,4% de C(50,5)."},
         ],
@@ -742,8 +760,8 @@ def _compute_filter_histogram(cores, ultimo_nums):
         if qv <= 3 and qg <= 3 and qa <= 2 and qc <= 1:
             mask |= 32
 
-        # G: min 2 numbers > 31
-        if (n0 > 31) + (n1 > 31) + (n2 > 31) + (n3 > 31) + (n4 > 31) >= 2:
+        # G: min 1 number > 31
+        if (n0 > 31) + (n1 > 31) + (n2 > 31) + (n3 > 31) + (n4 > 31) >= 1:
             mask |= 64
 
         # H: not perfect arithmetic progression

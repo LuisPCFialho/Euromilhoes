@@ -274,6 +274,32 @@
     body.light-mode .tbl-resumo td.ef-mais  { color:#b35019; }
     body.light-mode .tbl-resumo td.ef-menos { color:#1e7a46; }
 
+    /* ── Seletividade de cada filtro, ao lado do interruptor ── */
+    .filtro-sel { font-size:.7rem; color:#8a8aa8; font-variant-numeric:tabular-nums;
+                  white-space:nowrap; flex-shrink:0; }
+    .filtro-sel.nula { color:#e8703a; }
+    body.light-mode .filtro-sel { color:#888; }
+    body.light-mode .filtro-sel.nula { color:#b33d0c; }
+
+    /* ── Valor esperado ── */
+    .ev-destaque { font-size:1.9rem; font-weight:700; line-height:1.1;
+                   font-variant-numeric:tabular-nums; }
+    .ev-barra { height:11px; background:#272742; border-radius:6px;
+                overflow:hidden; margin:7px 0 4px 0; }
+    .ev-barra > div { height:100%; border-radius:6px; transition:width .25s; }
+    .tbl-ev { width:100%; border-collapse:collapse; font-size:.74rem;
+              color:#d0d0d0; font-variant-numeric:tabular-nums; }
+    .tbl-ev th, .tbl-ev td { border:1px solid #2a2a4a; padding:4px 8px;
+              text-align:right; white-space:nowrap; }
+    .tbl-ev th { background:#141432; color:#9ca3af; font-weight:600;
+              text-align:right; }
+    .tbl-ev td.esc { text-align:left; color:#9ca3af; }
+    .tbl-ev tr.jack td { color:#e8c55f; }
+    body.light-mode .tbl-ev { color:#333; }
+    body.light-mode .tbl-ev th, body.light-mode .tbl-ev td { border-color:#ddd; }
+    body.light-mode .tbl-ev th { background:#eef1f5; color:#555; }
+    body.light-mode .ev-barra { background:#e8e8ef; }
+
     .badge-padrao { background:#1a3a60; color:var(--em-azul); font-size:.72rem; padding:3px 8px; border-radius:8px; }
 
     #no-draws-msg { color:#9ca3af; text-align:center; padding:40px; }
@@ -921,6 +947,17 @@
       </div>
     </div>
 
+    <!-- ── Valor esperado de uma linha ── -->
+    <div class="card-dark" style="border-left:3px solid var(--em-gold);">
+      <h5><i class="fa-solid fa-coins me-2"></i>Quanto vale uma linha de 2,50 €</h5>
+      <div id="valor-esperado">
+        <div class="text-center py-4">
+          <div class="spinner-border text-warning mb-2"></div><br/>
+          <span style="color:#9ca3af;">A calcular...</span>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Memo: analise de partilha de premios (registo fixo, nao recalcula) ── -->
     <div class="card-dark" style="border-left:3px solid var(--em-gold);">
       <h5><i class="fa-solid fa-users me-2"></i>Análise de Partilha de Prémios</h5>
@@ -1019,10 +1056,14 @@
 
       <div class="memo-sub">O que isto mudou nos filtros</div>
       <ul class="memo-lista">
-        <li><b>Filtro G passou de 1 para 2 números acima de 31.</b> É a única recomendação
-            que estes dados sustentam. Não prevê o sorteio — os números saem ao acaso e
-            este filtro rejeita 36% das chaves tal como rejeitaria 36% ao acaso. O que faz
-            é evitar bilhetes populares.</li>
+        <li><b>Filtro G: mínimo 1 número acima de 31.</b> É a única recomendação que
+            estes dados sustentam, e elimina o pior caso — as chaves inteiramente de
+            datas, que atraem +4,1% de co-vencedores. Não prevê o sorteio: rejeita 8%
+            das chaves tal como rejeitaria 8% ao acaso; o que faz é evitar bilhetes
+            populares. Exigir 2 em vez de 1 baixaria a partilha esperada de −0,21%
+            para −0,79% — uma diferença de meio ponto, dentro da margem de erro da
+            própria medição (±1,0), e que deixava 2 dos 16 padrões equilibrados sem
+            chaves possíveis. Não valia a troca.</li>
         <li><b>Soma 90–195 puxa no mesmo sentido.</b> As somas que passou a rejeitar
             (80–89) têm em média <b>4,27</b> números ≤ 31; as que passou a aceitar
             (191–195) têm <b>1,09</b>.</li>
@@ -1417,7 +1458,7 @@ const FILTER_META = [
   { id:'F', nome:'Cores (9 sorteios)',
     tooltip:'Sistema de cores: Vermelhos (0×)→0-3; Verdes (1×)→0-3; Azuis (2×)→0-2; Castanhos (3×+)→0-1 na chave.' },
   { id:'G', nome:'Regra do 31',
-    tooltip:'Mín 2 números acima de 31. Medido no histórico de prémios: cada número ≤31 atrai ~1,3% mais co-vencedores. Não prevê o sorteio — reduz a partilha.' },
+    tooltip:'Mín 1 número acima de 31. Elimina as chaves inteiramente de datas, que o histórico de prémios mostra atraírem +4,1% de co-vencedores. Não prevê o sorteio — reduz a partilha.' },
   { id:'H', nome:'Anti-Progressão',
     tooltip:'Rejeita progressões aritméticas perfeitas (ex: 5,10,15,20,25). Sequências uniformes são muito populares e devem ser evitadas.' },
   { id:'I', nome:'AC Value',
@@ -1667,6 +1708,7 @@ function renderFilterConfig() {
         </div>
         <span class="filtro-id-badge">${f.id}</span>
         <span style="font-size:.85rem;color:#d0d0d0;flex:1;">${f.nome}</span>
+        <span class="filtro-sel" id="filtro-sel-${f.id}" title="Quantas das 2.118.760 chaves possíveis este filtro rejeita, no contexto de hoje."></span>
         <i class="fa-solid fa-circle-question filtro-info-icon"
            data-bs-toggle="tooltip" data-bs-placement="right"
            data-bs-title="${f.tooltip.replace(/"/g,"&quot;")}"></i>
@@ -1685,6 +1727,27 @@ function renderFilterConfig() {
   document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
     new bootstrap.Tooltip(el, { trigger:'hover' });
   });
+
+  mostrarSeletividade();
+}
+
+// Quanto cada filtro rejeita, de facto. Sem isto, nove interruptores parecem
+// todos igualmente importantes — e não são: o H rejeita 288 chaves em dois
+// milhões, ou seja, praticamente não faz nada.
+async function mostrarSeletividade() {
+  try {
+    const d = await getFilterStats();
+    for (const [id, v] of Object.entries(d.per_filter || {})) {
+      const el = document.getElementById(`filtro-sel-${id}`);
+      if (!el) continue;
+      const pct = 100 * v.eliminadas / d.total;
+      // Abaixo de 0,1% o filtro não está a fazer trabalho nenhum.
+      el.classList.toggle("nula", pct < 0.1);
+      el.textContent = pct < 0.1 ? `rejeita ${pct.toFixed(3)}%` : `rejeita ${pct.toFixed(1)}%`;
+      el.title = `${v.eliminadas.toLocaleString("pt-PT")} das ${d.total.toLocaleString("pt-PT")} chaves possíveis`
+               + (pct < 0.1 ? " — tão poucas que este filtro quase não faz nada." : "");
+    }
+  } catch(e) { /* sem ligação: os interruptores ficam sem a anotação */ }
 }
 
 function onFiltroAToggle() {
@@ -1703,7 +1766,7 @@ function showTab(name, el) {
   if (window.innerWidth <= 991) document.getElementById('sidebar').classList.remove('open');
 
   if (name === "sorteio")       loadUltimoSorteio();
-  if (name === "estatisticas")  { loadEstatisticas(); loadHistoricoFiltros(); }
+  if (name === "estatisticas")  { loadEstatisticas(); loadHistoricoFiltros(); loadValorEsperado(); }
   if (name === "estrategias")   loadEstrategias();
   if (name === "padroes")       loadPadroes();
   if (name === "hist-padroes")  loadHistoricoPadroes();
@@ -2151,6 +2214,132 @@ const STATS_CACHE_TTL = 300000; // 5 minutes
 // ── Filtros aplicados a todos os sorteios já realizados ──────────────
 let _histFiltrosFeito = false;
 
+
+// ════════════════════════════════════════════════════════════════════
+// Valor esperado de uma linha de 2,50 €
+//
+//   valor esperado = soma, nos 13 escalões, de P(escalão) × prémio médio
+//
+// As probabilidades são exactas; os prémios são as medianas dos 1039 sorteios
+// da era das 12 estrelas. O jackpot é calculado aqui, porque depende do bolo
+// que o utilizador escreve e da partilha: estimam-se os bilhetes vendidos a
+// partir do bolo e, com N outros vencedores ~ Poisson(λ), o que se recebe é
+// bolo/(1+N), cujo valor esperado é (1 − e^−λ)/λ.
+// ════════════════════════════════════════════════════════════════════
+let _evDados = null;
+let _evFeito = false;
+
+async function loadValorEsperado() {
+  if (_evFeito) return;
+  _evFeito = true;
+  const el = document.getElementById("valor-esperado");
+  try {
+    _evDados = await (await fetch("api/valor-esperado")).json();
+  } catch(e) {
+    el.innerHTML = `<div style="color:#ff6b6b;font-size:.85rem;">Erro ao calcular.</div>`;
+    return;
+  }
+  const d = _evDados;
+  const bolo = Math.round(d.jackpot_ultimo || 17000000);
+
+  const linhas = d.escaloes.map(e => `
+    <tr class="${e.jackpot ? 'jack' : ''}">
+      <td class="esc">${e.escalao}${e.jackpot ? ' (Jackpot)' : ''}</td>
+      <td>1 em ${e.um_em.toLocaleString("pt-PT")}</td>
+      <td>${e.premio_mediano === null ? '—'
+            : e.premio_mediano.toLocaleString("pt-PT", {maximumFractionDigits:0}) + ' €'}</td>
+      <td>${e.contributo === null ? 'ver acima' : e.contributo.toFixed(4) + ' €'}</td>
+    </tr>`).join("");
+
+  el.innerHTML = `
+    <p class="memo-p">
+      Soma, nos 13 escalões, da probabilidade a multiplicar pelo prémio.
+      As probabilidades são exactas; os prémios são as <b>medianas</b> dos
+      ${d.sorteios_usados} sorteios desde ${d.desde} (início das 12 estrelas —
+      antes disso as probabilidades eram outras). Escolheu-se a mediana e não a
+      média porque um punhado de sorteios com bolo acumulado puxaria a média
+      para cima e daria um sorteio típico mais generoso do que é.
+    </p>
+
+    <div class="row g-3 align-items-end mb-2">
+      <div class="col-sm-5">
+        <label for="ev-bolo" style="font-size:.8rem;color:#9ca3af;">Jackpot em bolo (€)</label>
+        <input type="number" class="form-control form-control-sm" id="ev-bolo"
+               value="${bolo}" min="17000000" max="300000000" step="1000000"
+               oninput="renderEV()"/>
+        <div style="font-size:.72rem;color:#7a7a9a;margin-top:3px;">
+          Último conhecido: ${(d.jackpot_ultimo||0).toLocaleString("pt-PT",{maximumFractionDigits:0})} €
+          (sorteio de ${d.data_ultimo})
+        </div>
+      </div>
+      <div class="col-sm-7" id="ev-resultado"></div>
+    </div>
+
+    <div style="overflow-x:auto;">
+    <table class="tbl-ev">
+      <thead><tr>
+        <th style="text-align:left;">Escalão</th><th>Probabilidade</th>
+        <th>Prémio mediano</th><th>Contributo</th>
+      </tr></thead>
+      <tbody>${linhas}</tbody>
+    </table>
+    </div>
+
+    <div class="memo-aviso" style="margin:12px 0 0 0;">
+      <i class="fa-solid fa-circle-info me-1"></i>
+      <b>Não inclui o M1LHÃO.</b> Cada aposta portuguesa de 2,50 € dá também
+      um código para esse sorteio, que acrescenta valor ao que está aqui
+      calculado. Não entra na conta porque não há, nestes dados, o número de
+      códigos portugueses em cada sorteio — sem isso, qualquer número seria
+      inventado. O valor real de uma aposta em Portugal é portanto
+      <b>maior</b> do que o mostrado acima.
+    </div>`;
+  renderEV();
+}
+
+function renderEV() {
+  const d = _evDados;
+  if (!d) return;
+  const el = document.getElementById("ev-resultado");
+  const bolo = Math.max(0, Number(document.getElementById("ev-bolo").value) || 0);
+  const p1 = d.prob_jackpot;
+  const m = d.vendas_modelo;
+
+  // Bilhetes vendidos para este bolo, pelo modelo log-log; sem modelo, usa-se
+  // a mediana histórica.
+  const bilhetes = (m && m.a !== null && bolo > 0)
+    ? Math.exp(m.a + m.b * Math.log(bolo))
+    : (d.bilhetes_mediana || 0);
+  const lam = bilhetes * p1;
+  const fator = lam > 0 ? (1 - Math.exp(-lam)) / lam : 1;
+  const evJackpot = p1 * bolo * fator;
+  const total = d.ev_sem_jackpot + evJackpot;
+  const pct = 100 * total / d.custo_linha;
+  const cor = pct >= 100 ? "#5fd38d" : (pct >= 60 ? "#e8c55f" : "#e8703a");
+
+  el.innerHTML = `
+    <div class="ev-destaque" style="color:${cor};">
+      ${total.toFixed(2)} €
+      <span style="font-size:.9rem;font-weight:400;color:#9ca3af;">
+        por cada 2,50 € apostados
+      </span>
+    </div>
+    <div class="ev-barra">
+      <div style="width:${Math.min(100, pct)}%;background:${cor};"></div>
+    </div>
+    <div style="font-size:.78rem;color:#9ca3af;">
+      Retorno de <b style="color:${cor};">${pct.toFixed(1)}%</b>.
+      Perde-se, em média, <b>${(d.custo_linha - total).toFixed(2)} €</b> por linha.
+    </div>
+    <div style="font-size:.72rem;color:#7a7a9a;margin-top:5px;">
+      Jackpot: ${evJackpot.toFixed(3)} € · restantes escalões:
+      ${d.ev_sem_jackpot.toFixed(3)} € ·
+      ${(bilhetes/1e6).toFixed(1)} M bilhetes estimados ·
+      ${lam.toFixed(2)} outros vencedores esperados, o que corta
+      ${((1-fator)*100).toFixed(0)}% ao jackpot pela partilha
+    </div>`;
+}
+
 async function loadHistoricoFiltros() {
   if (_histFiltrosFeito) return;
   const d = await (await fetch("api/historico-filtros")).json();
@@ -2514,10 +2703,20 @@ function renderTendenciaSomas(d) {
 // Strategies
 // ════════════════════════════════════════════════════════════════════
 let _filterHistogram = null;
+
+// O cálculo percorre as 2.118.760 combinações, por isso pede-se uma vez só e
+// partilha-se a promessa entre o painel dos filtros e o separador Estratégias.
+let _filterStatsPromise = null;
+function getFilterStats() {
+  if (!_filterStatsPromise) {
+    _filterStatsPromise = fetch("api/filter-stats").then(r => r.json());
+  }
+  return _filterStatsPromise;
+}
 const _FILTER_NAMES = {
   A:"Soma (90–195)", B:"Consecutivos", C:"Dígito Final",
   D:"Dezenas (mín 3)", E:"Anti-Repetição", F:"Cores (9 sorteios)",
-  G:"Regra do 31 (mín 2)", H:"Anti-Progressão", I:"AC Value (4, 5 ou 6)"
+  G:"Regra do 31", H:"Anti-Progressão", I:"AC Value (4, 5 ou 6)"
 };
 
 function updateFilterCombined() {
@@ -2630,14 +2829,14 @@ async function loadEstrategias() {
             <span style="color:#5fd38d;">(contagem confirmada)</span>.
           </p>
           <p style="color:#9ca3af;font-size:.82rem;">
-            <b style="color:#e8c55f;">Dois já não são alcançáveis:</b>
+            Os <b>16</b> estão todos alcançáveis. Chegaram a ser 14: com a Regra
+            do 31 a exigir 2 números acima de 31,
             <code style="color:#74c0fc;">[2,2,0,1]</code> e
-            <code style="color:#74c0fc;">[2,2,1,0]</code> têm só 1 número nos
-            quadrantes altos, e os quadrantes cortam em 25/26 enquanto a Regra
-            do 31 corta em 31 — os números 26 a 31 são altos no quadrante mas
-            não contam para a regra. Com o mínimo de 2 acima de 31, estes dois
-            padrões ficaram sem chaves possíveis. Restam 14, e a geração
-            continua abaixo de 1 segundo para 50 chaves.
+            <code style="color:#74c0fc;">[2,2,1,0]</code> ficavam sem chaves
+            possíveis, porque têm só 1 número nos quadrantes altos e os
+            quadrantes cortam em 25/26 enquanto a regra corta em 31 — os números
+            26 a 31 são altos no quadrante mas não contam para a regra. A regra
+            voltou ao mínimo de 1, para não excluir nenhum padrão.
           </p>
           <div class="memo-aviso" style="margin:0;">
             <i class="fa-solid fa-triangle-exclamation me-1"></i>
@@ -2677,7 +2876,7 @@ async function loadEstrategias() {
     </div>`;
 
   // Load filter stats asynchronously (computation-heavy)
-  fetch("api/filter-stats").then(r => r.json()).then(data => {
+  getFilterStats().then(data => {
     _filterHistogram = data;
     renderFilterStatsCard(data);
   }).catch(() => {

@@ -14,7 +14,7 @@ Estratégias implementadas:
   - Filtro D: Mín 3 décadas diferentes
   - Filtro E: Máx 2 repetições do sorteio anterior
   - Filtro F: Sistema de cores (últimos 9 sorteios)
-  - Filtro G: Regra do 31 – mín 2 números > 31 (anti-calendário)
+  - Filtro G: Regra do 31 – mín 1 número > 31 (anti-calendário)
   - Filtro H: Rejeitar progressões aritméticas perfeitas
   - Estrelas Equilibradas: sempre as 2 menos usadas
 """
@@ -29,7 +29,7 @@ import csv
 import time
 import re
 from collections import Counter
-from math import comb
+from math import comb, log
 from pathlib import Path
 
 # ─── Dependency check ────────────────────────────────────────────────────────
@@ -1932,6 +1932,108 @@ class StatisticsAnalyzer:
         return {"total": total, "resumo_grupos": resumo_grupos, "detalhe": detalhe}
 
 
+    # ── Expected value of one line ───────────────────────────────────────────
+    # Only draws from the 12-star era: before 2016-09-24 the star pool was 11
+    # (and 9 before 2011-05-10), so the odds of every tier were different.
+    ERA_12_ESTRELAS = "2016-09-24"
+
+    @staticmethod
+    def prob_escalao(acertos_num: int, acertos_est: int) -> float:
+        """Exact probability of matching this many numbers and stars with one
+        line: hypergeometric on the 50 numbers times the same on the 12 stars."""
+        return ((comb(5, acertos_num) * comb(45, 5 - acertos_num) / comb(50, 5))
+                * (comb(2, acertos_est) * comb(10, 2 - acertos_est) / comb(12, 2)))
+
+    def valor_esperado(self) -> dict:
+        """
+        What a 2,50 EUR line is actually worth.
+
+          valor esperado = soma, nos 13 escalões, de P(escalão) x prémio médio
+
+        The probabilities are exact. The prizes are the MEDIAN paid per winner
+        in the 12-star era — the median and not the mean, because a handful of
+        rollover draws would drag the mean up and misrepresent a typical draw.
+
+        The jackpot is left out of the total and handed to the caller as a
+        model, because its value depends on the current pot and on how many
+        other people win it. Tickets sold are estimated from the 2+0 tier,
+        whose probability is known and which has millions of winners:
+
+            bilhetes = vencedores(2+0) / P(2+0)
+
+        and that estimate is regressed on the pot (log-log) so the caller can
+        work out the sharing for any pot. With N other winners ~ Poisson(lam),
+        a winner receives pot/(1+N), and E[1/(1+N)] = (1 - e^-lam) / lam.
+
+        Returns the pieces, not a single number: the frontend recomputes the
+        total whenever the user changes the pot.
+        """
+        escaloes = [(5, 2, 1, "5+2"), (5, 1, 2, "5+1"), (5, 0, 3, "5+0"),
+                    (4, 2, 4, "4+2"), (4, 1, 5, "4+1"), (3, 2, 6, "3+2"),
+                    (4, 0, 7, "4+0"), (2, 2, 8, "2+2"), (3, 1, 9, "3+1"),
+                    (3, 0, 10, "3+0"), (1, 2, 11, "1+2"), (2, 1, 12, "2+1"),
+                    (2, 0, 13, "2+0")]
+
+        with sqlite3.connect(self.db.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            linhas = [dict(r) for r in conn.execute(
+                "SELECT * FROM premios WHERE data >= ? ORDER BY data",
+                (self.ERA_12_ESTRELAS,))]
+
+        def mediana(vals):
+            vals = sorted(vals)
+            n = len(vals)
+            if not n:
+                return None
+            return vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2
+
+        tabela, ev_sem_jackpot = [], 0.0
+        for k, j, t, nome in escaloes:
+            p = self.prob_escalao(k, j)
+            premios = [l[f"t{t}_prize"] for l in linhas
+                       if l.get(f"t{t}_prize") and l.get(f"t{t}_winners")]
+            med = mediana(premios)
+            contributo = None
+            if med is not None and t != 1:
+                contributo = p * med
+                ev_sem_jackpot += contributo
+            tabela.append({
+                "escalao": nome, "prob": p, "um_em": round(1 / p),
+                "premio_mediano": med, "contributo": contributo,
+                "sorteios": len(premios), "jackpot": t == 1,
+            })
+
+        # Bilhetes vendidos, estimados a partir do escalão 2+0.
+        p20 = self.prob_escalao(2, 0)
+        vendas = [(l["jackpot"], l["t13_winners"] / p20) for l in linhas
+                  if l.get("jackpot") and l.get("t13_winners")]
+        # Regressão log-log de bilhetes no bolo: bilhetes = e^a * bolo^b
+        a = b = None
+        if len(vendas) > 30:
+            xs = [log(v[0]) for v in vendas]
+            ys = [log(v[1]) for v in vendas]
+            n = len(xs)
+            mx, my = sum(xs) / n, sum(ys) / n
+            sxx = sum((x - mx) ** 2 for x in xs)
+            b = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx if sxx else 0.0
+            a = my - b * mx
+
+        bilhetes = sorted(v[1] for v in vendas)
+        ultimo = linhas[-1] if linhas else {}
+        return {
+            "custo_linha": CUSTO_POR_APOSTA,
+            "escaloes": tabela,
+            "ev_sem_jackpot": ev_sem_jackpot,
+            "prob_jackpot": self.prob_escalao(5, 2),
+            "vendas_modelo": {"a": a, "b": b},
+            "bilhetes_mediana": bilhetes[len(bilhetes) // 2] if bilhetes else None,
+            "sorteios_usados": len(linhas),
+            "desde": self.ERA_12_ESTRELAS,
+            "jackpot_ultimo": ultimo.get("jackpot"),
+            "data_ultimo": ultimo.get("data"),
+        }
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # FILTER ENGINE
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1993,10 +2095,12 @@ class FilterEngine:
         },
         "G": {
             "nome": "Regra do 31",
-            "descricao": "Mín 2 números acima de 31. Medido no histórico de prémios: cada "
-                         "número ≤31 atrai cerca de 1,3% mais co-vencedores, porque a "
-                         "maioria dos jogadores usa aniversários. Não prevê o sorteio — "
-                         "reduz a partilha do prémio.",
+            "descricao": "Mín 1 número acima de 31. Elimina as chaves inteiramente de "
+                         "datas, que o histórico de prémios mostra atraírem +4,1% de "
+                         "co-vencedores. Não prevê o sorteio — reduz a partilha. Exigir "
+                         "2 em vez de 1 baixaria a partilha esperada de −0,21% para "
+                         "−0,79%, diferença dentro da margem de erro, e tornaria "
+                         "impossíveis 2 dos 16 padrões equilibrados.",
         },
         "H": {
             "nome": "Anti-Progressão",
@@ -2050,7 +2154,7 @@ class FilterEngine:
         "C": 101_260,   # 3+ números com o mesmo dígito final
         "D": 151_260,   # menos de 3 dezenas diferentes
         "E":  10_126,   # 3+ números repetidos do sorteio anterior
-        "G": 767_746,   # menos de 2 números acima de 31
+        "G": 169_911,   # nenhum número acima de 31
         "H":     288,   # progressões aritméticas perfeitas
         "I":  75_470,   # AC Value diferente de 4, 5 ou 6
     }
@@ -2152,7 +2256,7 @@ class FilterEngine:
         # ── Filter G – Regra do 31 (anti-calendário) ─────────────────────────
         if "G" in self.active_filters:
             acima_31 = sum(1 for n in chave_s if n > 31)
-            if acima_31 < 2:
+            if acima_31 < 1:
                 self.stats["reprovadas_regra31"] += 1
                 return False
 
@@ -2229,8 +2333,8 @@ class FilterEngine:
             qtd_c = sum(1 for n in k if n in cores.get("castanhos", set()))
             r["F"] = (qtd_v <= 3) and (qtd_g <= 3) and (qtd_a <= 2) and (qtd_c <= 1)
 
-        # G – at least 2 numbers above 31
-        r["G"] = sum(1 for n in k if n > 31) >= 2
+        # G – at least 1 number above 31
+        r["G"] = sum(1 for n in k if n > 31) >= 1
 
         # H – reject perfect arithmetic progressions
         r["H"] = len({k[i+1] - k[i] for i in range(len(k) - 1)}) != 1
@@ -2284,7 +2388,7 @@ class FilterEngine:
                 "D": "mín 3 décadas",
                 "E": "máx 2 do anterior",
                 "F": "V:0-3 | G:0-3 | A:0-2 | C:0-1",
-                "G": "mín 2 números > 31",
+                "G": "mín 1 número > 31",
                 "H": "rejeitar sequências perfeitas",
                 "I": "AC = 4, 5 ou 6",
             }[f_id]
@@ -2936,8 +3040,8 @@ Estes 16 padrões cobrem ~1.333.800 combinações possíveis.
       • VERDES    (1×) → 0 a 3 na chave
       • AZUIS     (2×) → 0 a 2 na chave
       • CASTANHOS (3×+) → 0 a 1 na chave
-  [G] Regra do 31 – mínimo 2 números acima de 31
-      → cada número ≤31 atrai ~1,3% mais co-vencedores
+  [G] Regra do 31 – mínimo 1 número acima de 31
+      → as chaves 100% de datas atraem +4,1% de co-vencedores
         (medido no histórico de prémios): reduz a partilha
   [H] Rejeitar progressões aritméticas perfeitas
       → ex: 5,10,15,20,25 ou 3,9,15,21,27 são escolhas
