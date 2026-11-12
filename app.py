@@ -647,6 +647,28 @@ def api_valor_esperado():
     return jsonify(result)
 
 
+
+# ════════════════════════════════════════════════════════════════════════════
+# GUIA EM PDF
+# ════════════════════════════════════════════════════════════════════════════
+GUIA_PDF = Path(__file__).resolve().parent / "Guia-Gerador-Euromilhoes.pdf"
+
+
+@app.route("/guia")
+def api_guia():
+    """Serve o Guia de Utilização, que vive na raiz do repositório.
+
+    No Vercel o sistema de ficheiros é só de leitura, mas os ficheiros do
+    repositório estão lá — é daí que api/index.py copia a base de dados no
+    arranque. Abre no visualizador do browser em vez de descarregar.
+    """
+    if not GUIA_PDF.exists():
+        return jsonify({"erro": "Guia não encontrado no servidor."}), 404
+    return send_file(GUIA_PDF, mimetype="application/pdf",
+                     as_attachment=False,
+                     download_name="Guia-Gerador-Euromilhoes.pdf")
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # API – STRATEGY INFO
 # ════════════════════════════════════════════════════════════════════════════

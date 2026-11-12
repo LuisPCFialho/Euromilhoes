@@ -184,6 +184,12 @@
     }
     table.table th:hover::after { background:rgba(116,192,252,.5); }
 
+    /* O Guia abre noutro separador, por isso distingue-se dos restantes
+       itens do menu, que trocam de painel dentro da app. */
+    .nav-link.nav-externo { margin-top:10px; padding-top:12px;
+                            border-top:1px solid #2a2a4a; }
+    body.light-mode .nav-link.nav-externo { border-top-color:#dcdde6; }
+
     /* ── Tabelas dos filtros por sorteio ── */
     .tbl-filtros { width:100%; border-collapse:collapse; font-size:.72rem;
                    white-space:nowrap; color:#d0d0d0; }
@@ -698,6 +704,12 @@
     </a>
     <a class="nav-link" href="#" onclick="showTab('atualizar', this)">
       <i class="fa-solid fa-cloud-arrow-down"></i> Actualizar BD
+    </a>
+    <!-- Abre noutro separador: é um PDF, não um painel da app. -->
+    <a class="nav-link nav-externo" href="/guia" target="_blank" rel="noopener"
+       title="Guia de Utilização em PDF — 24 páginas, para quem nunca jogou e para quem joga há anos">
+      <i class="fa-solid fa-book-open"></i> Guia (PDF)
+      <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:.62rem;opacity:.55;margin-left:3px;"></i>
     </a>
   </nav>
   <div class="status-bar" id="status-bar">
