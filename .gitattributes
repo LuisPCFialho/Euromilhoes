@@ -1,0 +1,8 @@
+# Sem isto, o git decide por heurística se um ficheiro é texto e, em Windows
+# com core.autocrlf activo, pode converter fins de linha dentro de ficheiros
+# binários — o que os corrompe em silêncio. A base de dados e o PDF do guia
+# são commitados pelo cron e pelos scripts, por isso vale a pena ser explícito.
+*.pdf   binary
+*.db    binary
+*.xlsx  binary
+*.png   binary
