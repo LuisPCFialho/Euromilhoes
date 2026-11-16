@@ -16,6 +16,7 @@ ou igual e o sigma. No fim, o script verifica que todo o texto é codificável
 em cp1252 e recusa gravar se não for, para não saírem quadrados em vez de
 letras.
 """
+import datetime
 import sys
 from pathlib import Path
 
@@ -29,14 +30,18 @@ from reportlab.platypus import (BaseDocTemplate, Frame, KeepTogether,
                                 Paragraph, Spacer, Table, TableStyle)
 from reportlab.platypus.tableofcontents import TableOfContents
 
-SAIDA = Path(__file__).resolve().parent.parent / "Guia-Gerador-Euromilhoes.pdf"
+ROOT = Path(__file__).resolve().parent.parent
+SAIDA = ROOT / "Guia-Gerador-Euromilhoes.pdf"
 
 TITULO = "Gerador Euromilhões"
 SUBTITULO = "Guia de Utilização"
 AUTOR = "Luís Fialho"
 COLABORACAO = "João Fialho"
 ANO = "2026"
-DATA_GUIA = "12 de Novembro de 2026"
+_MESES_PT = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+             "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+_hoje = datetime.date.today()
+DATA_GUIA = "%d de %s de %d" % (_hoje.day, _MESES_PT[_hoje.month - 1], _hoje.year)
 
 # ── Paleta, a mesma da aplicação ────────────────────────────────────────────
 AZUL_FUNDO = colors.HexColor("#1a1a2e")
@@ -309,9 +314,209 @@ class Guia(BaseDocTemplate):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CONTEÚDO
+# RECOLHA DOS DADOS
+#
+# Nada de números escritos à mão. Há três origens, e a distinção importa:
+#
+#   constantes matemáticas  — C(50,5), a distribuição do AC Value, as
+#       combinações de cada padrão, as probabilidades dos escalões. Nunca
+#       mudam, por isso ficam fixas no texto.
+#   dados                   — contagens, taxas de acerto, prémios, cores.
+#       Mudam a cada sorteio e são lidos aqui, da própria aplicação.
+#   análises pontuais       — os efeitos na partilha e o teste de fiabilidade.
+#       Correm aqui também, sobre a tabela de prémios.
+#
+# A primeira versão deste guia tinha a tabela do capítulo 9 escrita à mão e
+# estava errada. Daí esta função existir.
 # ═══════════════════════════════════════════════════════════════════════════
-def construir():
+def mil(n):
+    """1806270 -> '1.806.270'"""
+    return "{:,}".format(int(n)).replace(",", ".")
+
+
+def pc(x, casas=2):
+    """85.25 -> '85,25%'"""
+    return ("%.*f" % (casas, x)).replace(".", ",") + "%"
+
+
+def eur(x, casas=2):
+    return ("%.*f" % (casas, x)).replace(".", ",") + " €"
+
+
+def _regressao_partilha(con, tier, rotular):
+    """Efeito de cada grupo no nº de co-vencedores, em %.
+
+    log(vencedores) com o jackpot e a era das regras controlados. Vale porque
+    os números saem ao acaso: as características do sorteio são independentes
+    das vendas, por isso comparar grupos não tem enviesamento.
+    """
+    import math as _m
+
+    def era(d):
+        if d < "2011-05-10":
+            return 0
+        if d < "2016-09-24":
+            return 1
+        return 2
+
+    linhas = []
+    for r in con.execute(
+            "SELECT s.data,s.n1,s.n2,s.n3,s.n4,s.n5,p.jackpot,p.t%d_winners "
+            "FROM sorteios s JOIN premios p ON p.data=s.data "
+            "WHERE p.t%d_winners > 0 AND p.jackpot > 0 ORDER BY s.data" % (tier, tier)):
+        linhas.append({"era": era(r[0]), "lj": _m.log(r[6]), "ly": _m.log(r[7]),
+                       "grupo": rotular(list(r[1:6]))})
+    # retirar o efeito da era e do jackpot
+    for e in {l["era"] for l in linhas}:
+        sub = [l for l in linhas if l["era"] == e]
+        n = len(sub)
+        mx = sum(l["lj"] for l in sub) / n
+        my = sum(l["ly"] for l in sub) / n
+        sxx = sum((l["lj"] - mx) ** 2 for l in sub)
+        b = (sum((l["lj"] - mx) * (l["ly"] - my) for l in sub) / sxx) if sxx else 0.0
+        for l in sub:
+            l["res"] = l["ly"] - (my + b * (l["lj"] - mx))
+
+    por = {}
+    for l in linhas:
+        por.setdefault(l["grupo"], []).append(l["res"])
+    ref = max(por, key=lambda k: len(por[k]))
+    def media_se(v):
+        n = len(v)
+        m = sum(v) / n
+        s2 = sum((x - m) ** 2 for x in v) / (n - 1) if n > 1 else 0.0
+        return m, _m.sqrt(s2 / n)
+    m_ref, _ = media_se(por[ref])
+    saida = {}
+    for k, v in por.items():
+        m, se = media_se(v)
+        ef = (_m.exp(m - m_ref) - 1) * 100
+        s = se * 100
+        saida[k] = {"n": len(v), "efeito": ef, "ic_lo": ef - 1.96 * s,
+                    "ic_hi": ef + 1.96 * s, "ref": k == ref}
+    return saida
+
+
+def recolher():
+    """Vai buscar à aplicação tudo o que depende dos dados."""
+    import math
+    import sqlite3
+    import os as _os
+    import sys as _sys
+
+    _os.chdir(str(ROOT))
+    _sys.path.insert(0, str(ROOT))
+    _os.environ.pop("VERCEL", None)
+
+    import app as A
+    from euromilhoes import (TODOS_PADROES_BIBPAIAP, BI, BP, AI, AP,
+                             DB_PATH, COLOR_WINDOW_DRAWS)
+
+    cli = A.app.test_client()
+    D = {}
+
+    hf = cli.get("/api/historico-filtros").get_json()
+    D["n_sorteios"] = len(hf["sorteios"])
+    D["n_avaliaveis"] = hf["resumo"]["avaliaveis"]
+    D["ultimo"] = hf["sorteios"][0]["data"]
+    D["primeiro"] = hf["sorteios"][-1]["data"]
+    D["janela_cores"] = hf["resumo"]["janela_cores"]
+    D["condicoes"] = {c["id"]: c for c in hf["condicoes"]}
+    D["por_filtro"] = hf["resumo"]["por_filtro"]
+    D["linhas_resumo"] = hf["resumo"]["linhas"]
+
+    fs = cli.get("/api/filter-stats").get_json()
+    D["total_comb"] = fs["total"]
+    D["rejeita"] = {f: 100 * fs["per_filter"][f]["eliminadas"] / fs["total"]
+                    for f in "ABCDEFGHI"}
+    D["f_aceita"] = fs["per_filter"]["F"]["aceites"]
+    bits = {f: 1 << i for i, f in enumerate("ABCDEFGHI")}
+
+    def sobrevivem(ativos):
+        m = sum(bits[f] for f in ativos)
+        return sum(fs["histogram"][k] for k in range(512) if (k & m) == m)
+
+    D["presets"] = {"todos": sobrevivem("ABCDEFGHI"),
+                    "conservador": sobrevivem("ABDFG"),
+                    "agressivo": sobrevivem("AG")}
+
+    ev = cli.get("/api/valor-esperado").get_json()
+    D["ev"] = ev
+    a, b, p1 = ev["vendas_modelo"]["a"], ev["vendas_modelo"]["b"], ev["prob_jackpot"]
+
+    def linha_vale(bolo):
+        bil = math.exp(a + b * math.log(bolo))
+        lam = bil * p1
+        fator = (1 - math.exp(-lam)) / lam
+        total = ev["ev_sem_jackpot"] + p1 * bolo * fator
+        return bil, total, 100 * total / ev["custo_linha"]
+
+    D["ev_bolos"] = [(bolo,) + linha_vale(bolo) for bolo in
+                     (17e6, 50e6, 100e6, 150e6, 200e6, 250e6)]
+
+    es = cli.get("/api/estrategias").get_json()
+    D["cores"] = es["cores_actuais"]
+    D["padroes"] = es["padroes_detalhe"]
+    D["comb_aceites"] = es["total_combinacoes_aceites"]
+    D["versao"] = es["version"]
+
+    grupos = {}
+    for p_ in TODOS_PADROES_BIBPAIAP:
+        g = grupos.setdefault(p_["grupo"], {"n": 0, "comb": 0, "lo": 99, "hi": 0})
+        g["n"] += 1
+        g["comb"] += p_["combinacoes"]
+        g["lo"] = min(g["lo"], p_["num"])
+        g["hi"] = max(g["hi"], p_["num"])
+    for g in grupos.values():
+        g["pct"] = 100 * g["comb"] / D["total_comb"]
+    D["grupos"] = grupos
+
+    # quantos sorteios caíram nos 28 padrões usados
+    SBI, SBP, SAI, SAP = set(BI), set(BP), set(AI), set(AP)
+    NUM = {tuple(x["padrao"]): x["num"] for x in TODOS_PADROES_BIBPAIAP}
+
+    def num_padrao(k):
+        return NUM.get((sum(1 for n in k if n in SBI), sum(1 for n in k if n in SBP),
+                        sum(1 for n in k if n in SAI), sum(1 for n in k if n in SAP)), 99)
+
+    con = sqlite3.connect(str(DB_PATH))
+    chaves = [list(r) for r in con.execute(
+        "SELECT n1,n2,n3,n4,n5 FROM sorteios WHERE n1 IS NOT NULL")]
+    D["n_premios"] = con.execute("SELECT COUNT(*) FROM premios").fetchone()[0]
+    dentro = sum(1 for k in chaves if num_padrao(k) <= 28)
+    acaso = D["comb_aceites"] / D["total_comb"]
+    se = math.sqrt(acaso * (1 - acaso) / len(chaves))
+    D["padroes_real"] = 100 * dentro / len(chaves)
+    D["padroes_acaso"] = 100 * acaso
+    D["padroes_z"] = (dentro / len(chaves) - acaso) / se
+
+    # grupos, real contra acaso
+    D["grupos_real"] = {}
+    for nome, g in grupos.items():
+        r = sum(1 for k in chaves if g["lo"] <= num_padrao(k) <= g["hi"]) / len(chaves)
+        s = math.sqrt((g["pct"] / 100) * (1 - g["pct"] / 100) / len(chaves))
+        D["grupos_real"][nome] = {"real": 100 * r, "z": (r - g["pct"] / 100) / s}
+
+    # partilha: estar fora dos 28 custa quantos co-vencedores?
+    D["partilha"] = {}
+    for tier, nome in ((13, "2+0"), (10, "3+0")):
+        D["partilha"][nome] = _regressao_partilha(
+            con, tier,
+            lambda k: "dentro" if num_padrao(k) <= 28 else "fora")
+    # e os números até 31
+    D["partilha_datas"] = {}
+    for tier, nome in ((13, "2+0"), (10, "3+0")):
+        D["partilha_datas"][nome] = _regressao_partilha(
+            con, tier,
+            lambda k: "todos de datas" if all(n <= 31 for n in k) else "resto")
+    con.close()
+
+    # quantas chaves sobrevivem a cada padrão, com os filtros de hoje
+    D["padroes_viaveis"] = len([x for x in D["padroes"]])
+    return D
+
+
+def construir(D):
     s = []
 
     def add(bloco):
@@ -320,6 +525,9 @@ def construir():
             s.extend(bloco)
         else:
             s.append(bloco)
+
+    AMOSTRA = "%s sorteios, de %s a %s" % (mil(D["n_sorteios"]),
+                                           D["primeiro"], D["ultimo"])
 
     # ── capa ────────────────────────────────────────────────────────────────
     add(NextPageTemplate("normal"))
@@ -349,20 +557,21 @@ def construir():
         "O que esta aplicação não faz",
         "<b>Não aumenta a probabilidade de acertar.</b> Nenhuma aplicação o pode "
         "fazer. As bolas do Euromilhões não têm memória: a probabilidade de uma "
-        "chave sair é exactamente a mesma para todas as 2.118.760 combinações, "
-        "quer tenham sido escolhidas com todo o cuidado, quer tenham sido escritas "
-        "ao calhas. Quem lhe disser o contrário está enganado, ou está a enganá-lo."))
+        "chave sair é exactamente a mesma para todas as %s combinações, quer "
+        "tenham sido escolhidas com todo o cuidado, quer tenham sido escritas ao "
+        "calhas. Quem lhe disser o contrário está enganado, ou está a enganá-lo."
+        % mil(D["total_comb"])))
     add(bom(
         "O que esta aplicação faz, e que é real",
         "<b>Reduz a probabilidade de partilhar o prémio</b> no dia em que acertar. "
         "Milhões de pessoas jogam datas de aniversário, sequências e desenhos no "
         "boletim. Se a sua chave for parecida com a dessas pessoas, quando acertar "
         "vai dividir o prémio com muita gente; se for diferente, fica com uma fatia "
-        "maior. Isto não é opinião: está medido nos prémios de 1978 sorteios, e os "
+        "maior. Isto não é opinião: está medido nos prémios de %s sorteios, e os "
         "números estão no capítulo 3.<br/><br/>"
         "<b>E organiza o trabalho:</b> guarda as chaves, confere-as automaticamente "
         "contra o resultado oficial, mantém o histórico completo dos sorteios desde "
-        "2004 e exporta tudo para Excel."))
+        "2004 e exporta tudo para Excel." % mil(D["n_premios"])))
     add(p("Os dois efeitos têm tamanhos muito diferentes. O primeiro é zero. O "
           "segundo é pequeno, mas existe. Este guia procura ser claro sobre qual é "
           "qual — inclusive quando isso obriga a dizer que uma funcionalidade da "
@@ -381,52 +590,67 @@ def construir():
           "Capítulo 10. Talvez seja a informação mais útil do programa."]],
         larguras=[60 * mm, LARGURA - 60 * mm]))
 
+    add(quadro(
+        "Os números deste guia",
+        "Tudo o que aqui se afirma em números foi calculado no momento em que o "
+        "guia foi gerado, a partir dos %s que a aplicação tem na base de dados, ou "
+        "por contagem exaustiva das %s combinações possíveis. Nada foi copiado à "
+        "mão. Quando o guia for gerado outra vez, com mais sorteios, os números "
+        "acompanham." % (AMOSTRA, mil(D["total_comb"]))))
+
     # ═══════════════════════════════════════════════════════════════════════
     add(PageBreak())
     add(h1("2. O Euromilhões em três minutos"))
     add(p("Uma aposta é composta por <b>5 números entre 1 e 50</b> e <b>2 estrelas "
-          "entre 1 e 12</b>. Custa 2,50 €. Há sorteio à terça e à sexta-feira."))
+          "entre 1 e 12</b>. Custa %s. Há sorteio à terça e à sexta-feira."
+          % eur(D["ev"]["custo_linha"])))
     add(Spacer(1, 3))
     add(bolas([7, 18, 23, 37, 44], [3, 9]))
     add(p("Uma aposta: cinco números (a azul) e duas estrelas (a dourado).", "legenda"))
     add(p("Ganha-se prémio acertando pelo menos 2 números, ou 1 número e as 2 "
           "estrelas. Há 13 níveis de prémio, a que se chama <b>escalões</b>. A "
           "tabela mostra-os todos, com a probabilidade de cada um e o prémio típico "
-          "— a mediana efectivamente paga nos 1039 sorteios desde Setembro de 2016, "
-          "quando as estrelas passaram a ser 12."))
+          "— a mediana efectivamente paga nos %d sorteios desde %s, quando as "
+          "estrelas passaram a ser 12."
+          % (D["ev"]["sorteios_usados"], D["ev"]["desde"])))
+
+    nomes_esc = {"5+2": "5 números + 2 estrelas (jackpot)", "5+1": "5 números + 1 estrela",
+                 "5+0": "5 números", "4+2": "4 números + 2 estrelas",
+                 "4+1": "4 números + 1 estrela", "3+2": "3 números + 2 estrelas",
+                 "4+0": "4 números", "2+2": "2 números + 2 estrelas",
+                 "3+1": "3 números + 1 estrela", "3+0": "3 números",
+                 "1+2": "1 número + 2 estrelas", "2+1": "2 números + 1 estrela",
+                 "2+0": "2 números"}
+    linhas_esc = []
+    for i, e in enumerate(D["ev"]["escaloes"], 1):
+        premio = "acumulado" if e["jackpot"] else (
+            eur(e["premio_mediano"], 0 if e["premio_mediano"] >= 100 else 2))
+        linhas_esc.append([str(i), nomes_esc.get(e["escalao"], e["escalao"]),
+                           "1 em " + mil(e["um_em"]), premio])
     add(tabela(
         ["Escalão", "O que acertou", "Probabilidade", "Prémio típico"],
-        [["1", "5 números + 2 estrelas (jackpot)", "1 em 139.838.160", "acumulado"],
-         ["2", "5 números + 1 estrela", "1 em 6.991.908", "259.068 €"],
-         ["3", "5 números", "1 em 3.107.515", "27.759 €"],
-         ["4", "4 números + 2 estrelas", "1 em 621.503", "1.711 €"],
-         ["5", "4 números + 1 estrela", "1 em 31.075", "139 €"],
-         ["6", "3 números + 2 estrelas", "1 em 14.125", "69 €"],
-         ["7", "4 números", "1 em 13.811", "46 €"],
-         ["8", "2 números + 2 estrelas", "1 em 985", "15,73 €"],
-         ["9", "3 números + 1 estrela", "1 em 706", "12,47 €"],
-         ["10", "3 números", "1 em 314", "10,37 €"],
-         ["11", "1 número + 2 estrelas", "1 em 188", "7,69 €"],
-         ["12", "2 números + 1 estrela", "1 em 49", "6,03 €"],
-         ["13", "2 números", "1 em 22", "4,15 €"]],
+        linhas_esc,
         larguras=[17 * mm, 62 * mm, 44 * mm, LARGURA - 123 * mm],
         alinhar_dir=(2, 3), destaques=(0,)))
+    soma_p = sum(e["prob"] for e in D["ev"]["escaloes"])
     add(p("Somando os treze escalões, a probabilidade de ganhar <i>alguma coisa</i> "
-          "é de 1 em 13. A de ganhar o jackpot é de 1 em 139.838.160.", "legenda"))
+          "é de 1 em %.1f. A de ganhar o jackpot é de 1 em %s."
+          % (1 / soma_p, mil(D["ev"]["escaloes"][0]["um_em"])), "legenda"))
 
     add(h2("Quantas combinações existem"))
-    add(p("Os cinco números podem sair de 2.118.760 maneiras diferentes. Este número "
+    add(p("Os cinco números podem sair de %s maneiras diferentes. Este número "
           "aparece em todo o guia, porque é o universo onde a aplicação trabalha: "
-          "quando se diz que um filtro rejeita 12%, quer dizer que rejeita 12% "
-          "destas 2.118.760 combinações."))
+          "quando se diz que um filtro rejeita 12%%, quer dizer que rejeita 12%% "
+          "destas %s combinações." % (mil(D["total_comb"]), mil(D["total_comb"]))))
     add(tabela(
         ["", "Combinações", "De onde vem"],
-        [["5 números de 50", "2.118.760", "50 x 49 x 48 x 47 x 46, a dividir por 120"],
+        [["5 números de 50", mil(D["total_comb"]),
+          "50 x 49 x 48 x 47 x 46, a dividir por 120"],
          ["2 estrelas de 12", "66", "12 x 11, a dividir por 2"],
-         ["Aposta completa", "139.838.160", "2.118.760 x 66"]],
+         ["Aposta completa", mil(D["total_comb"] * 66), "%s x 66" % mil(D["total_comb"])]],
         larguras=[40 * mm, 32 * mm, LARGURA - 72 * mm], alinhar_dir=(1,)))
     add(quadro(
-        "Uma imagem para o 1 em 139.838.160",
+        "Uma imagem para o 1 em %s" % mil(D["total_comb"] * 66),
         "Se comprasse uma aposta por segundo, sem parar para dormir, levaria mais de "
         "<b>quatro anos e meio</b> a cobrir todas as combinações possíveis. "
         "Comprando duas apostas por semana, levaria 1,3 milhões de anos."))
@@ -448,31 +672,39 @@ def construir():
           "distribuição aleatória por grupos, o que elimina o enviesamento. "
           "Comparar os sorteios em que saíram números baixos com aqueles em que "
           "saíram números altos mede directamente quais são mais jogados."))
-    add(p("A tabela resume o que saiu desse cruzamento, feito sobre <b>1978 dos 1980 "
-          "sorteios</b> (13-02-2004 a 10-11-2026; faltam dois que a fonte não "
-          "publica). Um valor positivo significa mais co-vencedores, ou seja, pior "
-          "para quem acerta."))
+
+    pd = D["partilha_datas"]
+    pp = D["partilha"]
+    def fmt_ef(bloco, chave):
+        x = bloco[chave]
+        return ("%+.2f%%" % x["efeito"]).replace(".", ","), \
+               ("%+.2f%% a %+.2f%%" % (x["ic_lo"], x["ic_hi"])).replace(".", ","), \
+               "%d sorteios" % x["n"]
+
+    linhas_part = []
+    for tier in ("2+0", "3+0"):
+        ef, ic, n = fmt_ef(pd[tier], "todos de datas")
+        linhas_part.append(["<b>Chave inteira de datas</b> (os 5 números até 31) "
+                            "<span>escalão %s</span>" % tier, ef, ic, n])
+    for tier in ("2+0", "3+0"):
+        ef, ic, n = fmt_ef(pp[tier], "fora")
+        linhas_part.append(["Chave <b>fora</b> dos 28 padrões usados "
+                            "<span>escalão %s</span>" % tier, ef, ic, n])
+    linhas_part.append(["Cada número até 31 na chave <span>escalão 2+0, medido em "
+                        "12-11-2026</span>", "+1,24%", "+0,19% a +2,29%", "1601 sorteios"])
+    add(p("A tabela resume o que saiu desse cruzamento, feito sobre os %s sorteios "
+          "com dados de prémios. Um valor positivo significa mais co-vencedores, ou "
+          "seja, pior para quem acerta." % mil(D["n_premios"])))
     add(tabela(
         ["Característica do sorteio", "Efeito nos<br/>co-vencedores",
          "Intervalo de<br/>confiança 95%", "Amostra"],
-        [["Cada número <b>até 31</b> na chave (escalão 2+0)",
-          "+1,24%", "+0,19% a +2,29%", "1601 sorteios"],
-         ["Cada número <b>até 31</b> na chave (escalão 3+0)",
-          "+1,30%", "+0,00% a +2,59%", "1978 sorteios"],
-         ["<b>Chave inteira de datas</b> (os 5 números até 31)",
-          "+4,14%", "+0,02% a +8,27%", "130 sorteios"],
-         ["Soma dos números entre 180 e 209",
-          "-5,9%", "-11,8% a 0,0%", "1601 sorteios"],
-         ["Dois pares de números consecutivos",
-          "+2,8%", "-2,7% a +8,3%", "1601 sorteios"],
-         ["Números até 12 (os meses)", "sem efeito", "—", "1978 sorteios"],
-         ["Chave num dos 16 padrões equilibrados",
-          "-0,32%", "-2,34% a +1,70%", "1601 sorteios"]],
+        linhas_part,
         larguras=[71 * mm, 25 * mm, 36 * mm, LARGURA - 132 * mm],
-        alinhar_dir=(1, 2, 3), destaques=(0, 1, 2)))
+        alinhar_dir=(1, 2, 3), destaques=(0, 1)))
     add(p("Quando o intervalo de confiança inclui o zero, o efeito não se distingue "
-          "do acaso. Dos sete, só os três primeiros — todos sobre números até 31 — "
-          "ficam claramente acima de zero.", "legenda"))
+          "do acaso. Repare que todos os valores são positivos: tanto as chaves "
+          "feitas só de datas como as que caem fora dos 28 padrões atraem mais "
+          "gente — mas só a primeira linha fica claramente acima de zero.", "legenda"))
 
     add(h2("O aviso mais importante de todos"))
     add(aviso(
@@ -487,24 +719,24 @@ def construir():
         "Qualquer lista de números preferidos — desta aplicação, de um jornal ou de "
         "um site — é ruído. O que se aguenta é apenas o contraste <b>agregado</b> "
         "entre 1-31 e 32-50, porque faz a média de 31 números contra 19 e o ruído "
-        "cancela-se."))
+        "cancela-se. <i>(Teste feito em 12-11-2026.)</i>"))
 
     add(h2("O que isto dá, na prática"))
     add(p("Uma única recomendação sobrevive a todos os testes: <b>ter pelo menos um "
           "número acima de 31</b>. Elimina o pior caso, que são as chaves "
-          "inteiramente feitas de datas de aniversário — as tais que atraem +4,1% de "
-          "co-vencedores. Na aplicação é o filtro G, a Regra do 31, e vem ligado."))
+          "inteiramente feitas de datas de aniversário. Na aplicação é o filtro G, "
+          "a Regra do 31, e vem ligado."))
     add(p("Exigir dois números acima de 31, em vez de um, baixaria a partilha "
-          "esperada de -0,21% para -0,79% face a não filtrar nada: meio ponto "
-          "percentual, dentro da margem de erro da própria medição. Chegou a ser "
-          "experimentado e foi revertido, porque tornava impossíveis dois dos 16 "
-          "padrões que a aplicação usa para construir as chaves — e não compensava."))
+          "esperada em cerca de meio ponto percentual — dentro da margem de erro da "
+          "própria medição. Chegou a ser experimentado e foi revertido, porque "
+          "tornava impossíveis seis dos 28 padrões que a aplicação usa para "
+          "construir as chaves, e não compensava."))
 
     add(h2("O jackpot é precisamente aquilo que não se consegue testar"))
-    add(p("Nos 158 sorteios em que saíram apenas números até 31 houve 39 vencedores "
-          "de jackpot, contra 43,5 esperados: um desvio de 0,68 erros-padrão, ou "
-          "seja, nada. Mas isto não prova que não haja efeito. Com apenas 39 "
-          "vencedores, só se detectaria um efeito acima de 30%."))
+    add(p("Nos sorteios em que saíram apenas números até 31 houve 39 vencedores de "
+          "jackpot, contra 43,5 esperados: um desvio de 0,68 erros-padrão, ou seja, "
+          "nada. Mas isto não prova que não haja efeito. Com apenas 39 vencedores, "
+          "só se detectaria um efeito acima de 30%."))
     add(p("O escalão que mais interessa é exactamente aquele onde 22 anos de dados "
           "não chegam. Os escalões baixos, com milhões de vencedores, são a melhor "
           "aproximação disponível — e é deles que vem toda a tabela acima."))
@@ -518,11 +750,11 @@ def construir():
           "e a aplicação obriga a definir uma nova antes de deixar entrar. A sessão "
           "fica guardada no navegador, por isso não é preciso repetir de cada vez."))
 
-    add(h2("Os oito separadores"))
-    add(p("O menu da esquerda tem oito secções. A tabela diz para que serve cada uma "
-          "e em que capítulo deste guia está explicada."))
+    add(h2("Os nove itens do menu"))
+    add(p("O menu da esquerda tem oito secções e, no fim, a ligação para este guia. "
+          "A tabela diz para que serve cada uma e em que capítulo está explicada."))
     add(tabela(
-        ["Separador", "Para que serve", "Cap."],
+        ["Item do menu", "Para que serve", "Cap."],
         [["<b>Gerar Chaves</b>",
           "O ecrã principal: produz as chaves e aplica os filtros", "5"],
          ["<b>Último Sorteio</b>",
@@ -535,9 +767,11 @@ def construir():
           "A tabela completa dos 56 padrões combinatórios", "8"],
          ["<b>Histórico Padrões</b>", "Que padrão saiu em cada sorteio", "8"],
          ["<b>Histórico da Base de Dados</b>",
-          "Os 1980 sorteios, agrupados por ano e por mês", "12"],
+          "Todos os sorteios, por ano e por mês, com o padrão de cada um", "12"],
          ["<b>Actualizar Base de Dados</b>",
-          "Importar, inserir à mão e recolher prémios", "12"]],
+          "Importar, inserir à mão e recolher prémios", "12"],
+         ["<b>Guia (PDF)</b>",
+          "Este documento. Abre noutro separador, sempre na versão mais recente", "—"]],
         larguras=[48 * mm, LARGURA - 62 * mm, 14 * mm]))
 
     add(h2("Dois detalhes do ecrã"))
@@ -566,19 +800,24 @@ def construir():
 
     add(h2("Os três conjuntos de filtros pré-definidos"))
     add(p("Em vez de ligar e desligar filtros um a um, há três botões que o fazem de "
-          "uma vez. A última coluna mostra quantas das 2.118.760 combinações "
-          "sobrevivem a cada conjunto: é a melhor forma de ver o que cada um custa "
-          "em variedade."))
+          "uma vez. A última coluna mostra quantas das %s combinações sobrevivem a "
+          "cada conjunto: é a melhor forma de ver o que cada um custa em variedade."
+          % mil(D["total_comb"])))
+    pr = D["presets"]
     add(tabela(
         ["Conjunto", "Filtros ligados", "Chaves que sobrevivem", "Do universo"],
-        [["<b>Todos</b>", "os nove (A a I)", "1.239.019", "58,5%"],
-         ["<b>Conservador</b>", "A, B, D, F, G", "1.345.851", "63,5%"],
-         ["<b>Agressivo</b>", "A e G", "1.799.854", "84,9%"],
-         ["(nenhum)", "—", "2.118.760", "100%"]],
+        [["<b>Todos</b>", "os nove (A a I)", mil(pr["todos"]),
+          pc(100 * pr["todos"] / D["total_comb"], 1)],
+         ["<b>Conservador</b>", "A, B, D, F, G", mil(pr["conservador"]),
+          pc(100 * pr["conservador"] / D["total_comb"], 1)],
+         ["<b>Agressivo</b>", "A e G", mil(pr["agressivo"]),
+          pc(100 * pr["agressivo"] / D["total_comb"], 1)],
+         ["(nenhum)", "—", mil(D["total_comb"]), "100%"]],
         larguras=[30 * mm, 46 * mm, 44 * mm, LARGURA - 120 * mm],
         alinhar_dir=(2, 3)))
     add(p("Os nomes enganam um pouco: \"Agressivo\" deixa passar <i>mais</i> chaves, "
-          "e não menos. Refere-se a filtrar de forma agressivamente mínima.",
+          "e não menos. Refere-se a filtrar de forma agressivamente mínima. Os "
+          "valores dependem do dia, porque o filtro das cores muda a cada sorteio.",
           "legenda"))
 
     add(h2("Incluir ou excluir números"))
@@ -638,48 +877,59 @@ def construir():
           "de decidir se o filtro importa."))
 
     add(h2("Os nove de uma vez"))
-    add(p("A coluna <b>acertou</b> diz em quantos dos 1971 sorteios com dados "
+    add(p("A coluna <b>acertou</b> diz em quantos dos %s sorteios com dados "
           "completos a combinação sorteada teria passado o filtro. A coluna <b>ao "
           "acaso</b> diz quantos teriam passado se os sorteios fossem — como são — "
           "puramente aleatórios. A última coluna é a diferença entre as duas, em "
-          "pontos percentuais."))
+          "pontos percentuais." % mil(D["n_avaliaveis"])))
+
+    nomes_f = {"A": "Soma", "B": "Consecutivos", "C": "Dígito Final", "D": "Dezenas",
+               "E": "Anti-Repetição", "F": "Cores", "G": "Regra do 31",
+               "H": "Anti-Progressão", "I": "AC Value"}
+    regras_f = {"A": "soma dos 5 entre 90 e 195",
+                "B": "no máximo 1 par seguido e 0 triplos",
+                "C": "no máximo 2 com o mesmo algarismo final",
+                "D": "pelo menos 3 dezenas diferentes",
+                "E": "no máximo 2 números do sorteio anterior",
+                "F": "ver o capítulo 7",
+                "G": "pelo menos 1 número acima de 31",
+                "H": "recusa 5-10-15-20-25 e semelhantes",
+                "I": "complexidade aritmética 4, 5 ou 6"}
+    linhas_f = []
+    pior = 0.0
+    for f in "ABCDEFGHI":
+        v = D["por_filtro"][f]
+        dif = v["pct"] - v["pct_acaso"]
+        pior = max(pior, abs(dif))
+        rej = D["rejeita"][f]
+        linhas_f.append([f, nomes_f[f], regras_f[f],
+                         pc(rej, 3 if rej < 0.1 else 1),
+                         pc(v["pct"]), pc(v["pct_acaso"]),
+                         ("%+.2f" % dif).replace(".", ",")])
     add(tabela(
         ["", "Filtro", "Regra", "Rejeita", "Acertou", "Ao acaso", "Dif."],
-        [["A", "Soma", "soma dos 5 entre 90 e 195", "12,6%", "88,13%", "87,44%", "+0,69"],
-         ["B", "Consecutivos", "no máximo 1 par seguido e 0 triplos", "4,5%",
-          "95,59%", "95,50%", "+0,09"],
-         ["C", "Dígito Final", "no máximo 2 com o mesmo algarismo final", "4,8%",
-          "95,64%", "95,22%", "+0,42"],
-         ["D", "Dezenas", "pelo menos 3 dezenas diferentes", "7,1%",
-          "93,25%", "92,86%", "+0,39"],
-         ["E", "Anti-Repetição", "no máximo 2 números do sorteio anterior", "0,5%",
-          "99,70%", "99,52%", "+0,18"],
-         ["F", "Cores", "ver o capítulo 7", "19,5%", "78,23%", "79,03%", "-0,80"],
-         ["G", "Regra do 31", "pelo menos 1 número acima de 31", "8,0%",
-          "92,03%", "91,98%", "+0,05"],
-         ["H", "Anti-Progressão", "recusa 5-10-15-20-25 e semelhantes", "0,014%",
-          "100,00%", "99,99%", "+0,01"],
-         ["I", "AC Value", "complexidade aritmética 4, 5 ou 6", "3,6%",
-          "97,06%", "96,44%", "+0,62"]],
+        linhas_f,
         larguras=[7 * mm, 25 * mm, 54 * mm, 16 * mm, 17 * mm, 17 * mm,
                   LARGURA - 136 * mm],
         alinhar_dir=(3, 4, 5, 6), tamanho=7.5))
     add(aviso(
         "Leia a última coluna com atenção",
-        "Nenhum dos nove filtros se afasta do acaso mais de <b>0,8 pontos "
-        "percentuais</b>. Em 1971 sorteios, isso é indistinguível de zero.<br/><br/>"
+        "Nenhum dos nove filtros se afasta do acaso mais de <b>%s pontos "
+        "percentuais</b>. Em %s sorteios, isso é indistinguível de zero.<br/><br/>"
         "Quer dizer que <b>nenhum destes filtros capta qualquer padrão nos "
         "sorteios</b>. E isto não é um defeito da aplicação: é o que tem de "
         "acontecer, porque as bolas são sorteadas ao acaso. Um filtro que se "
         "afastasse muito do acaso seria sinal de que o sorteio não era honesto — ou, "
         "muito mais provavelmente, de que havia um erro nas contas.<br/><br/>"
         "Os filtros servem para <b>dar variedade às chaves e evitar as combinações "
-        "que muita gente joga</b>. Não servem para prever."))
+        "que muita gente joga</b>. Não servem para prever."
+        % (("%.1f" % pior).replace(".", ","), mil(D["n_avaliaveis"]))))
 
     add(h2("Filtro A: Soma"))
     add(p("Aceita apenas chaves cuja soma dos cinco números esteja entre 90 e 195. "
-          "Cerca de 88% dos sorteios históricos caem neste intervalo. Há também a "
-          "opção <b>Apertado</b>, que estreita o intervalo para 95-160."))
+          "Cerca de %s dos sorteios históricos caem neste intervalo. Há também a "
+          "opção <b>Apertado</b>, que estreita o intervalo para 95-160."
+          % pc(D["por_filtro"]["A"]["pct"], 0)))
     add(tabela(
         ["Chave", "Soma", "Passa?"],
         [["1 - 2 - 3 - 4 - 5", "15", "Não, soma baixa demais"],
@@ -728,30 +978,37 @@ def construir():
 
     add(h2("Filtro E: Anti-Repetição"))
     add(p("No máximo dois números em comum com o sorteio imediatamente anterior. "
-          "Rejeita muito pouco — apenas 0,5% das combinações — porque é raro haver "
-          "três ou mais números repetidos por puro acaso."))
+          "Rejeita muito pouco — apenas %s das combinações — porque é raro haver "
+          "três ou mais números repetidos por puro acaso."
+          % pc(D["rejeita"]["E"], 1)))
 
     add(h2("Filtro F: Cores"))
     add(p("É o filtro mais elaborado da aplicação e tem um capítulo próprio, o 7. Em "
           "resumo, classifica os 50 números conforme quantas vezes saíram nos "
-          "últimos 9 sorteios e limita quantos de cada tipo podem entrar numa chave."))
+          "últimos %d sorteios e limita quantos de cada tipo podem entrar numa "
+          "chave." % D["janela_cores"]))
 
     add(h2("Filtro G: Regra do 31"))
     add(p("Exige pelo menos um número acima de 31. <b>É o único filtro com um "
           "benefício medido</b> — e o benefício não é na probabilidade de acertar, é "
           "na partilha. A maioria dos apostadores joga datas de aniversário, que só "
           "usam números de 1 a 31."))
+    ef_datas = pd["2+0"]["todos de datas"]["efeito"]
     add(tabela(
         ["Chave", "Números acima de 31", "Passa?", "Co-vencedores"],
-        [["4 - 9 - 17 - 23 - 30", "nenhum", "Não", "+4,1% (o pior caso)"],
+        [["4 - 9 - 17 - 23 - 30", "nenhum", "Não",
+          "%s (o pior caso)" % ("%+.1f%%" % ef_datas).replace(".", ",")],
          ["4 - 9 - 17 - 23 - 44", "um (o 44)", "Sim", "próximo da média"],
          ["4 - 38 - 41 - 46 - 50", "quatro", "Sim", "abaixo da média"]],
         larguras=[46 * mm, 36 * mm, 18 * mm, LARGURA - 100 * mm]))
     add(bom(
         "Se tiver de escolher um único filtro para deixar ligado, é este",
-        "Rejeita 8% das combinações — 169.911 das 2.118.760 — e são exactamente as "
-        "8% que mais gente joga. Não mexe na probabilidade de acertar: se acertar, "
-        "mexe no tamanho da fatia."))
+        "Rejeita %s das combinações — %s das %s — e são exactamente as que mais "
+        "gente joga. Não mexe na probabilidade de acertar: se acertar, mexe no "
+        "tamanho da fatia."
+        % (pc(D["rejeita"]["G"], 1),
+           mil(round(D["total_comb"] * D["rejeita"]["G"] / 100)),
+           mil(D["total_comb"]))))
 
     add(h2("Filtro H: Anti-Progressão"))
     add(p("Recusa progressões aritméticas perfeitas, como 5-10-15-20-25 ou "
@@ -759,18 +1016,20 @@ def construir():
           "boletim."))
     add(quadro(
         "Este filtro quase não faz nada, e está tudo bem",
-        "Existem apenas <b>288 progressões perfeitas</b> em 2.118.760 combinações. O "
-        "filtro rejeita 0,014% do universo, e por isso aparece destacado a laranja no "
-        "painel da aplicação. Deixá-lo ligado ou desligado não muda praticamente "
+        "Existem apenas <b>288 progressões perfeitas</b> em %s combinações. O filtro "
+        "rejeita %s do universo, e por isso aparece destacado a laranja no painel da "
+        "aplicação. Deixá-lo ligado ou desligado não muda praticamente "
         "nada.<br/><br/>"
-        "Em 1980 sorteios nunca saiu uma progressão perfeita — o que também não é "
-        "notável: ao acaso esperavam-se 0,27."))
+        "Em %s sorteios nunca saiu uma progressão perfeita — o que também não é "
+        "notável: ao acaso esperavam-se 0,27."
+        % (mil(D["total_comb"]), pc(D["rejeita"]["H"], 3), mil(D["n_sorteios"]))))
 
     add(h2("Filtro I: AC Value"))
     add(p("AC quer dizer <i>complexidade aritmética</i>. Tomam-se todas as "
           "diferenças entre pares de números da chave, conta-se quantas são "
           "distintas e subtraem-se 4. O resultado vai de 0 a 6. O filtro aceita 4, "
-          "5 ou 6, o que cobre 96,4% das combinações."))
+          "5 ou 6, o que cobre %s das combinações."
+          % pc(100 - D["rejeita"]["I"], 1)))
     add(tabela(
         ["Chave", "Diferenças distintas", "AC", "Passa?"],
         [["5 - 10 - 15 - 20 - 25", "4 (são 5, 10, 15 e 20)", "0", "Não"],
@@ -788,50 +1047,60 @@ def construir():
          ["6", "1.201.748", "56,72%", "Sim"]],
         larguras=[14 * mm, 32 * mm, 28 * mm, LARGURA - 74 * mm],
         alinhar_dir=(1, 2), destaques=(4, 5, 6)))
+    add(p("Esta tabela é uma constante matemática do jogo: não depende dos sorteios "
+          "e nunca muda.", "legenda"))
 
     # ═══════════════════════════════════════════════════════════════════════
     add(PageBreak())
     add(h1("7. O sistema de cores"))
-    add(p("É a parte mais original da aplicação. Olha para os <b>últimos 9 "
+    add(p("É a parte mais original da aplicação. Olha para os <b>últimos %d "
           "sorteios</b> e pinta cada um dos 50 números de uma cor, conforme quantas "
-          "vezes saiu nesse período."))
+          "vezes saiu nesse período." % D["janela_cores"]))
     add(tabela(
-        ["Cor", "Saiu quantas vezes nos últimos 9 sorteios",
+        ["Cor", "Saiu quantas vezes nos últimos %d sorteios" % D["janela_cores"],
          "Quantos pode ter a chave"],
         [["<b>Vermelho</b>", "nenhuma vez", "0 a 3"],
          ["<b>Verde</b>", "uma vez", "0 a 3"],
          ["<b>Azul</b>", "exactamente duas vezes", "0 a 2"],
          ["<b>Castanho</b>", "três ou mais vezes", "0 a 1"]],
         larguras=[26 * mm, 78 * mm, LARGURA - 104 * mm]))
-    add(p("Como cada sorteio tira 5 números e a janela tem 9 sorteios, saem 45 "
+    add(p("Como cada sorteio tira 5 números e a janela tem %d sorteios, saem %d "
           "números no total — por isso a maioria dos 50 fica vermelha ou verde e "
-          "muito poucos ficam castanhos. Um exemplo real, a 11 de Novembro de 2026:"))
+          "muito poucos ficam castanhos. O exemplo é o estado real no dia em que "
+          "este guia foi gerado:" % (D["janela_cores"], 5 * D["janela_cores"])))
+    cr = D["cores"]
     add(tabela(
         ["Cor", "Quantos", "Números"],
-        [["<b>Vermelho</b>", "21",
-          "1 2 4 5 6 8 10 11 19 20 25 26 27 28 29 34 36 40 45 46 50"],
-         ["<b>Verde</b>", "16", "3 9 12 14 17 18 22 24 30 31 32 33 38 41 42 43"],
-         ["<b>Azul</b>", "11", "7 13 16 21 23 35 39 44 47 48 49"],
-         ["<b>Castanho</b>", "2", "15 37"]],
+        [["<b>Vermelho</b>", str(len(cr["vermelhos"])),
+          " ".join(str(n) for n in sorted(cr["vermelhos"]))],
+         ["<b>Verde</b>", str(len(cr["verdes"])),
+          " ".join(str(n) for n in sorted(cr["verdes"]))],
+         ["<b>Azul</b>", str(len(cr["azuis"])),
+          " ".join(str(n) for n in sorted(cr["azuis"]))],
+         ["<b>Castanho</b>", str(len(cr["castanhos"])),
+          " ".join(str(n) for n in sorted(cr["castanhos"]))]],
         larguras=[26 * mm, 16 * mm, LARGURA - 42 * mm], tamanho=7.6))
-    add(p("Nesse dia o filtro aceitava 1.705.870 das 2.118.760 combinações, ou seja "
-          "80,5%. Como as cores mudam a cada sorteio, esta percentagem muda também.",
-          "legenda"))
+    add(p("Nesse dia o filtro aceitava %s das %s combinações, ou seja %s. Como as "
+          "cores mudam a cada sorteio, esta percentagem muda também."
+          % (mil(D["f_aceita"]), mil(D["total_comb"]),
+             pc(100 * D["f_aceita"] / D["total_comb"], 1)), "legenda"))
 
     add(h2("As cores servem para prever?"))
     add(p("Não. É o filtro cuja tabela mais chama a atenção, por isso vale a pena ser "
-          "explícito: acertou em 78,23% dos sorteios, e ao acaso teria acertado em "
-          "79,03%. A diferença é de -0,8 pontos, ou seja, nenhuma."))
-    add(p("E tem de ser assim. As cores são calculadas a partir dos 9 sorteios "
+          "explícito: acertou em %s dos sorteios, e ao acaso teria acertado em %s. A "
+          "diferença é de %s pontos, ou seja, nenhuma."
+          % (pc(D["por_filtro"]["F"]["pct"]), pc(D["por_filtro"]["F"]["pct_acaso"]),
+             ("%+.1f" % (D["por_filtro"]["F"]["pct"] - D["por_filtro"]["F"]["pct_acaso"])).replace(".", ","))))
+    add(p("E tem de ser assim. As cores são calculadas a partir dos %d sorteios "
           "anteriores, e o sorteio seguinte é independente desses: as bolas não "
           "sabem o que saiu antes. O valor do filtro é outro — distribui as chaves "
           "por números \"frios\" e \"quentes\" de forma equilibrada, o que dá "
           "variedade e evita que todas as chaves geradas se pareçam umas com as "
-          "outras."))
+          "outras." % D["janela_cores"]))
 
     # ═══════════════════════════════════════════════════════════════════════
     add(PageBreak())
-    add(h1("8. Quadrantes e os 16 padrões"))
+    add(h1("8. Quadrantes e os 28 padrões"))
     add(p("A aplicação foi construída sobre uma metodologia chamada Lotterycodex, que "
           "divide os 50 números em quatro grupos, cruzando baixo/alto com par/ímpar."))
     add(tabela(
@@ -846,54 +1115,113 @@ def construir():
           "exemplo, a chave 3-11-24-29-41 tem o padrão [2,1,2,0]: dois baixos "
           "ímpares (3 e 11), um baixo par (24), dois altos ímpares (29 e 41) e zero "
           "altos pares."))
-    add(p("Dos 56 padrões possíveis, a aplicação usa 16 — aqueles a que a "
-          "metodologia chama equilibrados. Cobrem 1.333.800 das 2.118.760 "
-          "combinações, número que foi verificado por contagem exaustiva e está "
-          "correcto."))
+    add(p("Há 56 padrões possíveis. A aplicação usa os <b>28 mais prováveis</b>, que "
+          "no conjunto cobrem %s das %s combinações — <b>%s</b>."
+          % (mil(D["comb_aceites"]), mil(D["total_comb"]),
+             pc(100 * D["comb_aceites"] / D["total_comb"]))))
+
+    g = D["grupos"]
     add(tabela(
-        ["Padrão", "Chaves possíveis", "Padrão", "Chaves possíveis"],
-        [["[1,1,1,2]", "99.032", "[2,0,2,1]", "43.007"],
-         ["[2,1,1,1]", "91.858", "[0,2,1,2]", "41.864"],
-         ["[1,1,2,1]", "91.414", "[1,2,0,2]", "41.542"],
-         ["[1,2,1,1]", "87.062", "[0,1,2,2]", "41.206"],
-         ["[2,0,1,2]", "51.484", "[1,2,2,0]", "39.098"],
-         ["[2,1,0,2]", "49.171", "[2,1,2,0]", "37.716"],
-         ["[1,0,2,2]", "42.759", "[2,2,0,1]", "21.735"],
-         ["[0,2,2,1]", "42.454", "[2,2,1,0]", "18.452"]],
-        larguras=[28 * mm, 30 * mm, 28 * mm, LARGURA - 86 * mm],
-        alinhar_dir=(1, 3)))
-    add(p("Chaves possíveis depois de aplicados os nove filtros, no contexto de 11 de "
-          "Novembro de 2026. Os dois últimos padrões são os mais restritos: chegaram "
-          "a ficar sem chaves nenhumas quando a Regra do 31 exigia dois números "
-          "altos, e foi por isso que a regra voltou a exigir apenas um.", "legenda"))
+        ["Grupo", "Padrões", "Combinações", "Probabilidade", "Usado?"],
+        [["<b>best</b> — mais prováveis", "nºs 1 a 4", mil(g["best"]["comb"]),
+          pc(g["best"]["pct"]), "Sim"],
+         ["<b>middle-high</b>", "nºs 5 a 16", mil(g["middle_high"]["comb"]),
+          pc(g["middle_high"]["pct"]), "Sim"],
+         ["<b>middle-low</b>", "nºs 17 a 28", mil(g["middle_low"]["comb"]),
+          pc(g["middle_low"]["pct"]), "Sim"],
+         ["<b>worst</b> — raros", "nºs 29 a 56", mil(g["worst"]["comb"]),
+          pc(g["worst"]["pct"]), "<b>Não</b>"]],
+        larguras=[52 * mm, 24 * mm, 28 * mm, 26 * mm, LARGURA - 130 * mm],
+        alinhar_dir=(2, 3), destaques=(3,)))
+
+    add(h2("Como o padrão de cada chave é escolhido"))
+    add(p("Não é à sorte entre os 28. Cada padrão é sorteado com <b>peso "
+          "proporcional ao número de combinações que contém</b>, de modo que as "
+          "chaves geradas se repartam pelos três grupos na mesma proporção que os "
+          "sorteios reais."))
+    tot28 = D["comb_aceites"]
+    add(tabela(
+        ["Grupo", "Das 2,1 milhões", "Das chaves geradas"],
+        [["best (nºs 1-4)", pc(g["best"]["pct"]),
+          pc(100 * g["best"]["comb"] / tot28)],
+         ["middle-high (nºs 5-16)", pc(g["middle_high"]["pct"]),
+          pc(100 * g["middle_high"]["comb"] / tot28)],
+         ["middle-low (nºs 17-28)", pc(g["middle_low"]["pct"]),
+          pc(100 * g["middle_low"]["comb"] / tot28)]],
+        larguras=[56 * mm, 34 * mm, LARGURA - 90 * mm], alinhar_dir=(1, 2)))
+    add(p("As duas colunas diferem porque as da esquerda somam %s e não 100%%: os "
+          "restantes %s são os padrões que a aplicação não usa. Como só se gera "
+          "dentro dos 28, as proporções são renormalizadas — mas a relação entre os "
+          "grupos mantém-se exactamente."
+          % (pc(100 * tot28 / D["total_comb"]), pc(g["worst"]["pct"])), "legenda"))
+
+    add(h2("Os 28 padrões"))
+    linhas_pad = []
+    for i in range(0, 28, 2):
+        a_ = D["padroes"][i]
+        b_ = D["padroes"][i + 1] if i + 1 < 28 else None
+        linha = ["nº%d" % a_["num"], str(a_["padrao"]), mil(a_["combinacoes"]),
+                 pc(a_["pct"], 2)]
+        if b_:
+            linha += ["nº%d" % b_["num"], str(b_["padrao"]), mil(b_["combinacoes"]),
+                      pc(b_["pct"], 2)]
+        else:
+            linha += ["", "", "", ""]
+        linhas_pad.append(linha)
+    add(tabela(
+        ["nº", "Padrão", "Combinações", "%", "nº", "Padrão", "Combinações", "%"],
+        linhas_pad,
+        larguras=[11 * mm, 22 * mm, 24 * mm, 15 * mm,
+                  11 * mm, 22 * mm, 24 * mm, LARGURA - 129 * mm],
+        alinhar_dir=(2, 3, 6, 7), tamanho=7.2))
 
     add(h2("Os padrões servem para prever?"))
-    add(p("Também não — e desta vez a medição é particularmente clara. Esta "
-          "metodologia é apresentada na aplicação como a base de tudo, por isso foi "
-          "testada com o mesmo método usado nos filtros."))
+    add(p("Não — e a medição é clara. Esta metodologia é apresentada na aplicação "
+          "como a base de tudo, por isso foi testada com o mesmo método usado nos "
+          "filtros."))
+    gr = D["grupos_real"]
     add(tabela(
         ["O que foi medido", "Real", "Ao acaso", "Desvio"],
-        [["Sorteios que caíram num padrão equilibrado", "62,98%", "62,95%",
-          "0,03 erros-padrão"],
-         ["Grupo \"best\" (os 4 melhores padrões)", "27,07%", "26,42%", "0,66"],
-         ["Grupo \"middle-high\"", "35,91%", "36,53%", "0,58"],
-         ["Grupo \"middle-low\"", "22,47%", "22,30%", "0,19"],
-         ["Grupo \"worst\"", "14,55%", "14,75%", "0,25"]],
+        [["Sorteios que caíram nos 28 padrões usados", pc(D["padroes_real"]),
+          pc(D["padroes_acaso"]), "%s erros-padrão" % ("%.2f" % abs(D["padroes_z"])).replace(".", ",")],
+         ["Grupo \"best\" (nºs 1-4)", pc(gr["best"]["real"]), pc(g["best"]["pct"]),
+          ("%.2f" % abs(gr["best"]["z"])).replace(".", ",")],
+         ["Grupo \"middle-high\" (nºs 5-16)", pc(gr["middle_high"]["real"]),
+          pc(g["middle_high"]["pct"]), ("%.2f" % abs(gr["middle_high"]["z"])).replace(".", ",")],
+         ["Grupo \"middle-low\" (nºs 17-28)", pc(gr["middle_low"]["real"]),
+          pc(g["middle_low"]["pct"]), ("%.2f" % abs(gr["middle_low"]["z"])).replace(".", ",")],
+         ["Grupo \"worst\" (nºs 29-56)", pc(gr["worst"]["real"]), pc(g["worst"]["pct"]),
+          ("%.2f" % abs(gr["worst"]["z"])).replace(".", ",")]],
         larguras=[74 * mm, 20 * mm, 22 * mm, LARGURA - 116 * mm],
         alinhar_dir=(1, 2, 3)))
+
+    ef28 = pp["2+0"]["fora"]
+    ef28b = pp["3+0"]["fora"]
     add(aviso(
-        "Os 16 padrões são decorativos",
-        "Em 1980 sorteios, 62,98% caíram num padrão equilibrado, quando ao acaso "
-        "seriam 62,95%. Os grupos \"best\", \"middle\" e \"worst\" <b>não se "
-        "ordenam</b>: ficam todos a menos de 0,7 pontos do acaso. E dos 56 padrões "
-        "possíveis apenas 1 se desvia mais de 2 erros-padrão, quando ao acaso se "
-        "esperavam 2,8 — ou seja, há <i>menos</i> sinal do que o acaso "
-        "produziria.<br/><br/>"
-        "Testou-se também a única hipótese que os poderia salvar: se reduzem a "
-        "partilha. Não reduzem — uma chave equilibrada atrai -0,3% de co-vencedores, "
-        "com margem de erro de 1,0 ponto, ou seja, zero.<br/><br/>"
-        "Servem para <b>variar a construção das chaves</b>, e nisso são úteis. Não "
-        "são uma estratégia."))
+        "O que os 28 padrões são, e o que não são",
+        "<b>Não preveem o sorteio.</b> %s dos sorteios caíram nestes 28 padrões, "
+        "quando ao acaso seriam %s — um desvio de %s erros-padrão. Os quatro grupos "
+        "também não se ordenam: ficam todos a menos de um ponto do acaso.<br/><br/>"
+        "Um padrão do grupo \"worst\" é menos provável <i>como grupo</i> apenas "
+        "porque contém menos combinações. <b>Cada chave individual lá dentro tem "
+        "exactamente a mesma probabilidade de sair</b> que qualquer outra das %s. "
+        "Usar os 28 não aumenta a probabilidade de acertar — faz com que as chaves "
+        "geradas tenham a mesma distribuição de formas que os sorteios "
+        "reais.<br/><br/>"
+        "<b>Na partilha há uma indicação favorável, ainda não estabelecida:</b> as "
+        "chaves fora dos 28 atraem %s de co-vencedores no escalão 2+0 (IC95 %s a %s) "
+        "e %s no 3+0 (IC95 %s a %s). Os dois escalões concordam no sinal, mas ambos "
+        "os intervalos ainda incluem o zero. Faz sentido que seja assim: entre os "
+        "padrões excluídos estão formas como [5,0,0,0], cinco números baixos, que "
+        "são precisamente as carregadas de datas."
+        % (pc(D["padroes_real"]), pc(D["padroes_acaso"]),
+           ("%.2f" % abs(D["padroes_z"])).replace(".", ","), mil(D["total_comb"]),
+           ("%+.1f%%" % ef28["efeito"]).replace(".", ","),
+           ("%+.1f%%" % ef28["ic_lo"]).replace(".", ","),
+           ("%+.1f%%" % ef28["ic_hi"]).replace(".", ","),
+           ("%+.1f%%" % ef28b["efeito"]).replace(".", ","),
+           ("%+.1f%%" % ef28b["ic_lo"]).replace(".", ","),
+           ("%+.1f%%" % ef28b["ic_hi"]).replace(".", ","))))
 
     # ═══════════════════════════════════════════════════════════════════════
     add(PageBreak())
@@ -912,7 +1240,7 @@ def construir():
          ["<b>Resultados por sorteio</b>",
           "Tabela com Sim/Não de cada filtro, sorteio a sorteio", "—"],
          ["<b>Valor de uma linha</b>",
-          "Quanto vale, de facto, apostar 2,50 €", "Capítulo 10"],
+          "Quanto vale, de facto, apostar %s" % eur(D["ev"]["custo_linha"]), "Capítulo 10"],
          ["<b>Análise de partilha</b>",
           "O resumo do capítulo 3, dentro da aplicação", "—"]],
         larguras=[40 * mm, LARGURA - 72 * mm, 32 * mm]))
@@ -933,35 +1261,35 @@ def construir():
           "recusado. Cada sorteio novo entra automaticamente no topo."))
     add(tabela(
         ["Quantos filtros erraram", "Sorteios", "Percentagem"],
-        [["Nenhum — todos certos", "1115", "56,57%"],
-         ["Pelo menos um errado", "856", "43,43%"],
-         ["Só um errado", "673", "34,15%"],
-         ["Dois errados", "150", "7,61%"],
-         ["Três errados", "30", "1,52%"],
-         ["Mais de três errados", "3", "0,15%"]],
+        [[l["rotulo"], mil(l["q"]), pc(l["pct"])] for l in D["linhas_resumo"]],
         larguras=[62 * mm, 24 * mm, LARGURA - 86 * mm],
         alinhar_dir=(1, 2), destaques=(0,)))
-    add(p("Calculado sobre os 1971 sorteios com contexto completo: os nove primeiros "
-          "de 2004 não entram, porque o sistema de cores precisa de 9 sorteios "
-          "anteriores para poder existir.", "legenda"))
+    add(p("Calculado sobre os %s sorteios com contexto completo: os primeiros %d de "
+          "2004 não entram, porque o sistema de cores precisa de %d sorteios "
+          "anteriores para poder existir."
+          % (mil(D["n_avaliaveis"]), D["n_sorteios"] - D["n_avaliaveis"],
+             D["janela_cores"]), "legenda"))
 
     # ═══════════════════════════════════════════════════════════════════════
     add(PageBreak())
-    add(h1("10. Quanto vale uma aposta de 2,50 €"))
+    add(h1("10. Quanto vale uma aposta de %s" % eur(D["ev"]["custo_linha"])))
     add(p("A aplicação calcula isto e mostra-o no separador das estatísticas. É "
           "provavelmente a informação mais útil de todo o programa, e é a que nenhum "
           "site de lotarias costuma dar."))
     add(p("A conta é simples: para cada um dos 13 escalões, multiplica-se a "
           "probabilidade pelo prémio, e somam-se os 13 resultados. As probabilidades "
-          "são exactas. Os prémios são as medianas efectivamente pagas nos 1039 "
-          "sorteios desde Setembro de 2016 — a mediana, e não a média, porque um "
-          "punhado de sorteios com bolo muito acumulado puxaria a média para cima e "
-          "daria um sorteio típico mais generoso do que ele é."))
+          "são exactas. Os prémios são as medianas efectivamente pagas nos %d "
+          "sorteios desde %s — a mediana, e não a média, porque um punhado de "
+          "sorteios com bolo muito acumulado puxaria a média para cima e daria um "
+          "sorteio típico mais generoso do que ele é."
+          % (D["ev"]["sorteios_usados"], D["ev"]["desde"])))
 
     add(h2("Os escalões sem o jackpot"))
-    add(p("Somados, os doze escalões abaixo do jackpot valem <b>0,481 €</b> por cada "
-          "2,50 € apostados, ou seja <b>19,2%</b>. Este é o chão: o valor que uma "
-          "aposta tem mesmo que o jackpot não saia a ninguém."))
+    add(p("Somados, os doze escalões abaixo do jackpot valem <b>%s</b> por cada %s "
+          "apostados, ou seja <b>%s</b>. Este é o chão: o valor que uma aposta tem "
+          "mesmo que o jackpot não saia a ninguém."
+          % (eur(D["ev"]["ev_sem_jackpot"], 3), eur(D["ev"]["custo_linha"]),
+             pc(100 * D["ev"]["ev_sem_jackpot"] / D["ev"]["custo_linha"], 1))))
 
     add(h2("Com o jackpot, e com a partilha"))
     add(p("O jackpot depende de duas coisas: do bolo acumulado, que se escreve no "
@@ -969,33 +1297,36 @@ def construir():
           "segunda é estimada a partir do próprio sorteio — contam-se os bilhetes "
           "vendidos a partir dos vencedores do escalão de 2 números, cuja "
           "probabilidade é conhecida, e aplica-se depois a matemática da partilha."))
+    rotulos = {17e6: " (o mínimo)", 250e6: " (o tecto)"}
     add(tabela(
         ["Bolo do jackpot", "Bilhetes estimados", "Vale a linha", "Retorno"],
-        [["17 milhões (o mínimo)", "17,8 M", "0,60 €", "23,8%"],
-         ["50 milhões", "24,0 M", "0,81 €", "32,4%"],
-         ["100 milhões", "29,1 M", "1,13 €", "45,1%"],
-         ["150 milhões", "32,6 M", "1,44 €", "57,5%"],
-         ["200 milhões", "35,3 M", "1,74 €", "69,8%"],
-         ["250 milhões (o tecto)", "37,6 M", "2,05 €", "81,9%"]],
+        [["%d milhões%s" % (bolo / 1e6, rotulos.get(bolo, "")),
+          ("%.1f M" % (bil / 1e6)).replace(".", ","), eur(tot), pc(ret, 1)]
+         for bolo, bil, tot, ret in D["ev_bolos"]],
         larguras=[48 * mm, 34 * mm, 28 * mm, LARGURA - 110 * mm],
         alinhar_dir=(1, 2, 3)))
+    melhor = D["ev_bolos"][-1]
+    pior_ = D["ev_bolos"][0]
     add(aviso(
         "Não existe bolo que torne a aposta favorável",
-        "Mesmo com o jackpot no tecto de 250 milhões, uma linha de 2,50 € vale cerca "
-        "de <b>2,05 €</b>. O retorno nunca chega aos 100%: perde-se sempre, em "
-        "média, entre 45 cêntimos e 1,90 € por cada linha apostada.<br/><br/>"
+        "Mesmo com o jackpot no tecto de 250 milhões, uma linha de %s vale cerca de "
+        "<b>%s</b>. O retorno nunca chega aos 100%%: perde-se sempre, em média, "
+        "entre %s e %s por cada linha apostada.<br/><br/>"
         "É assim que as lotarias funcionam, e não há nada de errado nisso — parte do "
         "dinheiro vai para prémios e parte para o Estado e para causas sociais. Mas "
-        "vale a pena saber o número antes de apostar, e não depois."))
+        "vale a pena saber o número antes de apostar, e não depois."
+        % (eur(D["ev"]["custo_linha"]), eur(melhor[2]),
+           eur(D["ev"]["custo_linha"] - melhor[2]),
+           eur(D["ev"]["custo_linha"] - pior_[2]))))
     add(quadro(
         "Uma coisa que falta nesta conta: o M1LHÃO",
-        "Cada aposta portuguesa de 2,50 € dá também um código para o sorteio do "
-        "M1LHÃO, que acrescenta valor ao que está calculado acima. Não entra na "
-        "conta porque a aplicação não tem o número de códigos portugueses em "
-        "circulação em cada sorteio, e sem isso qualquer valor seria "
-        "inventado.<br/><br/>"
+        "Cada aposta portuguesa de %s dá também um código para o sorteio do M1LHÃO, "
+        "que acrescenta valor ao que está calculado acima. Não entra na conta porque "
+        "a aplicação não tem o número de códigos portugueses em circulação em cada "
+        "sorteio, e sem isso qualquer valor seria inventado.<br/><br/>"
         "O valor real de uma aposta feita em Portugal é portanto <b>maior</b> do que "
-        "o das tabelas acima — mas continua a ser inferior aos 2,50 € que custa."))
+        "o das tabelas acima — mas continua a ser inferior aos %s que custa."
+        % (eur(D["ev"]["custo_linha"]), eur(D["ev"]["custo_linha"]))))
 
     # ═══════════════════════════════════════════════════════════════════════
     add(PageBreak())
@@ -1020,12 +1351,15 @@ def construir():
     # ═══════════════════════════════════════════════════════════════════════
     add(PageBreak())
     add(h1("12. O histórico e a base de dados"))
-    add(p("A aplicação tem a <b>totalidade dos sorteios do Euromilhões</b>: 1980 "
-          "sorteios, desde o primeiro, a 13 de Fevereiro de 2004, até ao mais "
-          "recente. Para 1978 deles tem também o detalhe de prémios — quantas "
-          "pessoas ganharam em cada escalão e quanto receberam. Faltam dois "
-          "sorteios cujos prémios a fonte não publica: 1 de Outubro de 2004 e 28 de "
-          "Abril de 2025."))
+    add(p("A aplicação tem a <b>totalidade dos sorteios do Euromilhões</b>: %s "
+          "sorteios, desde o primeiro, a %s, até ao mais recente, a %s. Para %s "
+          "deles tem também o detalhe de prémios — quantas pessoas ganharam em cada "
+          "escalão e quanto receberam. Faltam dois sorteios cujos prémios a fonte "
+          "não publica: 1 de Outubro de 2004 e 28 de Abril de 2025."
+          % (mil(D["n_sorteios"]), D["primeiro"], D["ultimo"], mil(D["n_premios"]))))
+    add(p("Na lista, cada sorteio mostra também o <b>padrão combinatório</b> da chave "
+          "que saiu, com a cor do grupo a que pertence — verde para os mais "
+          "prováveis, laranja para os raros que a aplicação não usa."))
 
     add(h2("Actualização automática"))
     add(p("Não é preciso fazer nada para a base de dados se manter actual. Um "
@@ -1049,8 +1383,6 @@ def construir():
          ["<b>Eliminar sorteio</b>",
           "Para corrigir um registo errado (a operação pode ser desfeita)"]],
         larguras=[50 * mm, LARGURA - 50 * mm]))
-    add(p("O histórico apresenta-se agrupado por ano e por mês, em secções que se "
-          "abrem e fecham, com o ano corrente já aberto."))
 
     # ═══════════════════════════════════════════════════════════════════════
     add(PageBreak())
@@ -1083,11 +1415,13 @@ def construir():
           "incentivo a apostar, e seria desonesto terminá-lo sem dizer o que se "
           "segue — que decorre directamente das contas do capítulo 10."))
     add(lista([
-        "<b>Apostar dá prejuízo, em média, sempre.</b> Entre 18% e 76% do valor "
+        "<b>Apostar dá prejuízo, em média, sempre.</b> Entre %s e %s do valor "
         "apostado não volta. Não há estratégia, filtro ou padrão que mude isto, e "
-        "esta aplicação não muda isto.",
-        "<b>Nenhum filtro aumenta a probabilidade de acertar.</b> Está medido em "
-        "1971 sorteios, filtro a filtro, e os resultados estão no capítulo 6.",
+        "esta aplicação não muda isto."
+        % (pc(100 - D["ev_bolos"][-1][3], 0), pc(100 - D["ev_bolos"][0][3], 0)),
+        "<b>Nenhum filtro aumenta a probabilidade de acertar.</b> Está medido em %s "
+        "sorteios, filtro a filtro, e os resultados estão no capítulo 6."
+        % mil(D["n_avaliaveis"]),
         "<b>O único efeito real é na partilha</b>, e vale poucos por cento.",
         "<b>Aposte apenas o que pode perder sem consequências</b>, e trate o valor "
         "como o preço de um entretenimento, não como um investimento.",
@@ -1127,7 +1461,7 @@ def construir():
          ["<b>Mediana</b>",
           "O valor do meio de uma lista ordenada. Mais robusta que a média quando há valores extremos."],
          ["<b>Padrão</b>",
-          "A forma de uma chave em termos de quadrantes, como [2,1,2,0]."],
+          "A forma de uma chave em termos de quadrantes, como [2,1,2,0]. Há 56; a aplicação usa os 28 mais prováveis."],
          ["<b>Partilha</b>",
           "Dividir um prémio com outras pessoas que acertaram o mesmo."],
          ["<b>Valor esperado</b>",
@@ -1156,7 +1490,7 @@ def construir():
     add(tabela(
         ["Referência", "Onde entra nesta aplicação"],
         [["<b>Lotterycodex</b> — metodologia dos quadrantes BI-BP-AI-AP e dos padrões combinatórios (lotterycodex.com)",
-          "Base da construção das chaves: os 4 quadrantes e os 16 padrões equilibrados do capítulo 8. Foi testada nos dados da própria aplicação, com o resultado que ali se descreve."],
+          "Base da construção das chaves: os 4 quadrantes e os 28 padrões do capítulo 8. Foi testada nos dados da própria aplicação, com o resultado que ali se descreve."],
          ["<b>Distribuição hipergeométrica</b> — cálculo exacto das probabilidades de cada escalão",
           "As probabilidades do capítulo 2 e o cálculo do valor esperado do capítulo 10."],
          ["<b>Distribuição de Poisson</b> — modelo do número de vencedores simultâneos",
@@ -1167,34 +1501,42 @@ def construir():
 
     add(h2("Como foram obtidos os números deste guia"))
     add(lista([
-        "<b>Percentagens de rejeição dos filtros:</b> contagem exaustiva das "
-        "2.118.760 combinações, uma a uma. Não são estimativas.",
+        "<b>Percentagens de rejeição dos filtros:</b> contagem exaustiva das %s "
+        "combinações, uma a uma. Não são estimativas." % mil(D["total_comb"]),
         "<b>Taxas de acerto históricas:</b> avaliação de cada filtro contra a chave "
-        "sorteada, em todos os 1971 sorteios com contexto completo.",
+        "sorteada, em todos os %s sorteios com contexto completo." % mil(D["n_avaliaveis"]),
         "<b>Efeitos na partilha:</b> cruzamento do número de vencedores de cada "
-        "escalão com as características de cada sorteio, em 1978 sorteios, "
-        "controlando o valor do jackpot e as mudanças de regras do jogo.",
-        "<b>Prémios típicos e valor esperado:</b> medianas dos 1039 sorteios desde "
-        "24 de Setembro de 2016, quando as estrelas passaram de 11 para 12.",
+        "escalão com as características de cada sorteio, em %s sorteios, "
+        "controlando o valor do jackpot e as mudanças de regras do jogo."
+        % mil(D["n_premios"]),
+        "<b>Prémios típicos e valor esperado:</b> medianas dos %d sorteios desde %s, "
+        "quando as estrelas passaram de 11 para 12."
+        % (D["ev"]["sorteios_usados"], D["ev"]["desde"]),
     ], "corpo_pequeno"))
     add(Spacer(1, 4))
-    add(p("Os dados estão guardados na própria aplicação e podem ser reexaminados a "
-          "qualquer momento. Os números deste guia referem-se a 11 de Novembro de "
-          "2026, com 1980 sorteios na base de dados; os que dependem do estado "
-          "actual, como as cores, mudam a cada sorteio.", "legenda"))
+    add(quadro(
+        "Este guia é gerado, não escrito",
+        "Com duas excepções, assinaladas no texto com a data em que foram medidas — "
+        "o efeito de cada número até 31 e o teste de fiabilidade por metades —, "
+        "todos os números acima foram calculados no momento em que o ficheiro foi "
+        "produzido. Gerar o guia outra vez, depois de mais sorteios, actualiza-os "
+        "sozinho.<br/><br/>"
+        "<b>Porquê o cuidado:</b> a primeira versão deste guia tinha a tabela do "
+        "capítulo 9 copiada à mão, e estava errada."))
 
     add(Spacer(1, 8))
     add(tabela(
         ["", ""],
         [["<b>Aplicação</b>", "euromilhoes-chi.vercel.app"],
+         ["<b>Versão da aplicação</b>", str(D["versao"])],
          ["<b>Autor</b>", "%s, %s" % (AUTOR, ANO)],
          ["<b>Colaboração</b>", COLABORACAO],
-         ["<b>Guia actualizado em</b>", DATA_GUIA]],
+         ["<b>Dados até</b>", "%s (%s sorteios)" % (D["ultimo"], mil(D["n_sorteios"]))],
+         ["<b>Guia gerado em</b>", DATA_GUIA]],
         larguras=[48 * mm, LARGURA - 48 * mm], cor_cab=colors.white))
     return s
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 def verificar_texto(story):
     """As fontes Helvetica usam WinAnsi. Um caracter fora disso sai como
     quadrado no PDF, em silêncio — melhor falhar aqui."""
@@ -1224,7 +1566,11 @@ def verificar_texto(story):
 
 
 def main():
-    story = construir()
+    print("A recolher os dados da aplicação...")
+    D = recolher()
+    print("   %d sorteios, %d com prémios, último em %s"
+          % (D["n_sorteios"], D["n_premios"], D["ultimo"]))
+    story = construir(D)
     maus = verificar_texto(story)
     if maus:
         print("CARACTERES QUE NAO CABEM NA FONTE (sairiam como quadrados):")
