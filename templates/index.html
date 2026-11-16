@@ -307,6 +307,17 @@
     body.light-mode .filtro-sel { color:#888; }
     body.light-mode .filtro-sel.nula { color:#b33d0c; }
 
+    /* ── Indicador de partilha, por chave ── */
+    .part-badge { font-size:.68rem; padding:2px 6px; border-radius:7px;
+                  font-variant-numeric:tabular-nums; white-space:nowrap;
+                  font-weight:600; }
+    .part-boa   { background:#17351f; color:#5fd38d; }
+    .part-media { background:#2a2a42; color:#9ca3af; }
+    .part-ma    { background:#3a1d10; color:#e8955f; }
+    body.light-mode .part-boa   { background:#e3f5e9; color:#1e7a46; }
+    body.light-mode .part-media { background:#eef1f5; color:#666; }
+    body.light-mode .part-ma    { background:#fdeadf; color:#b35019; }
+
     /* ── Valor esperado ── */
     .ev-destaque { font-size:1.9rem; font-weight:700; line-height:1.1;
                    font-variant-numeric:tabular-nums; }
@@ -901,6 +912,7 @@
                 <tr>
                   <th>#</th><th>N1</th><th>N2</th><th>N3</th><th>N4</th><th>N5</th>
                   <th>★1</th><th>★2</th><th>Soma</th><th>Padrão</th>
+                  <th title="Estimativa de com quantas pessoas partilharia o prémio, face a uma chave típica. Não é previsão: todas as chaves têm a mesma probabilidade de sair.">Partilha</th>
                 </tr>
               </thead>
               <tbody id="chaves-tbody"></tbody>
@@ -1993,6 +2005,7 @@ function renderChaves(d) {
         <td colspan="2">${stars}</td>
         <td><strong style="color:#d0d0d0;">${ch.soma}</strong></td>
         <td>${padrao} ${rarityBadge(ch.padrao)}${consecHTML}</td>
+        <td>${partilhaBadge(ch.partilha)}</td>
       </tr>`);
   });
   // #15 counter + #37 attempts indicator + #26 par/ímpar
@@ -2251,6 +2264,26 @@ const STATS_CACHE_TTL = 300000; // 5 minutes
 // ── Filtros aplicados a todos os sorteios já realizados ──────────────
 let _histFiltrosFeito = false;
 
+
+// Indicador de partilha de uma chave: quanto atrai de co-vencedores face a
+// uma chave típica. Soma os dois efeitos medidos que variam de chave para
+// chave — os números até 31, que muita gente joga por serem datas, e a
+// popularidade das duas estrelas. Negativo é melhor.
+//
+// Não prevê nada. Todas as chaves têm a mesma probabilidade de sair; isto só
+// estima com quanta gente dividiria o prémio.
+function partilhaBadge(p) {
+  if (!p) return "";
+  // Classificar pelo valor ARREDONDADO, que é o que se vê: senão aparecia
+  // "-1,0% média", com o número e a etiqueta a dizerem coisas diferentes.
+  const v = Math.round(p.efeito * 10) / 10;
+  const cls = v <= -1 ? "part-boa" : (v >= 1 ? "part-ma" : "part-media");
+  const sinal = v > 0 ? "+" : "";
+  const txt = v <= -1 ? "menos" : (v >= 1 ? "mais" : "média");
+  return `<span class="part-badge ${cls}"
+    title="${p.baixos} número(s) até 31 e as estrelas escolhidas fazem esta chave atrair ${sinal}${v.toFixed(1)}% de co-vencedores do que uma chave típica. Não é previsão.">`
+    + `${sinal}${v.toFixed(1)}% ${txt}</span>`;
+}
 
 // ════════════════════════════════════════════════════════════════════
 // Valor esperado de uma linha de 2,50 €
@@ -2916,6 +2949,10 @@ async function loadEstrategias() {
           <h5>Filtros Activos</h5>
           ${filtroRows}
         </div>
+        <div class="card-dark mb-3" id="card-estrelas">
+          <h5><i class="fa-solid fa-star me-2"></i>Popularidade das Estrelas</h5>
+          <div class="text-center py-3"><div class="spinner-border spinner-border-sm text-warning"></div></div>
+        </div>
         <div class="card-dark">
           <h5>Estrelas Equilibradas</h5>
           <p style="color:#9ca3af;font-size:.85rem;">
@@ -2928,6 +2965,8 @@ async function loadEstrategias() {
     </div>`;
 
   // Load filter stats asynchronously (computation-heavy)
+  carregarEstrelas();
+
   getFilterStats().then(data => {
     _filterHistogram = data;
     renderFilterStatsCard(data);
@@ -2936,6 +2975,64 @@ async function loadEstrategias() {
     if (fc) fc.innerHTML = `<h5><i class="fa-solid fa-filter me-2"></i>Eficácia dos Filtros</h5>
       <div style="color:#ff6b6b;font-size:.85rem;">Erro ao calcular. Tente novamente.</div>`;
   });
+}
+
+// A popularidade medida de cada estrela, e o peso que o gerador lhe dá.
+async function carregarEstrelas() {
+  const el = document.getElementById("card-estrelas");
+  if (!el) return;
+  try {
+    const d = await (await fetch("api/estrelas")).json();
+    if (!d.disponivel) {
+      el.innerHTML = `<h5><i class="fa-solid fa-star me-2"></i>Popularidade das Estrelas</h5>
+        <p style="color:#9ca3af;font-size:.85rem;">Ainda sem dados suficientes.</p>`;
+      return;
+    }
+    const ord = [...d.estrelas].sort((a, b) => a.efeito - b.efeito);
+    const linhas = ord.map(e => {
+      const v = e.efeito;
+      const cor = v <= -0.5 ? "#5fd38d" : (v >= 0.5 ? "#e8955f" : "#9ca3af");
+      const larg = Math.min(100, Math.abs(v) / 2 * 100);
+      return `<tr>
+        <td style="text-align:center;"><span class="ball ball-star" style="width:26px;height:26px;line-height:26px;font-size:.78rem;">★${e.estrela}</span></td>
+        <td style="color:${cor};font-weight:600;text-align:right;">${v > 0 ? "+" : ""}${v.toFixed(2)}%</td>
+        <td style="width:40%;">
+          <div style="background:#272742;border-radius:4px;height:7px;">
+            <div style="width:${larg}%;height:100%;background:${cor};border-radius:4px;"></div>
+          </div>
+        </td>
+        <td style="text-align:right;color:#9ca3af;">${(e.peso * 12).toFixed(2)}x</td>
+      </tr>`;
+    }).join("");
+    el.innerHTML = `
+      <h5><i class="fa-solid fa-star me-2"></i>Popularidade das Estrelas</h5>
+      <p style="color:#9ca3af;font-size:.82rem;">
+        Medido em <b>${d.sorteios}</b> sorteios desde ${d.desde}, comparando os
+        escalões 2+2 e 2+0 — ambos exigem 2 números, por isso no quociente
+        sobra o efeito das estrelas. Negativo = menos gente a jogar = menos
+        partilha. A última coluna é quantas vezes mais o gerador escolhe essa
+        estrela, face a tirá-las todas ao acaso.
+      </p>
+      <table class="table table-sm" style="font-size:.8rem;">
+        <thead><tr><th style="text-align:center;">Estrela</th><th style="text-align:right;">Efeito</th><th></th><th style="text-align:right;">Peso</th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+      <div class="memo-aviso" style="margin:0;">
+        <i class="fa-solid fa-circle-info me-1"></i>
+        <b>Isto não prevê nada</b> — as estrelas saem ao acaso e todas têm a
+        mesma probabilidade. O que muda é com quanta gente se divide o prémio.
+        <br/><br/>
+        As duas metades da amostra concordam (<b>r = ${d.r_metades.toFixed(3)}</b>),
+        ao contrário do que acontece com os números, onde dá zero. Mas a
+        fiabilidade é de apenas <b>${d.fiabilidade.toFixed(2)}</b>, ou seja,
+        cerca de metade sinal e metade ruído — por isso os efeitos acima já
+        vêm encolhidos por esse factor, e o gerador inclina-se de forma suave
+        em vez de jogar sempre as mesmas duas estrelas.
+      </div>`;
+  } catch (e) {
+    el.innerHTML = `<h5><i class="fa-solid fa-star me-2"></i>Popularidade das Estrelas</h5>
+      <p style="color:#ff6b6b;font-size:.85rem;">Erro ao carregar.</p>`;
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════

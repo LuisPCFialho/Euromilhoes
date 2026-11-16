@@ -242,7 +242,10 @@ def api_gerar():
     ultimo_nums = ultimo["numeros"] if ultimo else []
 
     fe  = FilterEngine(cores, ultimo_nums, config=cfg)
-    gen = KeyGenerator(fe, db)
+    pop_est = _popularidade_estrelas()
+    pesos_est = ([e["peso"] for e in pop_est["estrelas"]]
+                 if pop_est.get("disponivel") else None)
+    gen = KeyGenerator(fe, db, pesos_estrelas=pesos_est)
 
     chaves_geradas = []
     total_tentativas = 0
@@ -354,6 +357,13 @@ def api_gerar():
         # Recount final achievements
         for ps in pref_state:
             ps["achieved"] = sum(1 for ch in chaves_geradas if ps["numero"] in ch["numeros"])
+
+    # Indicador de partilha, chave a chave (ver _indicador_partilha).
+    efeito_estrela = ({e["estrela"]: e["efeito"] for e in pop_est["estrelas"]}
+                      if pop_est.get("disponivel") else {})
+    for ch in chaves_geradas:
+        ch["partilha"] = _indicador_partilha(ch["numeros"], ch["estrelas"],
+                                             efeito_estrela)
 
     logger.info("Chaves geradas: %d/%d (tentativas: %d)", len(chaves_geradas), quantidade, total_tentativas)
 
@@ -639,6 +649,56 @@ def api_historico_filtros():
 
 _ev_cache = {"data": None, "ts": 0.0}
 _EV_TTL = 3600
+
+# A popularidade das estrelas só muda quando entram sorteios novos, e o
+# cálculo percorre a tabela de prémios — vale a pena guardar.
+_estrelas_cache = {"data": None, "ts": 0.0}
+_ESTRELAS_TTL = 3600
+
+
+def _popularidade_estrelas():
+    now = _time.monotonic()
+    if (_estrelas_cache["data"] is not None
+            and (now - _estrelas_cache["ts"]) < _ESTRELAS_TTL):
+        return _estrelas_cache["data"]
+    try:
+        d = stats.popularidade_estrelas()
+    except Exception:
+        logger.exception("Falha a medir a popularidade das estrelas")
+        d = {"disponivel": False, "sorteios": 0}
+    _estrelas_cache["data"] = d
+    _estrelas_cache["ts"] = now
+    return d
+
+
+# Efeito de cada número até 31 no nº de co-vencedores, em %. Medido no
+# histórico de prémios (escalão 2+0, IC95 +0,19 a +2,29).
+EFEITO_NUMERO_BAIXO = 1.24
+# Quantos números até 31 tem uma chave típica, para o indicador ser relativo
+# a uma chave comum e não a um extremo.
+BAIXOS_REFERENCIA = 3.0
+
+
+def _indicador_partilha(numeros, estrelas, efeito_estrela):
+    """Quanto esta chave atrai de co-vencedores, face a uma chave típica.
+
+    Soma os dois efeitos medidos que variam de chave para chave: os números
+    até 31 (que muita gente joga por serem datas) e a popularidade das duas
+    estrelas. Negativo é melhor: menos gente a dividir o prémio.
+
+    Não é uma previsão de nada — todas as chaves têm a mesma probabilidade
+    de sair. É só uma estimativa de com quantas pessoas partilharia.
+    """
+    baixos = sum(1 for n in numeros if n <= 31)
+    efeito = (baixos - BAIXOS_REFERENCIA) * EFEITO_NUMERO_BAIXO
+    efeito += sum(efeito_estrela.get(e, 0.0) for e in estrelas)
+    return {"efeito": round(efeito, 2), "baixos": baixos}
+
+
+@app.route("/api/estrelas")
+def api_estrelas():
+    """Popularidade medida de cada estrela, e o peso que lhe dá o gerador."""
+    return jsonify(_popularidade_estrelas())
 
 
 @app.route("/api/valor-esperado")

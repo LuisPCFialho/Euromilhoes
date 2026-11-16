@@ -29,7 +29,7 @@ import csv
 import time
 import re
 from collections import Counter
-from math import comb, log
+from math import comb, exp, log, sqrt
 from pathlib import Path
 
 # ─── Dependency check ────────────────────────────────────────────────────────
@@ -2053,6 +2053,118 @@ class StatisticsAnalyzer:
         }
 
 
+    # ── Popularidade das estrelas ────────────────────────────────────────────
+    # Só a era das 12 estrelas: antes eram 11, e antes disso 9.
+    ERA_12_ESTRELAS_EST = "2016-09-24"
+
+    # Quanto se inclina a escolha das estrelas. Baixar inclina mais (e repete
+    # mais as mesmas estrelas); subir aproxima do puro acaso.
+    #
+    # A troca, medida por simulação (ganho = pontos percentuais de redução na
+    # partilha; o máximo seria jogar sempre as duas menos populares):
+    #
+    #   escala   ganho    % do máximo   par mais comum   pares distintos em 10
+    #     10     +0,21        6,5%           2,2%                9,3
+    #      5     +0,44       13,5%           3,0%                9,3
+    #      3     +0,71       21,9%           4,1%                9,2
+    #      2     +1,02       31,5%           6,4%                9,0
+    #    > 1,5   +1,32       41,0%           9,2%                8,7  <<
+    #      1     +1,79       55,6%          16,6%                7,9
+    #    0,7     +2,24       69,4%          29,1%                6,7
+    #
+    # (ao acaso puro: 9,3 pares distintos em 10 chaves). Escolheu-se 1,5: fica
+    # com 41% do ganho e a variedade quase intacta. Abaixo disso o mesmo par
+    # começa a repetir-se de forma visível.
+    ESCALA_PESO_ESTRELAS = 1.5
+
+    def popularidade_estrelas(self) -> dict:
+        """
+        Quais são as estrelas mais jogadas, medido nos prémios.
+
+        O TRUQUE: comparam-se dois escalões que só diferem nas estrelas.
+        O 2+2 e o 2+0 exigem ambos acertar 2 números, por isso no quociente
+        a popularidade dos NÚMEROS cancela-se em boa parte e sobra a das
+        estrelas. y = log(t8/t13), regredido nas 12 indicadoras "a estrela k
+        saiu".
+
+        Devolve também a fiabilidade: a amostra é dividida em duas metades
+        independentes e estima-se tudo outra vez em cada uma. Se as metades
+        não concordarem, a lista é ruído — foi o que aconteceu com os números,
+        onde r ficou em zero. Com as estrelas dá positivo, mas modesto, por
+        isso o efeito é encolhido por essa fiabilidade antes de ser usado:
+        é o ajuste clássico para não tomar ruído por sinal.
+        """
+        with sqlite3.connect(self.db.db_path) as conn:
+            linhas = [{"estrelas": [r[0], r[1]], "y": log(r[2] / r[3])}
+                      for r in conn.execute(
+                          "SELECT s.e1, s.e2, p.t8_winners, p.t13_winners "
+                          "FROM sorteios s JOIN premios p ON p.data = s.data "
+                          "WHERE s.data >= ? AND p.t8_winners > 0 "
+                          "AND p.t13_winners > 0 ORDER BY s.data",
+                          (self.ERA_12_ESTRELAS_EST,))]
+
+        def estimar(dados):
+            """Regressão de y nas 12 indicadoras. Devolve o efeito em %."""
+            n = 12
+            XtX = [[0.0] * n for _ in range(n)]
+            Xty = [0.0] * n
+            my = sum(d["y"] for d in dados) / len(dados)
+            for d in dados:
+                idx = [e - 1 for e in d["estrelas"]]
+                for i in idx:
+                    Xty[i] += d["y"] - my
+                    for j in idx:
+                        XtX[i][j] += 1.0
+            # eliminação de Gauss com pivotagem parcial
+            M = [XtX[i][:] + [Xty[i]] for i in range(n)]
+            for c in range(n):
+                piv = max(range(c, n), key=lambda r: abs(M[r][c]))
+                if abs(M[piv][c]) < 1e-12:
+                    raise ValueError("matriz singular")
+                M[c], M[piv] = M[piv], M[c]
+                for r in range(n):
+                    if r == c:
+                        continue
+                    f = M[r][c] / M[c][c]
+                    if f:
+                        for k in range(c, n + 1):
+                            M[r][k] -= f * M[c][k]
+            coef = [M[i][n] / M[i][i] for i in range(n)]
+            m = sum(coef) / n
+            return [(c - m) * 100 for c in coef]
+
+        if len(linhas) < 200:
+            return {"disponivel": False, "sorteios": len(linhas)}
+
+        bruto = estimar(linhas)
+        # fiabilidade: as duas metades concordam?
+        A = estimar([l for i, l in enumerate(linhas) if i % 2 == 0])
+        B = estimar([l for i, l in enumerate(linhas) if i % 2 == 1])
+        ma, mb = sum(A) / 12, sum(B) / 12
+        sa = sqrt(sum((x - ma) ** 2 for x in A))
+        sb = sqrt(sum((x - mb) ** 2 for x in B))
+        r = (sum((x - ma) * (y - mb) for x, y in zip(A, B)) / (sa * sb)
+             if sa and sb else 0.0)
+        # Spearman-Brown: fiabilidade da estimativa completa
+        fiab = max(0.0, 2 * r / (1 + r)) if r > -1 else 0.0
+
+        efeito = [b * fiab for b in bruto]          # encolhido
+        pesos = [exp(-e / self.ESCALA_PESO_ESTRELAS) for e in efeito]
+        soma = sum(pesos)
+        return {
+            "disponivel": True,
+            "sorteios": len(linhas),
+            "desde": self.ERA_12_ESTRELAS_EST,
+            "r_metades": r,
+            "fiabilidade": fiab,
+            "estrelas": [
+                {"estrela": i + 1, "efeito_bruto": bruto[i], "efeito": efeito[i],
+                 "peso": pesos[i] / soma}
+                for i in range(12)
+            ],
+        }
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # FILTER ENGINE
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2426,32 +2538,35 @@ class FilterEngine:
 # KEY GENERATOR
 # ═════════════════════════════════════════════════════════════════════════════
 class KeyGenerator:
-    def __init__(self, filter_engine: FilterEngine, db: DatabaseManager):
+    def __init__(self, filter_engine: FilterEngine, db: DatabaseManager,
+                 pesos_estrelas: list | None = None):
         self.fe = filter_engine
         self.db = db
-        self.contagem_estrelas = {i: 0 for i in range(1, 13)}
-        self._load_star_counts()
+        # Peso de cada estrela na escolha. Vem medido dos prémios (ver
+        # StatisticsAnalyzer.popularidade_estrelas); sem ele, todas iguais.
+        self.pesos_estrelas = pesos_estrelas or [1 / 12] * 12
 
-    def _load_star_counts(self):
-        raw = self.db.get_metadata("contagem_estrelas")
-        if raw:
-            try:
-                loaded = json.loads(raw)
-                for k, v in loaded.items():
-                    self.contagem_estrelas[int(k)] = v
-            except (json.JSONDecodeError, ValueError, KeyError):
-                pass
+    def escolher_estrelas(self) -> list:
+        """Duas estrelas distintas, sorteadas com peso inverso à popularidade.
 
-    def _save_star_counts(self):
-        self.db.set_metadata("contagem_estrelas", json.dumps(self.contagem_estrelas))
+        Antes escolhiam-se as duas MENOS USADAS desde a última geração. Isso
+        não previa nada — as bolas não têm memória — e em produção nem sequer
+        funcionava: o contador vivia na base de dados, que no Vercel está em
+        /tmp e desaparece a cada arrefecimento.
 
-    def escolher_estrelas_equilibradas(self) -> list:
-        disponiveis = list(range(1, 13))
-        random.shuffle(disponiveis)
-        disponiveis.sort(key=lambda x: self.contagem_estrelas[x])
-        e1, e2 = disponiveis[0], disponiveis[1]
-        self.contagem_estrelas[e1] += 1
-        self.contagem_estrelas[e2] += 1
+        Agora o critério é outro e tem medição por trás: as estrelas menos
+        jogadas pelas outras pessoas reduzem a partilha do prémio. Sorteia-se
+        com peso, e não escolhendo sempre as mesmas duas, porque todas as
+        chaves ficariam com as mesmas estrelas — além de concentrar o risco,
+        tornaria as chaves previsíveis.
+        """
+        estrelas = list(range(1, 13))
+        pesos = list(self.pesos_estrelas)
+        e1 = random.choices(estrelas, weights=pesos, k=1)[0]
+        i = e1 - 1
+        estrelas.pop(i)
+        pesos.pop(i)
+        e2 = random.choices(estrelas, weights=pesos, k=1)[0]
         return sorted([e1, e2])
 
     def _sortear_padrao(self) -> list:
@@ -2485,8 +2600,7 @@ class KeyGenerator:
 
             nums_sorted = sorted(nums)
             if self.fe.verificar(nums_sorted):
-                estrelas = self.escolher_estrelas_equilibradas()
-                self._save_star_counts()
+                estrelas = self.escolher_estrelas()
                 self.db.guardar_chave_gerada(nums_sorted, estrelas, padrao)
                 return {
                     "numeros": nums_sorted,
