@@ -1,19 +1,4 @@
 {
-  "_comentario": [
-    "Este ficheiro NAO e' lido pelo projeto principal (euromilhoes), cuja raiz",
-    "e' a raiz do repositorio e que usa o /vercel.json de la'.",
-    "",
-    "Serve o segundo projeto, euromilhoes1, que esta' configurado com",
-    "rootDirectory=templates e sem framework: servia esta pasta como ficheiros",
-    "estaticos, sem Flask, sem API e sem /guia, e por isso tudo o que nao fosse",
-    "a pagina inicial dava 404. Agora reencaminha para a aplicacao a serio.",
-    "",
-    "307 e nao 301 de proposito: um redirecionamento permanente fica em cache",
-    "nos browsers e e' dificil de desfazer. Para voltar atras basta apagar",
-    "este ficheiro.",
-    "",
-    "O Flask ignora isto: a pasta templates/ so' lhe interessa pelo index.html."
-  ],
   "redirects": [
     {
       "source": "/(.*)",
