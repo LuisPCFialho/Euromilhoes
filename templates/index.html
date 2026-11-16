@@ -706,7 +706,9 @@
       <i class="fa-solid fa-cloud-arrow-down"></i> Actualizar BD
     </a>
     <!-- Abre noutro separador: é um PDF, não um painel da app. -->
-    <a class="nav-link nav-externo" href="/guia" target="_blank" rel="noopener"
+    <!-- ?v= muda a cada deploy, para a CDN do Vercel nunca servir um guia
+         antigo; a rota /guia manda ainda no-store, para o browser. -->
+    <a class="nav-link nav-externo" href="/guia?v={{ version }}" target="_blank" rel="noopener"
        title="Guia de Utilização em PDF — 24 páginas, para quem nunca jogou e para quem joga há anos">
       <i class="fa-solid fa-book-open"></i> Guia (PDF)
       <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:.62rem;opacity:.55;margin-left:3px;"></i>
@@ -1032,8 +1034,8 @@
             <td class="ef-nada">sem efeito</td><td>—</td><td>1978 sorteios</td>
           </tr>
           <tr>
-            <td class="esq">Chave em padrão equilibrado <span class="memo-esc">BI/BP/AI/AP</span></td>
-            <td class="ef-nada">−0,32%</td><td>−2,34% a +1,70%</td><td>1601 sorteios</td>
+            <td class="esq">Chave <b>fora</b> dos 28 padrões usados <span class="memo-esc">BI/BP/AI/AP</span></td>
+            <td class="ef-nada">+1,90%</td><td>−1,51% a +5,30%</td><td>1601 sorteios</td>
           </tr>
           <tr>
             <td class="esq">Jackpot 5+2 em chaves só de datas</td>
@@ -1054,9 +1056,11 @@
         <li><b>Os apostadores não evitam números consecutivos.</b> Dois pares consecutivos
             dão, se alguma coisa, ligeiramente <i>mais</i> vencedores. É folclore repetido.</li>
         <li><b>Os meses (números ≤ 12) não têm efeito nenhum.</b> Zero em todos os grupos.</li>
-        <li><b>Os 16 padrões equilibrados não servem para nada de mensurável.</b>
-            Não preveem o sorteio (62,98% real contra 62,95% ao acaso) nem reduzem
-            a partilha (−0,3% ± 1,0). É a metodologia base da app, e é decorativa.</li>
+        <li><b>Os padrões BI/BP/AI/AP não preveem o sorteio.</b> 85,46% dos
+            1981 sorteios caíram nos 28 padrões usados, contra 85,25% ao acaso — desvio
+            de 0,26 erros-padrão. Na partilha há uma indicação favorável que ainda
+            não é certa: ficar fora dos 28 custa +1,9% de co-vencedores (IC95
+            −1,5 a +5,3), e o escalão 3+0 concorda com +3,2% (IC95 −0,4 a +6,8).</li>
         <li><b>O efeito das datas é real mas pequeno.</b> Cerca de 4% numa chave
             inteiramente de datas — uma ordem de grandeza abaixo dos 20-30% que se leem
             por aí. Os dados excluem com confiança qualquer efeito acima de ~2,5% por número.</li>
@@ -1074,8 +1078,9 @@
             das chaves tal como rejeitaria 8% ao acaso; o que faz é evitar bilhetes
             populares. Exigir 2 em vez de 1 baixaria a partilha esperada de −0,21%
             para −0,79% — uma diferença de meio ponto, dentro da margem de erro da
-            própria medição (±1,0), e que deixava 2 dos 16 padrões equilibrados sem
-            chaves possíveis. Não valia a troca.</li>
+            própria medição (±1,0), e que deixava 6 dos 28 padrões usados sem chaves
+            possíveis — todos os que têm um só número nos quadrantes altos.
+            Não valia a troca.</li>
         <li><b>Soma 90–195 puxa no mesmo sentido.</b> As somas que passou a rejeitar
             (80–89) têm em média <b>4,27</b> números ≤ 31; as que passou a aceitar
             (191–195) têm <b>1,09</b>.</li>
@@ -2812,8 +2817,10 @@ async function loadEstrategias() {
       </div>
     </div>`).join("");
 
-  const padroes = (d.padroes_equilibrados||[]).map(p =>
-    `<span class="badge me-1 mb-1" style="background:#0f2040;color:#74c0fc;padding:5px 8px;">[${p.join(",")}]</span>`
+  const _CORES_GRUPO = { best:"#5fd38d", middle_high:"#74c0fc", middle_low:"#e8c55f" };
+  const padroes = (d.padroes_detalhe||[]).map(p =>
+    `<span class="badge me-1 mb-1" title="Padrão nº${p.num} — ${p.pct}% das combinações"
+       style="background:#0f2040;color:${_CORES_GRUPO[p.grupo]||'#74c0fc'};padding:5px 8px;">[${p.padrao.join(",")}]</span>`
   ).join("");
 
   el.innerHTML = `
@@ -2833,36 +2840,49 @@ async function loadEstrategias() {
           </div>
         </div>
         <div class="card-dark">
-          <h5>16 Padrões Equilibrados</h5>
+          <h5>28 Padrões Utilizados</h5>
           <div>${padroes}</div>
           <p style="color:#9ca3af;font-size:.82rem;margin-top:10px;">
-            Formato: [BI, BP, AI, AP]. Todos os padrões somam 5.
-            Cobrem 1.333.800 das 2.118.760 combinações possíveis
-            <span style="color:#5fd38d;">(contagem confirmada)</span>.
+            Formato: [BI, BP, AI, AP]. Todos os padrões somam 5. São os
+            <b>28 mais prováveis</b> dos 56 possíveis, e cobrem
+            <b>1.806.270</b> das 2.118.760 combinações —
+            <b>85,25%</b> <span style="color:#5fd38d;">(contagem confirmada)</span>.
+            Os 28 que ficam de fora valem 14,75% no conjunto, ou seja cerca de
+            um sorteio em cada sete.
           </p>
           <p style="color:#9ca3af;font-size:.82rem;">
-            Os <b>16</b> estão todos alcançáveis. Chegaram a ser 14: com a Regra
-            do 31 a exigir 2 números acima de 31,
-            <code style="color:#74c0fc;">[2,2,0,1]</code> e
-            <code style="color:#74c0fc;">[2,2,1,0]</code> ficavam sem chaves
-            possíveis, porque têm só 1 número nos quadrantes altos e os
-            quadrantes cortam em 25/26 enquanto a regra corta em 31 — os números
-            26 a 31 são altos no quadrante mas não contam para a regra. A regra
-            voltou ao mínimo de 1, para não excluir nenhum padrão.
+            A cor de cada etiqueta é o grupo:
+            <span style="color:#5fd38d;">mais provável</span> (nºs 1-4, 26,42%),
+            <span style="color:#74c0fc;">provável</span> (nºs 5-16, 36,53%) e
+            <span style="color:#e8c55f;">menos provável</span> (nºs 17-28, 22,30%).
+            O padrão de cada chave é sorteado com peso proporcional ao número de
+            combinações que contém, por isso as chaves geradas repartem-se pelos
+            três grupos na mesma proporção que os sorteios reais — 31,0%, 42,9%
+            e 26,2% depois de renormalizar para 100%.
           </p>
           <div class="memo-aviso" style="margin:0;">
             <i class="fa-solid fa-triangle-exclamation me-1"></i>
-            <b>Medido: estes padrões não preveem nada.</b>
-            Em 1980 sorteios, <b>62,98%</b> caíram num padrão equilibrado;
-            ao acaso seriam <b>62,95%</b> — um desvio de 0,03 erros-padrão.
-            Os grupos &quot;best&quot;, &quot;middle&quot; e &quot;worst&quot; do Lotterycodex
-            não se ordenam: ficam todos a menos de 0,7 pontos do acaso. E dos
-            56 padrões possíveis só 1 se desvia mais de 2 sigma, quando ao
-            acaso se esperavam 2,8.
+            <b>Medido: os padrões não preveem o sorteio.</b>
+            Em 1981 sorteios (até 13-11-2026), <b>85,46%</b> caíram nestes 28
+            padrões; ao acaso
+            seriam <b>85,25%</b> — um desvio de 0,26 erros-padrão, ou seja,
+            nenhum. Os grupos &quot;best&quot;, &quot;middle&quot; e &quot;worst&quot;
+            também não se ordenam: ficam todos a menos de 0,7 pontos do acaso.
             <br/><br/>
-            Também <b>não reduzem a partilha</b>: uma chave equilibrada atrai
-            −0,3% ± 1,0 co-vencedores, ou seja, zero. Servem para variar a
-            construção das chaves — não como estratégia.
+            Um padrão do grupo excluído é menos provável <i>como grupo</i>
+            apenas porque contém menos combinações. <b>Cada chave individual lá
+            dentro tem exactamente a mesma probabilidade de sair</b> que
+            qualquer outra das 2.118.760. Usar os 28 não aumenta a
+            probabilidade de acertar — faz com que as chaves geradas tenham a
+            mesma distribuição de formas que os sorteios reais.
+            <br/><br/>
+            <b>Na partilha há uma indicação favorável, ainda não estabelecida:</b>
+            as chaves fora dos 28 atraem <b>+1,9%</b> de co-vencedores no escalão
+            2+0 (IC95 −1,5 a +5,3) e <b>+3,2%</b> no 3+0 (IC95 −0,4 a +6,8). Os
+            dois escalões concordam no sinal, mas ambos os intervalos ainda
+            incluem o zero. Faz sentido que seja assim: entre os padrões
+            excluídos estão formas como [5,0,0,0], cinco números baixos, que são
+            precisamente as carregadas de datas.
           </div>
         </div>
       </div>
@@ -2940,6 +2960,7 @@ async function loadHistorico() {
             <td style="color:#d0d0d0;">${s.numeros.join(" · ")}</td>
             <td style="color:#ffd700;">★${s.estrelas.join(" ★")}</td>
             <td style="color:#9ca3af;">${s.soma}</td>
+            <td style="white-space:nowrap;">${padraoBadge(s)}</td>
             <td style="text-align:center;"><span class="btn-delete-draw" onclick="eliminarSorteio('${s.data}')" title="Apagar sorteio">✕</span></td>
           </tr>`).join("");
 
@@ -2947,7 +2968,7 @@ async function loadHistorico() {
             <div class="hist-month-section">
               <span class="hist-month-title">${mes.nome} – ${mes.sorteios.length} sorteio${mes.sorteios.length !== 1 ? 's' : ''}</span>
               <table class="table table-sm mb-1" style="margin-top:4px;">
-                <thead><tr><th>Data</th><th>Números</th><th>Estrelas</th><th>Soma</th><th></th></tr></thead>
+                <thead><tr><th>Data</th><th>Números</th><th>Estrelas</th><th>Soma</th><th>Padrão</th><th></th></tr></thead>
                 <tbody>${mesRows}</tbody>
               </table>
             </div>`;
@@ -2960,6 +2981,24 @@ async function loadHistorico() {
   } catch(e) {
     el.innerHTML = `<div style="color:#ff6b6b;">Erro ao carregar histórico.</div>`;
   }
+}
+
+// O padrão BI-BP-AI-AP de um sorteio, com a cor do grupo a que pertence.
+// Os dados vêm do servidor (api/sorteios-agrupados), não são recalculados aqui.
+const _GRUPO_COR = {
+  best:        { cor:"#5fd38d", nome:"mais provável" },
+  middle_high: { cor:"#74c0fc", nome:"provável" },
+  middle_low:  { cor:"#e8c55f", nome:"menos provável" },
+  worst:       { cor:"#e8703a", nome:"raro — fora dos 28 usados" },
+};
+
+function padraoBadge(s) {
+  if (!s.padrao) return '<span style="color:#6b7280;">—</span>';
+  const g = _GRUPO_COR[s.padrao_grupo] || { cor:"#9ca3af", nome:"" };
+  return `<span title="Padrão nº${s.padrao_num} — ${g.nome}"
+    style="color:${g.cor};font-size:.78rem;font-variant-numeric:tabular-nums;">
+    [${s.padrao.join(",")}]<span style="color:#6b7280;margin-left:4px;">nº${s.padrao_num}</span>
+  </span>`;
 }
 
 function toggleAno(ano) {

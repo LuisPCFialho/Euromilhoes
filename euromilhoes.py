@@ -7,7 +7,7 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 Estratégias implementadas:
-  - 16 Padrões Equilibrados (Lotterycodex BI/BP/AI/AP)
+  - 28 Padrões Lotterycodex BI/BP/AI/AP (85,25% das combinações)
   - Filtro A: Soma configurável (padrão 90–195 | apertado 95–160)
   - Filtro B: Máx 1 par consecutivo, 0 triplos
   - Filtro C: Máx 2 números com mesmo dígito final
@@ -187,13 +187,8 @@ BP = [n for n in range(2, 25) if n % 2 == 0]    # Low-Even: 2,4,6..24
 AI = [n for n in range(27, 50) if n % 2 != 0]   # High-Odd: 27,29..49
 AP = [n for n in range(26, 51) if n % 2 == 0]   # High-Even:26,28..50
 
-# 16 balanced patterns [BI, BP, AI, AP]
-PADROES_EQUILIBRADOS = [
-    [1,1,1,2],[2,1,1,1],[1,2,1,1],[1,1,2,1],
-    [2,2,0,1],[1,0,2,2],[2,0,1,2],[2,1,0,2],
-    [2,0,2,1],[1,2,0,2],[2,2,1,0],[0,2,1,2],
-    [0,1,2,2],[2,1,2,0],[0,2,2,1],[1,2,2,0],
-]
+# PADROES_ACEITES e PESOS_PADROES são derivados da tabela completa, logo a
+# seguir a ela — a tabela é a única fonte de verdade.
 
 # ── Full BI-BP-AI-AP pattern table (56 patterns, Lotterycodex) ────────────────
 # Each entry: num, padrao [BI,BP,AI,AP], combinacoes, pct, grupo
@@ -260,6 +255,30 @@ TODOS_PADROES_BIBPAIAP = [
     {"num": 55, "padrao": [0,0,5,0], "combinacoes":    792, "pct": 0.04, "grupo": "worst"},
     {"num": 56, "padrao": [0,5,0,0], "combinacoes":    792, "pct": 0.04, "grupo": "worst"},
 ]
+
+# ── Padrões usados na geração: os 28 primeiros (grupos best, middle_high e
+# middle_low), que cobrem 1.806.270 das 2.118.760 combinações, ou 85,25%.
+#
+# Os 28 restantes (grupo "worst", nºs 29 a 56) ficam de fora: no conjunto
+# valem 14,75%, ou cerca de um sorteio em cada sete.
+#
+# ATENÇÃO AO QUE ISTO É E AO QUE NÃO É: um padrão do grupo "worst" é menos
+# provável apenas porque contém menos combinações. Cada chave individual lá
+# dentro tem exactamente a mesma probabilidade de sair que qualquer outra das
+# 2.118.760. Excluí-los não aumenta a probabilidade de acertar — faz com que
+# as chaves geradas tenham a mesma distribuição de formas que os sorteios
+# reais. Medido: 85,45% dos 1980 sorteios caíram nestes 28 padrões, contra
+# 85,25% ao acaso (desvio de 0,26 erros-padrão, ou seja, nenhum).
+PADROES_ACEITES = [p["padrao"] for p in TODOS_PADROES_BIBPAIAP
+                   if p["grupo"] != "worst"]
+
+# Peso de cada padrão na escolha = quantas combinações ele contém. Assim a
+# frequência de cada grupo nas chaves geradas acompanha a dos sorteios reais:
+# best 30,99%, middle_high 42,85%, middle_low 26,16% (as percentagens
+# absolutas 26,42 / 36,53 / 22,30 renormalizadas para 100%, já que só se gera
+# dentro destes 28).
+PESOS_PADROES = [p["combinacoes"] for p in TODOS_PADROES_BIBPAIAP
+                 if p["grupo"] != "worst"]
 
 # Lookup dict for fast classification: tuple(padrao) → pattern entry
 _PADRAO_LOOKUP = {tuple(p["padrao"]): p for p in TODOS_PADROES_BIBPAIAP}
@@ -2100,7 +2119,7 @@ class FilterEngine:
                          "co-vencedores. Não prevê o sorteio — reduz a partilha. Exigir "
                          "2 em vez de 1 baixaria a partilha esperada de −0,21% para "
                          "−0,79%, diferença dentro da margem de erro, e tornaria "
-                         "impossíveis 2 dos 16 padrões equilibrados.",
+                         "impossíveis 6 dos 28 padrões usados.",
         },
         "H": {
             "nome": "Anti-Progressão",
@@ -2435,16 +2454,21 @@ class KeyGenerator:
         self.contagem_estrelas[e2] += 1
         return sorted([e1, e2])
 
+    def _sortear_padrao(self) -> list:
+        """Escolhe um dos 28 padrões aceites, com probabilidade proporcional
+        ao número de combinações que cada um contém."""
+        return random.choices(PADROES_ACEITES, weights=PESOS_PADROES, k=1)[0]
+
     def gerar_chave(self, max_tentativas: int = 100000) -> dict | None:
         self.fe.reset_stats()
-        padrao = random.choice(PADROES_EQUILIBRADOS)
+        padrao = self._sortear_padrao()
         bi_n, bp_n, ai_n, ap_n = padrao
 
         # Safety net: rotate pattern every 2000 attempts to avoid rare
         # dead-end combinations where a pattern + active filters conflict.
         for i in range(max_tentativas):
             if i > 0 and i % 2000 == 0:
-                padrao = random.choice(PADROES_EQUILIBRADOS)
+                padrao = self._sortear_padrao()
                 bi_n, bp_n, ai_n, ap_n = padrao
             try:
                 nums = (
@@ -2970,13 +2994,13 @@ class TerminalUI:
         total = self.db.total_sorteios()
         table = Table(title="Padrões BI-BP-AI-AP Históricos", box=box.SIMPLE_HEAD)
         table.add_column("Padrão [BI,BP,AI,AP]")
-        table.add_column("Equilibrado?", justify="center")
+        table.add_column("Aceite?", justify="center")
         table.add_column("Ocorrências", justify="right")
         table.add_column("% histórico", justify="right")
 
-        equilibrados_set = {tuple(p) for p in PADROES_EQUILIBRADOS}
+        aceites_set = {tuple(p) for p in PADROES_ACEITES}
         for padrao, count in sorted(padroes.items(), key=lambda x: -x[1]):
-            eq = "[green]✓[/]" if padrao in equilibrados_set else "[red]✗[/]"
+            eq = "[green]✓[/]" if padrao in aceites_set else "[red]✗[/]"
             pct = (count / total * 100) if total > 0 else 0
             table.add_row(str(list(padrao)), eq, str(count), f"{pct:.1f}%")
         console.print(table)
@@ -3020,9 +3044,10 @@ Os 50 números são divididos em 4 quadrantes:
   [blue]AI[/] (Altos-Ímpares)  : { """ + ", ".join(str(n) for n in AI) + """ }
   [cyan]AP[/] (Altos-Pares)    : { """ + ", ".join(str(n) for n in AP) + """ }
 
-[bold yellow]16 PADRÕES EQUILIBRADOS[/]
-Apenas combinações com distribuição equilibrada entre quadrantes.
-Estes 16 padrões cobrem ~1.333.800 combinações possíveis.
+[bold yellow]28 PADRÕES UTILIZADOS[/]
+Os 28 padrões mais prováveis dos 56 possíveis (grupos best, middle-high e
+middle-low). Cobrem 1.806.270 das 2.118.760 combinações, ou seja 85,25%.
+O padrão é sorteado com peso proporcional ao nº de combinações que contém.
 
 [bold yellow]FILTROS ACTIVOS:[/]
   [A] Soma configurável: padrão 90–195 | apertado 95–160

@@ -22,7 +22,7 @@ from flask import Flask, render_template, request, jsonify, send_file
 from euromilhoes import (
     DatabaseManager, StatisticsAnalyzer, FilterEngine,
     KeyGenerator, ExcelExporter, EuromilhoesScraper, HistoricoScraper,
-    PADROES_EQUILIBRADOS, BI, BP, AI, AP, HISTORICO_PATH,
+    PADROES_ACEITES, BI, BP, AI, AP, HISTORICO_PATH,
     ExcelImporter, EXCEL_SOURCE_PATH,
     TODOS_PADROES_BIBPAIAP, classificar_padrao_bibpaiap, classificar_padrao_cores,
     corrigir_data_sorteio,
@@ -451,6 +451,13 @@ def api_sorteios_agrupados():
     todos = db.todos_sorteios()
     dados: dict = {}
     for s in todos:
+        # O padrão BI-BP-AI-AP vai daqui e não do frontend, para a regra dos
+        # quadrantes ficar definida num sítio só.
+        info = classificar_padrao_bibpaiap(s["numeros"]) if s.get("numeros") else None
+        if info:
+            s["padrao"] = info["padrao"]
+            s["padrao_num"] = info["num"]
+            s["padrao_grupo"] = info["grupo"]
         year      = s["data"][:4]
         month_num = int(s["data"][5:7])
         month_key = s["data"][:7]          # "YYYY-MM"
@@ -664,9 +671,16 @@ def api_guia():
     """
     if not GUIA_PDF.exists():
         return jsonify({"erro": "Guia não encontrado no servidor."}), 404
-    return send_file(GUIA_PDF, mimetype="application/pdf",
-                     as_attachment=False,
-                     download_name="Guia-Gerador-Euromilhoes.pdf")
+    resposta = send_file(GUIA_PDF, mimetype="application/pdf",
+                         as_attachment=False,
+                         download_name="Guia-Gerador-Euromilhoes.pdf")
+    # Sem isto, o browser e a CDN do Vercel podem servir uma cópia antiga
+    # depois de o guia ser regenerado. O ficheiro tem 62 KB, por isso
+    # revalidar a cada abertura não custa nada.
+    resposta.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resposta.headers["Pragma"] = "no-cache"
+    resposta.headers["Expires"] = "0"
+    return resposta
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -683,9 +697,14 @@ def api_estrategias():
             "AI": {"descricao": "Altos Ímpares (27–49)", "numeros": sorted(AI)},
             "AP": {"descricao": "Altos Pares (26–50)",   "numeros": sorted(AP)},
         },
-        "padroes_equilibrados": PADROES_EQUILIBRADOS,
+        "padroes_aceites": PADROES_ACEITES,
+        "padroes_detalhe": [
+            {"num": p["num"], "padrao": p["padrao"], "pct": p["pct"],
+             "combinacoes": p["combinacoes"], "grupo": p["grupo"]}
+            for p in TODOS_PADROES_BIBPAIAP if p["grupo"] != "worst"
+        ],
         "total_combinacoes_universo": 2_118_760,
-        "total_combinacoes_aceites":  1_333_800,
+        "total_combinacoes_aceites":  1_806_270,
         "filtros": [
             {"id": "A", "nome": "Soma",               "descricao": "Entre 90–195 (padrão) ou 95–160 (apertado). ~88% dos sorteios históricos."},
             {"id": "B", "nome": "Consecutivos",        "descricao": "Máx 1 par consecutivo, 0 triplos. Pares: ~42% histórico, triplos: <1%."},
