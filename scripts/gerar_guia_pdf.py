@@ -1222,7 +1222,9 @@ def construir(D):
 
     ef28 = pp["2+0"]["fora"]
     ef28b = pp["3+0"]["fora"]
-    add(aviso(
+    # KeepTogether: senão o reportlab parte a caixa e deixa o título sozinho no
+    # fundo da página anterior, longe do texto que ele anuncia.
+    add(KeepTogether(aviso(
         "O que os 28 padrões são, e o que não são",
         "<b>Não preveem o sorteio.</b> %s dos sorteios caíram nestes 28 padrões, "
         "quando ao acaso seriam %s — um desvio de %s erros-padrão. Os quatro grupos "
@@ -1254,7 +1256,7 @@ def construir(D):
            ("%+.1f%%" % ef28["ic_hi"]).replace(".", ","),
            ("%+.1f%%" % ef28b["efeito"]).replace(".", ","),
            ("%+.1f%%" % ef28b["ic_lo"]).replace(".", ","),
-           ("%+.1f%%" % ef28b["ic_hi"]).replace(".", ","))))
+           ("%+.1f%%" % ef28b["ic_hi"]).replace(".", ",")))))
 
     # ═══════════════════════════════════════════════════════════════════════
     add(PageBreak())
