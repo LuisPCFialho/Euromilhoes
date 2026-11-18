@@ -33,15 +33,26 @@ from reportlab.platypus.tableofcontents import TableOfContents
 ROOT = Path(__file__).resolve().parent.parent
 SAIDA = ROOT / "Guia-Gerador-Euromilhoes.pdf"
 
-TITULO = "Gerador Euromilhões"
+TITULO = "Euromilhões: Gerador Profissional"
 SUBTITULO = "Guia de Utilização"
-AUTOR = "Luís Fialho"
-COLABORACAO = "João Fialho"
+AUTORES = "Luís Fialho  e  João Fialho"
 ANO = "2026"
 _MESES_PT = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
              "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 _hoje = datetime.date.today()
 DATA_GUIA = "%d de %s de %d" % (_hoje.day, _MESES_PT[_hoje.month - 1], _hoje.year)
+
+# ── Capa ────────────────────────────────────────────────────────────────────
+# Desenho, textos e cores vêm de "CAPA 1.docx", feito pelos autores. A textura
+# de fundo é a imagem que lá estava, reduzida para 150 DPI (de 2,2 MB para
+# 93 KB, sem diferença visível à vista desarmada).
+CAPA_TEXTURA = ROOT / "static" / "capa-textura.jpg"
+CAPA_NUMEROS = [7, 20, 31, 38, 46]
+CAPA_ESTRELAS = [3, 8]
+CAPA_AZUL_TITULO = colors.HexColor("#83CAEB")   # EUROMILHÕES / GERADOR
+CAPA_DOURADO = colors.HexColor("#FFCC00")       # Guia de Utilização, estrelas
+CAPA_AZUL_TEXTO = colors.HexColor("#CAEDFB")    # subtítulo, autores, data
+CAPA_AZUL_BOLA = colors.HexColor("#C1E4F5")     # números
 
 # ── Paleta, a mesma da aplicação ────────────────────────────────────────────
 AZUL_FUNDO = colors.HexColor("#1a1a2e")
@@ -205,64 +216,72 @@ def bolas(numeros, estrelas):
 # Capa e rodapé
 # ═══════════════════════════════════════════════════════════════════════════
 def desenhar_capa(canvas, doc):
+    """A capa de CAPA 1.docx: textura azul, a chave e os títulos.
+
+    O .docx punha a textura numa caixa com margens; aqui vai a sangrar, que é
+    como uma capa se apresenta. Os valores das bolas, os textos e as cores são
+    exactamente os de lá.
+    """
     canvas.saveState()
     L, A = A4
-    canvas.setFillColor(AZUL_FUNDO)
-    canvas.rect(0, 0, L, A, fill=1, stroke=0)
-    canvas.setFillColor(AZUL_MEIO)
-    canvas.rect(0, A - 96 * mm, L, 96 * mm, fill=1, stroke=0)
-    canvas.setFillColor(DOURADO_CLARO)
-    canvas.rect(0, A - 97.6 * mm, L, 1.6 * mm, fill=1, stroke=0)
 
-    canvas.setFillColor(DOURADO_CLARO)
-    canvas.setFont("Helvetica-Bold", 10)
-    canvas.drawCentredString(L / 2, A - 34 * mm,
-                             "A P L I C A Ç Ã O   D E   A P O S T A S")
+    if CAPA_TEXTURA.exists():
+        canvas.drawImage(str(CAPA_TEXTURA), 0, 0, width=L, height=A,
+                         preserveAspectRatio=False, mask=None)
+    else:
+        # Sem a textura o guia continua a gerar-se, apenas com fundo liso.
+        canvas.setFillColor(colors.HexColor("#1C8BC0"))
+        canvas.rect(0, 0, L, A, fill=1, stroke=0)
 
-    canvas.setFillColor(colors.white)
-    canvas.setFont("Helvetica-Bold", 42)
-    canvas.drawCentredString(L / 2, A - 57 * mm, "GERADOR")
-    canvas.setFont("Helvetica-Bold", 37)
-    canvas.drawCentredString(L / 2, A - 76 * mm, "EUROMILHÕES")
+    # ── títulos ─────────────────────────────────────────────────────────────
+    canvas.setFillColor(CAPA_AZUL_TITULO)
+    canvas.setFont("Helvetica-Bold", 36)
+    canvas.drawCentredString(L / 2, A - 58 * mm, "EUROMILHÕES")
+    canvas.setFont("Helvetica-Bold", 25)
+    canvas.drawCentredString(L / 2, A - 76 * mm, "GERADOR PROFISSIONAL")
 
-    y = A - 142 * mm
-    exemplo = [7, 18, 23, 37, 44]
-    estrelas_ex = [3, 9]
-    passo = 23 * mm
-    todos = exemplo + estrelas_ex
-    x0 = L / 2 - (len(todos) - 1) * passo / 2
-    for i, v in enumerate(todos):
-        x = x0 + i * passo
-        canvas.setFillColor(colors.white if i < 5 else DOURADO_CLARO)
-        canvas.circle(x, y, 9.2 * mm, fill=1, stroke=0)
-        canvas.setFillColor(AZUL_FUNDO)
-        canvas.setFont("Helvetica-Bold", 16)
-        canvas.drawCentredString(x, y - 5.6, str(v))
+    # ── a chave: cinco números e duas estrelas ──────────────────────────────
+    y = A - 120 * mm
+    raio = 7.0 * mm
+    passo = 15.3 * mm          # o mesmo espaçamento do .docx
+    intervalo = 27.2 * mm      # a folga entre os números e as estrelas
+    largura = 4 * passo + intervalo + passo
+    x = (L - largura) / 2
+    for valor in CAPA_NUMEROS:
+        canvas.setFillColor(CAPA_AZUL_BOLA)
+        canvas.circle(x, y, raio, fill=1, stroke=0)
+        canvas.setFillColor(colors.HexColor("#0E5A7A"))
+        canvas.setFont("Helvetica-Bold", 13)
+        canvas.drawCentredString(x, y - 4.6, str(valor))
+        x += passo
+    x += intervalo - passo
+    for valor in CAPA_ESTRELAS:
+        canvas.setFillColor(CAPA_DOURADO)
+        canvas.circle(x, y, raio, fill=1, stroke=0)
+        canvas.setFillColor(colors.HexColor("#5A4000"))
+        canvas.setFont("Helvetica-Bold", 13)
+        canvas.drawCentredString(x, y - 4.6, str(valor))
+        x += passo
 
-    canvas.setFillColor(colors.HexColor("#c8c8da"))
-    canvas.setFont("Helvetica", 18)
-    canvas.drawCentredString(L / 2, y - 32 * mm, SUBTITULO)
-    canvas.setFont("Helvetica-Oblique", 11.5)
-    canvas.drawCentredString(L / 2, y - 44 * mm,
-                             "Como escolher chaves, e o que os números dizem sobre isso")
-    canvas.setFont("Helvetica", 10)
-    canvas.setFillColor(colors.HexColor("#9a9ab0"))
-    canvas.drawCentredString(L / 2, y - 55 * mm,
-                             "Para quem nunca jogou e para quem joga há anos")
+    # ── subtítulo ───────────────────────────────────────────────────────────
+    canvas.setFillColor(CAPA_DOURADO)
+    canvas.setFont("Helvetica-Bold", 25)
+    canvas.drawCentredString(L / 2, A - 162 * mm, SUBTITULO)
 
-    canvas.setStrokeColor(DOURADO)
-    canvas.setLineWidth(0.8)
-    canvas.line(L / 2 - 26 * mm, 70 * mm, L / 2 + 26 * mm, 70 * mm)
+    canvas.setFillColor(CAPA_AZUL_TEXTO)
+    canvas.setFont("Helvetica", 15)
+    canvas.drawCentredString(L / 2, A - 180 * mm, "Como escolher chaves")
+    canvas.setFont("Helvetica", 11)
+    canvas.drawCentredString(L / 2, A - 190 * mm,
+                             "( para quem nunca jogou e para quem joga há anos )")
 
-    canvas.setFillColor(colors.white)
-    canvas.setFont("Helvetica-Bold", 14)
-    canvas.drawCentredString(L / 2, 58 * mm, AUTOR)
-    canvas.setFont("Helvetica", 9)
-    canvas.setFillColor(colors.HexColor("#9a9ab0"))
-    canvas.drawCentredString(L / 2, 50 * mm, "com colaboração de %s" % COLABORACAO)
-    canvas.setFont("Helvetica-Bold", 12)
-    canvas.setFillColor(DOURADO_CLARO)
-    canvas.drawCentredString(L / 2, 38 * mm, ANO)
+    # ── autores e data ──────────────────────────────────────────────────────
+    canvas.setFillColor(CAPA_AZUL_TEXTO)
+    canvas.setFont("Helvetica", 13)
+    canvas.drawCentredString(L / 2, 48 * mm, AUTORES)
+    canvas.setFont("Helvetica", 11)
+    canvas.drawCentredString(L / 2, 38 * mm,
+                             "%s.%s" % (_MESES_PT[_hoje.month - 1], ANO))
     canvas.restoreState()
 
 
@@ -286,7 +305,7 @@ class Guia(BaseDocTemplate):
         super().__init__(caminho, pagesize=A4,
                          leftMargin=20 * mm, rightMargin=20 * mm,
                          topMargin=20 * mm, bottomMargin=22 * mm,
-                         title="%s — %s" % (TITULO, SUBTITULO), author=AUTOR,
+                         title="%s — %s" % (TITULO, SUBTITULO), author=AUTORES,
                          subject="Guia de utilização da aplicação Gerador Euromilhões")
         self.addPageTemplates([
             # A capa é toda desenhada no canvas; esta moldura só recebe o
@@ -558,8 +577,9 @@ def construir(D):
         "<b>Não aumenta a probabilidade de acertar.</b> Nenhuma aplicação o pode "
         "fazer. As bolas do Euromilhões não têm memória: a probabilidade de uma "
         "chave sair é exactamente a mesma para todas as %s combinações, quer "
-        "tenham sido escolhidas com todo o cuidado, quer tenham sido escritas ao "
-        "calhas. Quem lhe disser o contrário está enganado, ou está a enganá-lo."
+        "tenham sido escolhidas com todo o cuidado, quer tenham sido escritas de "
+        "forma aleatória. Quem lhe disser o contrário está enganado, ou está a "
+        "enganá-lo."
         % mil(D["total_comb"])))
     add(bom(
         "O que esta aplicação faz, e que é real",
@@ -569,6 +589,11 @@ def construir(D):
         "vai dividir o prémio com muita gente; se for diferente, fica com uma fatia "
         "maior. Isto não é opinião: está medido nos prémios de %s sorteios, e os "
         "números estão no capítulo 3.<br/><br/>"
+        "<b>Selecciona chaves entre as mais prováveis.</b> Ao seleccionar chaves "
+        "que cumpram os critérios dos 28 primeiros padrões combinatórios, que são "
+        "os mais prováveis de acontecer, evita desperdiçar dinheiro em chaves que "
+        "têm uma probabilidade reduzida ou muito reduzida de serem sorteadas."
+        "<br/><br/>"
         "<b>E organiza o trabalho:</b> guarda as chaves, confere-as automaticamente "
         "contra o resultado oficial, mantém o histórico completo dos sorteios desde "
         "2004 e exporta tudo para Excel." % mil(D["n_premios"])))
@@ -744,12 +769,6 @@ def construir(D):
     # ═══════════════════════════════════════════════════════════════════════
     add(PageBreak())
     add(h1("4. Primeiros passos"))
-    add(h2("Entrar na aplicação"))
-    add(p("A aplicação abre no endereço <b>euromilhoes-chi.vercel.app</b> e pede "
-          "email e palavra-passe. Na primeira entrada a palavra-passe é <b>123</b>, "
-          "e a aplicação obriga a definir uma nova antes de deixar entrar. A sessão "
-          "fica guardada no navegador, por isso não é preciso repetir de cada vez."))
-
     add(h2("Os nove itens do menu"))
     add(p("O menu da esquerda tem oito secções e, no fim, a ligação para este guia. "
           "A tabela diz para que serve cada uma e em que capítulo está explicada."))
@@ -842,7 +861,7 @@ def construir(D):
         "chaves, e essa é uma razão perfeitamente legítima para jogar. Fica apenas "
         "dito o que custa, para a escolha ser informada."))
 
-    add(h2("Chave ao calhas"))
+    add(h2("Chave Aleatória"))
     add(p("O botão <b>Lucky Pick</b> gera uma chave sem filtro nenhum, puramente ao "
           "acaso. Vale a pena dizê-lo com clareza: <b>a probabilidade de essa chave "
           "acertar é exactamente a mesma</b> das que passaram pelos nove filtros. A "
@@ -860,7 +879,8 @@ def construir(D):
          ["<b>Exportar CSV</b>",
           "O mesmo em texto simples, para outras folhas de cálculo"],
          ["<b>JSC</b>",
-          "Envia as chaves para a aplicação AIJackpot (capítulo 13)"],
+          "Envia as chaves para a aplicação AIJackpot (capítulo 13) e também as "
+          "regista automaticamente como Favoritas no site SCML - Jogos Santa Casa"],
          ["<b>Comparar com sorteio</b>",
           "Mostra quantos números cada chave acertou no último sorteio"]],
         larguras=[46 * mm, LARGURA - 46 * mm]))
@@ -921,8 +941,10 @@ def construir(D):
         "acontecer, porque as bolas são sorteadas ao acaso. Um filtro que se "
         "afastasse muito do acaso seria sinal de que o sorteio não era honesto — ou, "
         "muito mais provavelmente, de que havia um erro nas contas.<br/><br/>"
-        "Os filtros servem para <b>dar variedade às chaves e evitar as combinações "
-        "que muita gente joga</b>. Não servem para prever."
+        "<b>Os filtros não servem para prever</b> quais as chaves que serão "
+        "sorteadas. Servem para dar variedade às chaves, evitar as combinações que "
+        "muita gente joga e afastar as chaves com probabilidade baixa ou muito "
+        "baixa de serem sorteadas."
         % (("%.1f" % pior).replace(".", ","), mil(D["n_avaliaveis"]))))
 
     add(h2("Filtro A: Soma"))
@@ -1101,8 +1123,11 @@ def construir(D):
     # ═══════════════════════════════════════════════════════════════════════
     add(PageBreak())
     add(h1("8. Quadrantes e os 28 padrões"))
-    add(p("A aplicação foi construída sobre uma metodologia chamada Lotterycodex, que "
-          "divide os 50 números em quatro grupos, cruzando baixo/alto com par/ímpar."))
+    add(p("A aplicação utiliza uma metodologia de Padrões Combinatórios que "
+          "constitui uma adaptação feita pelos autores, tendo por base a teoria "
+          "designada Lotterycodex (www.lotterycodex.com, da autoria de Edvin "
+          "Hiltner). Esta teoria divide os 50 números em quatro grupos, cruzando "
+          "baixo/alto com par/ímpar."))
     add(tabela(
         ["Sigla", "Grupo", "Quantos", "Números"],
         [["<b>BI</b>", "Baixos Ímpares", "13", "1, 3, 5, ... 25"],
@@ -1213,7 +1238,15 @@ def construir(D):
         "e %s no 3+0 (IC95 %s a %s). Os dois escalões concordam no sinal, mas ambos "
         "os intervalos ainda incluem o zero. Faz sentido que seja assim: entre os "
         "padrões excluídos estão formas como [5,0,0,0], cinco números baixos, que "
-        "são precisamente as carregadas de datas."
+        "são precisamente as carregadas de datas.<br/><br/>"
+        "No entanto, como as chaves geradas pela aplicação apresentam as "
+        "características das combinações presentes nos grupos de padrões "
+        "combinatórios mais prováveis de acontecer, isso tem duas consequências "
+        "práticas: por um lado, afasta chaves dos grupos com probabilidade baixa ou "
+        "muito baixa de serem sorteados, evitando desperdiçar dinheiro no registo "
+        "dessas chaves; por outro, deixa-nos mais perto do \"lado vencedor\", uma "
+        "vez que as chaves geradas se inserem nos grupos que, na prática, têm maior "
+        "probabilidade de acontecer."
         % (pc(D["padroes_real"]), pc(D["padroes_acaso"]),
            ("%.2f" % abs(D["padroes_z"])).replace(".", ","), mil(D["total_comb"]),
            ("%+.1f%%" % ef28["efeito"]).replace(".", ","),
@@ -1402,7 +1435,10 @@ def construir(D):
          ["3",
           "As chaves são numeradas automaticamente com o ano e o mês do próximo sorteio"],
          ["4", "São enviadas para o AIJackpot e aparecem na conta do grupo"],
-         ["5", "Pode também enviar a lista para o WhatsApp, para o grupo ver"]],
+         ["5", "Pode também enviar a lista para o WhatsApp, para o grupo ver"],
+         ["6", "As chaves geradas são enviadas para serem registadas "
+               "automaticamente no site SCML - Jogos Santa Casa como Chaves "
+               "Favoritas"]],
         larguras=[15 * mm, LARGURA - 15 * mm]))
     add(p("A numeração reinicia sozinha quando muda o mês. O botão <b>Configurar "
           "JSC</b> permite ajustar o contador, se por alguma razão for preciso "
@@ -1527,10 +1563,9 @@ def construir(D):
     add(Spacer(1, 8))
     add(tabela(
         ["", ""],
-        [["<b>Aplicação</b>", "euromilhoes-chi.vercel.app"],
+        [["<b>Aplicação</b>", "Euromilhões: Gerador Profissional"],
          ["<b>Versão da aplicação</b>", str(D["versao"])],
-         ["<b>Autor</b>", "%s, %s" % (AUTOR, ANO)],
-         ["<b>Colaboração</b>", COLABORACAO],
+         ["<b>Autores</b>", AUTORES],
          ["<b>Dados até</b>", "%s (%s sorteios)" % (D["ultimo"], mil(D["n_sorteios"]))],
          ["<b>Guia gerado em</b>", DATA_GUIA]],
         larguras=[48 * mm, LARGURA - 48 * mm], cor_cab=colors.white))
